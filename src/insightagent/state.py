@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, Protocol
 
 from .contracts import AgentState, StatePatch, utc_now
 
@@ -12,6 +12,27 @@ class StateConflictError(RuntimeError):
 
 class InvalidStatePatchError(ValueError):
     pass
+
+
+class StateStore(Protocol):
+    async def load_or_create(self, **kwargs: Any) -> AgentState:
+        ...
+
+    async def get(self, session_id: str) -> AgentState:
+        ...
+
+    async def save(
+        self, state: AgentState, *, expected_version: Optional[int] = None
+    ) -> AgentState:
+        ...
+
+    async def apply_patch(
+        self, session_id: str, patch: StatePatch
+    ) -> AgentState:
+        ...
+
+    async def history(self, session_id: str) -> list[AgentState]:
+        ...
 
 
 class InMemoryStateStore:
@@ -107,22 +128,9 @@ class InMemoryStateStore:
                     )
                 )
 
-            data = current.model_dump(mode="python")
-            for path, value in patch.set.items():
-                self._validate_path(path)
-                _set_path(data, path, value)
-            for path, values in patch.append.items():
-                self._validate_path(path)
-                target = _get_or_create_list(data, path)
-                target.extend(values)
-            for path, values in patch.remove.items():
-                self._validate_path(path)
-                target = _get_or_create_list(data, path)
-                target[:] = [item for item in target if item not in values]
-
-            data["version"] = current.version + 1
-            data["updated_at"] = utc_now()
-            persisted = AgentState.model_validate(data)
+            persisted = apply_patch_to_state(
+                current, patch, self._mutable_roots
+            )
             self._states[session_id] = persisted.model_copy(deep=True)
             self._history[session_id].append(persisted.model_copy(deep=True))
             return persisted
@@ -181,3 +189,35 @@ def _get_or_create_list(root: Dict[str, Any], path: str) -> list[Any]:
             "State path is not a list: {}".format(path)
         )
     return value
+
+
+def apply_patch_to_state(
+    current: AgentState,
+    patch: StatePatch,
+    mutable_roots: Iterable[str] = InMemoryStateStore.DEFAULT_MUTABLE_ROOTS,
+) -> AgentState:
+    allowed = frozenset(mutable_roots)
+
+    def validate_path(path: str) -> None:
+        root = path.split(".", 1)[0]
+        if root not in allowed:
+            raise InvalidStatePatchError(
+                "State path is not mutable: {}".format(path)
+            )
+
+    data = current.model_dump(mode="python")
+    for path, value in patch.set.items():
+        validate_path(path)
+        _set_path(data, path, value)
+    for path, values in patch.append.items():
+        validate_path(path)
+        target = _get_or_create_list(data, path)
+        target.extend(values)
+    for path, values in patch.remove.items():
+        validate_path(path)
+        target = _get_or_create_list(data, path)
+        target[:] = [item for item in target if item not in values]
+
+    data["version"] = current.version + 1
+    data["updated_at"] = utc_now()
+    return AgentState.model_validate(data)

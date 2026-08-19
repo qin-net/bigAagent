@@ -17,6 +17,10 @@ dev = [
   "pytest",
   "pytest-asyncio",
 ]
+akshare = [
+  "akshare",
+  "pandas",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -24,7 +28,13 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+insightagent = ["fixtures/*.json"]
+
 [tool.pytest.ini_options]
 addopts = "-q"
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+  "live: calls a real external API",
+]

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "stock_code": "999999",
+  "company_name": null,
+  "as_of": "2026-06-30T00:00:00+00:00",
+  "price": null,
+  "pe": null,
+  "pb": null,
+  "pe_percentile_5y": null,
+  "pb_percentile_5y": null,
+  "roe": null,
+  "roe_stable": null,
+  "revenue_yoy": null,
+  "profit_yoy": null,
+  "gross_margin": null,
+  "debt_ratio": null,
+  "current_ratio": null,
+  "operating_cf": null,
+  "net_profit": null,
+  "goodwill": null,
+  "non_recurring_profit_ratio": null
+}

@@ -42,3 +42,15 @@ agent = AgentInstance(
 ```
 
 No live API call is performed by the test suite.
+
+## Local SQLite
+
+SQLite runs in-process; no database server is required.
+
+```bash
+.venv/bin/python -m insightagent db init
+.venv/bin/python -m insightagent db status
+```
+
+The default database is `data/insightagent.db`. Database files, WAL files, and
+artifact data are ignored by Git.

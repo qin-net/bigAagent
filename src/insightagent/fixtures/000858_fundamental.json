@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "stock_code": "000858",
+  "company_name": "五粮液",
+  "as_of": "2026-06-30T00:00:00+00:00",
+  "price": 128.6,
+  "pe": 18.5,
+  "pb": 4.2,
+  "pe_percentile_5y": 45.0,
+  "pb_percentile_5y": 52.0,
+  "roe": 16.8,
+  "roe_stable": true,
+  "revenue_yoy": 6.4,
+  "profit_yoy": 8.5,
+  "gross_margin": 74.2,
+  "debt_ratio": 32.1,
+  "current_ratio": 3.4,
+  "operating_cf": -12.4,
+  "net_profit": 80.0,
+  "goodwill": 0.0,
+  "non_recurring_profit_ratio": 2.1
+}

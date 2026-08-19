@@ -21,6 +21,24 @@ class TokenCounter(Protocol):
         ...
 
 
+class ArtifactStore(Protocol):
+    async def put(self, content: str) -> str:
+        ...
+
+    async def get(self, ref: str) -> str:
+        ...
+
+
+class ContextArchive(Protocol):
+    async def append(
+        self, session_id: str, message: LLMMessage
+    ) -> None:
+        ...
+
+    async def load(self, session_id: str) -> List[LLMMessage]:
+        ...
+
+
 class CharacterTokenCounter:
     """Portable approximation until a model-specific tokenizer is configured."""
 
@@ -82,7 +100,7 @@ class ContextBuffer:
     def __init__(
         self,
         session_id: str,
-        archive: InMemoryContextArchive,
+        archive: ContextArchive,
         messages: Optional[List[LLMMessage]] = None,
     ) -> None:
         self.session_id = session_id
@@ -91,7 +109,7 @@ class ContextBuffer:
 
     @classmethod
     async def load(
-        cls, session_id: str, archive: InMemoryContextArchive
+        cls, session_id: str, archive: ContextArchive
     ) -> "ContextBuffer":
         return cls(session_id, archive, await archive.load(session_id))
 
@@ -179,7 +197,7 @@ class ContextCompactor:
         self,
         *,
         token_counter: Optional[TokenCounter] = None,
-        artifact_store: Optional[InMemoryArtifactStore] = None,
+        artifact_store: Optional[ArtifactStore] = None,
         summarizer: Optional[AutoCompactSummarizer] = None,
         config: Optional[ContextConfig] = None,
     ) -> None:

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import ValidationError
 
 from .context import (
+    ContextArchive,
     ContextBuffer,
     ContextCompactor,
     InMemoryContextArchive,
@@ -28,7 +29,7 @@ from .resources import (
     ResourceRegistry,
 )
 from .retry import ExponentialBackoff
-from .state import InMemoryStateStore, StateConflictError
+from .state import InMemoryStateStore, StateConflictError, StateStore
 
 
 class MaxLoopRoundExceeded(RuntimeError):
@@ -45,6 +46,29 @@ class ContentFilteredError(RuntimeError):
 
 class InvalidModelOutputError(ValueError):
     pass
+
+
+def _jsonable(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    return value
+
+
+class LoopTracer:
+    """Records scheduler stage payloads for tests and debugging."""
+
+    def __init__(self) -> None:
+        self.events: List[Dict[str, Any]] = []
+
+    def emit(self, stage: str, payload: Any = None) -> None:
+        self.events.append({"stage": stage, "payload": _jsonable(payload)})
+
+    def stages(self) -> List[str]:
+        return [event["stage"] for event in self.events]
 
 
 @dataclass(frozen=True)
@@ -66,7 +90,7 @@ class AgentLocalScheduler:
         self,
         *,
         agent_name: str,
-        state_store: InMemoryStateStore,
+        state_store: StateStore,
         resource_registry: ResourceRegistry,
         compactor: ContextCompactor,
         llm_retry: ExponentialBackoff,
@@ -82,6 +106,7 @@ class AgentLocalScheduler:
         self.orchestrator = orchestrator
         self.llm = llm_adapter
         self.config = config
+        self.tracer: Optional[LoopTracer] = None
 
     async def run_agent_loop(
         self,
@@ -96,6 +121,15 @@ class AgentLocalScheduler:
             state, expected_version=state.version
         )
         await context_buffer.append_user(user_input)
+        self._trace(
+            "loop_start",
+            {
+                "agent_name": self.agent_name,
+                "session_id": state.session_id,
+                "version": state.version,
+                "user_input": user_input,
+            },
+        )
 
         try:
             while (
@@ -130,9 +164,29 @@ class AgentLocalScheduler:
                     max_tokens=self.config.max_tokens,
                     user_id=self.config.user_id,
                 )
+                self._trace(
+                    "llm_request",
+                    {
+                        "loop_round": state.loop_round,
+                        "state_version": state.version,
+                        "tool_names": [
+                            item.get("function", {}).get("name")
+                            for item in resource_definitions
+                        ],
+                        "messages": request.messages,
+                    },
+                )
 
                 response = await self.llm_retry.execute(
                     self.llm.complete, request
+                )
+                self._trace(
+                    "llm_response",
+                    {
+                        "finish_reason": response.finish_reason,
+                        "content": response.content,
+                        "tool_calls": response.tool_calls,
+                    },
                 )
                 await context_buffer.append_assistant(
                     content=response.content,
@@ -146,7 +200,12 @@ class AgentLocalScheduler:
                             "finish_reason=tool_calls without tool calls"
                         )
                     calls = self._parse_tool_calls(response.tool_calls)
+                    self._trace("scheduler_dispatch", calls)
                     results = await self.orchestrator.dispatch_calls(calls)
+                    self._trace(
+                        "tool_results",
+                        {call_id: result for call_id, result in results.items()},
+                    )
                     for call in response.tool_calls:
                         result = results[call.id]
                         await context_buffer.append_tool(
@@ -164,12 +223,20 @@ class AgentLocalScheduler:
                     state = await self.state_store.save(
                         state, expected_version=state.version
                     )
+                    self._trace(
+                        "state_checkpoint",
+                        {
+                            "loop_round": state.loop_round,
+                            "version": state.version,
+                        },
+                    )
                     continue
 
                 if response.finish_reason == "stop":
                     final = self._parse_final_response(
                         response.content, state
                     )
+                    self._trace("final_response", final)
                     state = await self.state_store.apply_patch(
                         state.session_id, final.state_patch
                     )
@@ -179,6 +246,13 @@ class AgentLocalScheduler:
                     )
                     await self.state_store.save(
                         state, expected_version=state.version
+                    )
+                    self._trace(
+                        "loop_complete",
+                        {
+                            "status": state.status.value,
+                            "version": state.version,
+                        },
                     )
                     return final
 
@@ -204,6 +278,10 @@ class AgentLocalScheduler:
         except Exception as error:
             await self._mark_failed(state.session_id, error)
             raise
+
+    def _trace(self, stage: str, payload: Any = None) -> None:
+        if self.tracer is not None:
+            self.tracer.emit(stage, payload)
 
     def _system_prompt(self, state: AgentState) -> str:
         schema = AgentFinalResponse.model_json_schema()
@@ -299,13 +377,14 @@ class AgentInstance:
         name: str,
         llm_adapter: LLMAdapter,
         config: Optional[RuntimeConfig] = None,
-        state_store: Optional[InMemoryStateStore] = None,
-        context_archive: Optional[InMemoryContextArchive] = None,
+        state_store: Optional[StateStore] = None,
+        context_archive: Optional[ContextArchive] = None,
         compactor: Optional[ContextCompactor] = None,
         llm_retry: Optional[ExponentialBackoff] = None,
         resource_retry_policies: Optional[
             Dict[str, ExponentialBackoff]
         ] = None,
+        tracer: Optional[LoopTracer] = None,
     ) -> None:
         self.name = name
         self.config = config or RuntimeConfig()
@@ -331,6 +410,7 @@ class AgentInstance:
             llm_adapter=llm_adapter,
             config=self.config,
         )
+        self.scheduler.tracer = tracer
 
     def register_resource(self, resource: Resource) -> None:
         self.resource_registry.register(resource)
