@@ -3,8 +3,16 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional, Protocol, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Protocol, Sequence, Tuple
 
+from .akshare_map import (
+    HIST_VALUE_EM,
+    bars_from_mapped,
+    map_akshare_row,
+    map_akshare_rows,
+    map_row,
+    parse_quantity,
+)
 from .contracts import utc_now
 from .data_contracts import (
     AnnouncementHit,
@@ -45,36 +53,14 @@ def normalize_stock_code(raw: str) -> str:
 
 
 def to_float(value: Any) -> Optional[float]:
-    if value is None:
+    number, unit = parse_quantity(value)
+    if number is None:
         return None
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        number = float(value)
-        if number != number:  # NaN
-            return None
-        return number
-    text = str(value).strip().replace(",", "")
-    for prefix in ("增持", "减持", "持股"):
-        if text.startswith(prefix):
-            text = text[len(prefix) :]
-    text = text.replace("%", "").strip()
-    if text in {"", "-", "None", "nan", "NaN", "False", "True"}:
-        return None
-    multiplier = 1.0
-    if text.endswith("亿元"):
-        text = text[:-2].strip()
-        multiplier = 100_000_000.0
-    elif text.endswith("亿"):
-        text = text[:-1].strip()
-        multiplier = 100_000_000.0
-    elif text.endswith("万"):
-        text = text[:-1].strip()
-        multiplier = 10_000.0
-    try:
-        return float(text) * multiplier
-    except ValueError:
-        return None
+    if unit == "yi_yuan":
+        return number * 100_000_000.0
+    if unit == "wan":
+        return number * 10_000.0
+    return number
 
 
 def scale_accounting_amount(value: Optional[float]) -> Optional[float]:
@@ -127,6 +113,7 @@ def _row_date(row: Dict[str, Any]) -> Optional[datetime]:
         "报告日",
         "变动日期",
         "发布时间",
+        "published_at",
     ):
         text = _text(row.get(key))
         if not text:
@@ -165,23 +152,7 @@ def newest_records(rows: Sequence[Dict[str, Any]], limit: int) -> List[Dict[str,
 
 
 def bars_from_value_rows(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    bars: List[Dict[str, Any]] = []
-    for row in rows:
-        close = to_float(row.get("当日收盘价") or row.get("close"))
-        if close is None:
-            continue
-        bars.append(
-            {
-                "date": _text(row.get("数据日期") or row.get("date")),
-                "open": close,
-                "close": close,
-                "high": close,
-                "low": close,
-                "volume": to_float(row.get("成交量") or row.get("volume")),
-                "turnover": to_float(row.get("总市值")),
-            }
-        )
-    return bars
+    return bars_from_mapped(map_row(row, HIST_VALUE_EM) for row in rows)
 
 
 def missing_of(payload: Dict[str, Any], fields: Sequence[str]) -> List[str]:
@@ -453,18 +424,12 @@ class AkshareMarketClient:
                 "stock_individual_info_em", symbol=code
             )
             mapping = _info_map(table)
-            name = (
-                mapping.get("股票简称")
-                or mapping.get("名称")
-                or mapping.get("证券简称")
-            )
+            mapped = map_akshare_row("stock_individual_info_em", mapping)
             return {
                 "stock_code": code,
-                "company_name": _text(name),
-                "industry": _text(mapping.get("行业")),
-                "listing_date": normalize_date(
-                    mapping.get("上市时间") or mapping.get("上市日期")
-                ),
+                "company_name": mapped.get("company_name"),
+                "industry": mapped.get("industry"),
+                "listing_date": mapped.get("listing_date"),
                 "source": "akshare.stock_individual_info_em",
             }
         except Exception:
@@ -525,11 +490,11 @@ class AkshareMarketClient:
                 "source": self._hist_source.get(code, "akshare.hist"),
             }
         rows = await self._value_rows(code)
-        latest = latest_record(rows)
+        latest = map_akshare_row("stock_value_em", latest_record(rows))
         return {
             "stock_code": code,
-            "price": to_float(latest.get("当日收盘价")),
-            "change_pct": to_float(latest.get("当日涨跌幅")),
+            "price": latest.get("price"),
+            "change_pct": latest.get("change_pct"),
             "source": "akshare.stock_value_em",
         }
 
@@ -539,21 +504,12 @@ class AkshareMarketClient:
         except Exception:
             return {}
         mapping = _info_map(table)
-        price = to_float(mapping.get("最新"))
-        if price is None:
+        mapped = map_akshare_row("stock_bid_ask_em", mapping)
+        if mapped.get("price") is None:
             return {}
-        return {
-            "stock_code": code,
-            "price": price,
-            "open": to_float(mapping.get("今开")),
-            "high": to_float(mapping.get("最高")),
-            "low": to_float(mapping.get("最低")),
-            "pre_close": to_float(mapping.get("昨收")),
-            "change_pct": to_float(mapping.get("涨幅")),
-            "volume": to_float(mapping.get("总手")),
-            "turnover": to_float(mapping.get("金额")),
-            "source": "akshare.stock_bid_ask_em",
-        }
+        mapped["stock_code"] = code
+        mapped["source"] = "akshare.stock_bid_ask_em"
+        return mapped
 
     async def hist_daily(
         self, stock_code: str, *, limit: int = 120
@@ -595,7 +551,7 @@ class AkshareMarketClient:
             end_date=end.strftime("%Y%m%d"),
             adjust="qfq",
         )
-        return _parse_hist_rows(table)
+        return _parse_hist_rows(table, "stock_zh_a_hist")
 
     async def _hist_from_tencent(self, code: str) -> List[Dict[str, Any]]:
         end = datetime.now(timezone.utc)
@@ -608,7 +564,7 @@ class AkshareMarketClient:
             end_date=end.strftime("%Y%m%d"),
             adjust="qfq",
         )
-        return _parse_hist_rows(table)
+        return _parse_hist_rows(table, "stock_zh_a_hist_tx")
 
     async def _value_rows(self, stock_code: str) -> List[Dict[str, Any]]:
         if stock_code in self._value_cache:
@@ -621,11 +577,12 @@ class AkshareMarketClient:
     async def valuation(self, stock_code: str) -> Dict[str, Any]:
         code = normalize_stock_code(stock_code)
         rows = await self._value_rows(code)
-        latest = latest_record(rows)
-        pe_values = [to_float(row.get("PE(TTM)")) for row in rows]
-        pb_values = [to_float(row.get("市净率")) for row in rows]
-        pe = to_float(latest.get("PE(TTM)"))
-        pb = to_float(latest.get("市净率"))
+        mapped_rows = map_akshare_rows("stock_value_em", rows)
+        latest = latest_record(mapped_rows)
+        pe_values = [row.get("pe") for row in mapped_rows]
+        pb_values = [row.get("pb") for row in mapped_rows]
+        pe = latest.get("pe")
+        pb = latest.get("pb")
         return {
             "stock_code": code,
             "pe": pe,
@@ -637,7 +594,7 @@ class AkshareMarketClient:
 
     async def financials(self, stock_code: str) -> Dict[str, Any]:
         code = normalize_stock_code(stock_code)
-        table = await _akshare_call_first(
+        function_name, table = await _akshare_call_first(
             (
                 (
                     "stock_financial_abstract_ths",
@@ -653,62 +610,25 @@ class AkshareMarketClient:
                 ),
             )
         )
-        rows = _records(table)
-        latest = latest_record(rows)
-        payload = {
+        latest = latest_record(map_akshare_rows(function_name, _records(table)))
+        return {
             "stock_code": code,
-            "roe": _first_number(
-                latest,
-                ("加权净资产收益率(%)", "净资产收益率(%)", "净资产收益率", "ROEJQ", "roe"),
-            ),
-            "revenue_yoy": _first_number(
-                latest,
-                (
-                    "营业总收入同比增长率",
-                    "主营业务收入增长率(%)",
-                    "TOTALOPERATEREVETZ",
-                    "revenue_yoy",
-                    "营收同比",
-                ),
-            ),
-            "profit_yoy": _first_number(
-                latest,
-                (
-                    "净利润同比增长率",
-                    "净利润增长率(%)",
-                    "PARENTNETPROFITTZ",
-                    "netprofit_yoy",
-                    "净利润同比",
-                ),
-            ),
-            "gross_margin": _first_number(
-                latest, ("销售毛利率(%)", "销售毛利率", "XSMLL", "毛利率", "grossprofit_margin")
-            ),
-            "debt_ratio": _first_number(
-                latest, ("资产负债率(%)", "资产负债率", "ZCFZL", "debt_asset_ratio")
-            ),
-            "current_ratio": _first_number(latest, ("流动比率", "LD", "current_ratio")),
-            "net_profit": _first_number(
-                latest,
-                (
-                    "净利润",
-                    "PARENTNETPROFIT",
-                    "扣除非经常性损益后的净利润(元)",
-                    "netprofit",
-                ),
-            ),
-            "goodwill": _first_number(latest, ("商誉", "goodwill")),
-            "non_recurring_profit_ratio": _first_number(
-                latest, ("非经常性损益占比", "non_recurring_profit_ratio")
-            ),
-            "source": "akshare.financials",
+            "roe": latest.get("roe"),
+            "revenue_yoy": latest.get("revenue_yoy"),
+            "profit_yoy": latest.get("profit_yoy"),
+            "gross_margin": latest.get("gross_margin"),
+            "debt_ratio": latest.get("debt_ratio"),
+            "current_ratio": latest.get("current_ratio"),
+            "net_profit": latest.get("net_profit"),
+            "goodwill": latest.get("goodwill"),
+            "non_recurring_profit_ratio": latest.get("non_recurring_profit_ratio"),
+            "source": "akshare.{}".format(function_name),
         }
-        return payload
 
     async def cashflow(self, stock_code: str) -> Dict[str, Any]:
         code = normalize_stock_code(stock_code)
         financials = await self.financials(code)
-        table = await _akshare_call_first(
+        function_name, table = await _akshare_call_first(
             (
                 (
                     "stock_cash_flow_sheet_by_report_em",
@@ -720,26 +640,16 @@ class AkshareMarketClient:
                 ),
             )
         )
-        rows = _records(table)
-        latest = latest_record(rows)
-        operating = _first_number(
-            latest,
-            (
-                "经营活动产生的现金流量净额",
-                "NETCASH_OPERATE",
-                "经营现金流",
-                "operating_cf",
-            ),
-        )
-        net_profit = _first_number(latest, ("净利润", "NETPROFIT", "net_profit")) or financials.get(
-            "net_profit"
-        )
+        latest = latest_record(map_akshare_rows(function_name, _records(table)))
+        net_profit = latest.get("net_profit")
+        if net_profit is None:
+            net_profit = financials.get("net_profit")
         return {
             "stock_code": code,
-            "operating_cf": operating,
+            "operating_cf": latest.get("operating_cf"),
             "net_profit": net_profit,
             "profit_yoy": financials.get("profit_yoy"),
-            "source": "akshare.cashflow",
+            "source": "akshare.{}".format(function_name),
         }
 
     async def announcements(
@@ -762,26 +672,24 @@ class AkshareMarketClient:
                 retries=1,
                 security=code,
             )
-        rows = newest_records(_records(table), max(limit * 3, 30))
+        rows = newest_records(
+            map_akshare_rows(
+                "stock_individual_notice_report", _records(table)
+            ),
+            max(limit * 3, 30),
+        )
         hits = []
-        for row in rows:
-            title = _text(
-                row.get("公告标题")
-                or row.get("标题")
-                or row.get("title")
-                or row.get("新闻标题")
-            )
+        for item in rows:
+            title = item.get("title")
             if not title:
                 continue
             hits.append(
                 {
                     "title": title,
-                    "published_at": normalize_date(
-                        row.get("公告日期") or row.get("日期") or row.get("发布时间")
-                    ),
-                    "notice_type": _text(row.get("公告类型") or row.get("类型")),
-                    "url": _text(row.get("网址") or row.get("url") or row.get("链接")),
-                    "source": "akshare.announcement",
+                    "published_at": item.get("published_at"),
+                    "notice_type": item.get("notice_type"),
+                    "url": item.get("url"),
+                    "source": "akshare.stock_individual_notice_report",
                 }
             )
             if len(hits) >= limit:
@@ -793,24 +701,21 @@ class AkshareMarketClient:
     ) -> List[Dict[str, Any]]:
         code = normalize_stock_code(stock_code)
         table = await _akshare_call("stock_news_em", symbol=code, retries=1)
-        rows = newest_records(_records(table), limit)
+        rows = newest_records(
+            map_akshare_rows("stock_news_em", _records(table)), limit
+        )
         hits = []
-        for row in rows:
-            title = _text(
-                row.get("新闻标题") or row.get("标题") or row.get("title")
-            )
+        for item in rows:
+            title = item.get("title")
             if not title:
                 continue
             hits.append(
                 {
                     "title": title,
-                    "published_at": _text(
-                        row.get("发布时间") or row.get("日期") or row.get("时间")
-                    ),
-                    "url": _text(row.get("新闻链接") or row.get("url") or row.get("链接")),
-                    "source": _text(row.get("文章来源") or row.get("来源"))
-                    or "akshare.stock_news_em",
-                    "summary": _text(row.get("新闻内容") or row.get("内容")),
+                    "published_at": item.get("published_at"),
+                    "url": item.get("url"),
+                    "source": item.get("source") or "akshare.stock_news_em",
+                    "summary": item.get("summary"),
                 }
             )
         return hits
@@ -819,38 +724,29 @@ class AkshareMarketClient:
         self, stock_code: str, *, limit: int = 20
     ) -> List[Dict[str, Any]]:
         code = normalize_stock_code(stock_code)
-        table = await _akshare_call_first(
+        function_name, table = await _akshare_call_first(
             (
                 ("stock_shareholder_change_ths", {"symbol": code}),
                 ("stock_share_hold_change_szse", {"symbol": code}),
                 ("stock_hold_change_cninfo", {"symbol": code}),
             )
         )
-        rows = newest_records(_records(table), limit)
+        rows = newest_records(
+            map_akshare_rows(function_name, _records(table)), limit
+        )
         items = []
-        for row in rows:
-            note = _text(
-                row.get("变动原因")
-                or row.get("增减")
-                or row.get("变动类型")
-                or row.get("公告标题")
-                or row.get("变动途径")
+        for item in rows:
+            qty_text = item.get("raw_change") or ""
+            note = item.get("note")
+            name = item.get("holder_name")
+            change_shares = item.get("change_shares")
+            change_type = classify_event(
+                " ".join(part for part in (qty_text, note, name) if part)
             )
-            name = _text(
-                row.get("股东名称")
-                or row.get("变动股东")
-                or row.get("持股人")
-                or row.get("姓名")
-            )
-            qty_text = _text(row.get("变动数量") or row.get("增减数量"))
-            change_shares = _first_number(
-                row, ("变动数量", "变动股数", "增减数量", "change_shares")
-            )
-            change_type = classify_event(" ".join(part for part in (qty_text, note, name) if part))
             if change_type == "announcement":
-                if qty_text and "减持" in qty_text:
+                if "减持" in qty_text:
                     change_type = "reduction"
-                elif qty_text and "增持" in qty_text:
+                elif "增持" in qty_text:
                     change_type = "increase"
                 elif change_shares is not None and change_shares < 0:
                     change_type = "reduction"
@@ -863,26 +759,26 @@ class AkshareMarketClient:
                     "holder_name": name,
                     "change_type": change_type,
                     "change_shares": change_shares,
-                    "published_at": _text(
-                        row.get("变动日期") or row.get("公告日期") or row.get("日期")
-                    ),
+                    "published_at": item.get("published_at"),
                     "note": note,
                 }
             )
         return items
 
     async def macro(self) -> Dict[str, Any]:
-        lpr = _records(await _akshare_call("macro_china_lpr"))
-        latest = latest_record(lpr)
+        lpr_rows = map_akshare_rows(
+            "macro_china_lpr", _records(await _akshare_call("macro_china_lpr"))
+        )
+        latest = latest_record(lpr_rows)
         shibor = _records(await _akshare_call_optional("macro_china_shibor_all"))
         shibor_latest = latest_record(shibor) if shibor else {}
         return {
-            "lpr_1y": _first_number(latest, ("LPR1Y", "1年期LPR", "lpr_1y", "LPR_1Y")),
-            "lpr_5y": _first_number(latest, ("LPR5Y", "5年期以上LPR", "lpr_5y")),
+            "lpr_1y": latest.get("lpr_1y"),
+            "lpr_5y": latest.get("lpr_5y"),
             "shibor_overnight": _first_number(
                 shibor_latest, ("Overnight_O/N_定价", "O/N", "overnight")
             ),
-            "source": "akshare.macro",
+            "source": "akshare.macro_china_lpr",
         }
 
 
@@ -1317,14 +1213,14 @@ async def _akshare_call_optional(name: str, **kwargs: Any) -> Any:
 
 async def _akshare_call_first(
     candidates: Sequence[tuple], *, retries: int = 0
-) -> Any:
+) -> Tuple[str, Any]:
     last_error = None
     ak = _import_akshare()
     for name, kwargs in candidates:
         if getattr(ak, name, None) is None:
             continue
         try:
-            return await _akshare_call(name, retries=retries, **kwargs)
+            return name, await _akshare_call(name, retries=retries, **kwargs)
         except Exception as error:
             last_error = error
             continue
@@ -1400,26 +1296,14 @@ def _records(table: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def _parse_hist_rows(table: Any) -> List[Dict[str, Any]]:
-    bars = []
-    for row in _records(table):
-        close = to_float(
-            row.get("收盘") or row.get("close") or row.get("收盘价")
+def _parse_hist_rows(table: Any, function_name: str) -> List[Dict[str, Any]]:
+    return [
+        bar
+        for bar in bars_from_mapped(
+            map_akshare_rows(function_name, _records(table))
         )
-        if close is None:
-            continue
-        bars.append(
-            {
-                "date": _text(row.get("日期") or row.get("date") or row.get("时间")),
-                "open": to_float(row.get("开盘") or row.get("open")),
-                "close": close,
-                "high": to_float(row.get("最高") or row.get("high")),
-                "low": to_float(row.get("最低") or row.get("low")),
-                "volume": to_float(row.get("成交量") or row.get("volume")),
-                "turnover": to_float(row.get("成交额") or row.get("amount")),
-            }
-        )
-    return bars
+        if bar.get("close") is not None
+    ]
 
 
 def _info_map(table: Any) -> Dict[str, Any]:
