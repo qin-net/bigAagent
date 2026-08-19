@@ -4,6 +4,7 @@ import os
 import pytest
 
 from insightagent.contracts import AgentFinalResponse
+from insightagent.env import load_dotenv
 from insightagent.llm import DeepSeekChatAdapter, DeepSeekConfig
 from insightagent.market import FixtureMarketClient, MarketService
 from insightagent.runtime import AgentInstance, LoopTracer, RuntimeConfig
@@ -15,6 +16,7 @@ pytestmark = pytest.mark.live
 
 @pytest.mark.asyncio
 async def test_live_deepseek_calls_market_tools():
+    load_dotenv()
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         pytest.skip("DEEPSEEK_API_KEY is not set")

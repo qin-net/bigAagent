@@ -6,6 +6,7 @@ import json
 import os
 from typing import Optional, Sequence
 
+from .env import load_dotenv
 from .llm import DeepSeekChatAdapter, DeepSeekConfig
 from .persistence import SQLiteDatabase
 from .workflows.initial_research import (
@@ -63,7 +64,7 @@ def build_llm(model: str) -> DeepSeekChatAdapter:
     if not api_key:
         raise SystemExit(
             "DEEPSEEK_API_KEY is required for analyze. "
-            "Pass it as a process environment variable."
+            "Put it in .env or export it in the process environment."
         )
     return DeepSeekChatAdapter(
         DeepSeekConfig(api_key=api_key, default_model=model)
@@ -151,6 +152,7 @@ async def _run_analyze(args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    load_dotenv()
     parser = build_parser()
     args = parser.parse_args(argv)
     return asyncio.run(_run(args))

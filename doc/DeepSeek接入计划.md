@@ -75,9 +75,10 @@ function.strict: true
 
 第一期策略：
 
-- 默认使用正式 base URL + 本地严格校验
-- Strict Beta 作为可配置实验开关，不作为正确性的唯一保障
-- Schema Builder 提供 `deepseek_strict_compatible` 检查
+- 默认使用 Beta base URL + `function.strict=true` + 本地 Pydantic 二次校验
+- 所有工具 schema 经 `to_strict_json_schema` 改写成官方子集（properties 全 required、`additionalProperties=false`、`$defs` 改为 `$def`）
+- 最终交卷走 `submit_final` 工具，用同一套 strict schema 约束；DeepSeek 不支持 `response_format.json_schema`
+- Strict 仍不是正确性的唯一保障：参数和最终 payload 都要再校验
 
 ### 2.4 JSON Output
 
@@ -96,10 +97,11 @@ function.strict: true
 
 框架处理：
 
-- 最终交付物使用 JSON Output + Pydantic 二次校验
-- 空 content 视为可纠正输出错误
+- 最终交付物优先通过 strict 工具 `submit_final` 提交（JSON Schema 在 function.parameters 上强制）
+- `json_object` 仅作为非 strict 回退；DeepSeek 不提供 `json_schema` response_format
+- 空 content 或 schema 失败视为可纠正输出错误，进入下一轮，不因模型抄错 version/loop_round 失败
 - `length` 不直接解析为成功，先执行上下文/输出预算处理
-- 校验错误以结构化纠正提示进入下一轮
+- `loop_round` 与 `base_version` 由 LocalScheduler 递增/盖章
 
 ### 2.5 finish_reason
 

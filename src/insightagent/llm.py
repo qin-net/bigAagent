@@ -20,10 +20,13 @@ class LLMAdapter(Protocol):
         ...
 
 
+DEEPSEEK_BETA_URL = "https://api.deepseek.com/beta"
+
+
 @dataclass(frozen=True)
 class DeepSeekConfig:
     api_key: str
-    base_url: str = "https://api.deepseek.com"
+    base_url: str = DEEPSEEK_BETA_URL
     default_model: str = "deepseek-v4-pro"
 
 

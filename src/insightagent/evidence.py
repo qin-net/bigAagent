@@ -10,7 +10,16 @@ YEAR_RE = re.compile(r"^(?:19|20)\d{2}$")
 SCORE_RE = re.compile(r"^[1-5]$")
 NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 STOCK_CODE_RE = re.compile(r"\b\d{6}\b")
+ISO_DATETIME_RE = re.compile(
+    r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?"
+)
+SLASH_DATE_RE = re.compile(r"\d{4}/\d{1,2}/\d{1,2}")
+CN_DATE_RE = re.compile(r"\d{4}年\d{1,2}月(?:\d{1,2}日)?")
+YEAR_MONTH_RE = re.compile(r"\d{4}-\d{2}(?!\d)")
 RULE_THRESHOLDS = (15.0, 30.0, 60.0, 70.0, 80.0)
+# Exact snapshot copy only. Do not treat 22 as 22.145.
+NUMBER_ABS_TOL = 1e-6
+NUMBER_REL_TOL = 1e-9
 
 
 class EvidenceBindingError(ValueError):
@@ -48,8 +57,16 @@ def allowed_financial_numbers(snapshot: FundamentalSnapshot) -> Set[float]:
     return allowed
 
 
+def strip_dates(text: str) -> str:
+    cleaned = ISO_DATETIME_RE.sub(" ", text)
+    cleaned = SLASH_DATE_RE.sub(" ", cleaned)
+    cleaned = CN_DATE_RE.sub(" ", cleaned)
+    return YEAR_MONTH_RE.sub(" ", cleaned)
+
+
 def extract_candidate_numbers(text: str, stock_code: str) -> List[float]:
-    cleaned = STOCK_CODE_RE.sub(" ", text)
+    cleaned = strip_dates(text)
+    cleaned = STOCK_CODE_RE.sub(" ", cleaned)
     cleaned = cleaned.replace(stock_code, " ")
     numbers: List[float] = []
     for token in NUMBER_RE.findall(cleaned):
@@ -61,7 +78,12 @@ def extract_candidate_numbers(text: str, stock_code: str) -> List[float]:
 
 def number_is_allowed(value: float, allowed: Iterable[float]) -> bool:
     for candidate in allowed:
-        if math.isclose(value, candidate, rel_tol=1e-3, abs_tol=0.051):
+        if math.isclose(
+            value,
+            candidate,
+            rel_tol=NUMBER_REL_TOL,
+            abs_tol=NUMBER_ABS_TOL,
+        ):
             return True
     return False
 

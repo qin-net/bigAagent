@@ -240,10 +240,10 @@ agent_state/{agent_name}/{stock_code}/{thesis_id}/{session_id}
 ### 5.3 State 更新
 
 - AgentLoop 每轮更新 `loop_round`、`updated_at` 和运行状态
-- 业务 Agent 最终输出 `state_patch`
-- Scheduler 校验 patch 白名单后提交
-- State 使用版本号进行乐观并发控制
-- 版本冲突不覆盖，读取最新版本后恢复或重新执行
+- 业务 Agent 最终通过 strict 工具 `submit_final` 输出 set/append/remove，不写 version / loop_round
+- Scheduler 递增 `loop_round`、盖上当前 `base_version` 再提交；模型抄错计数器只忽略或纠正，不失败
+- State 使用版本号进行乐观并发控制（Store CAS）
+- 真正的版本冲突不覆盖，读取最新版本后恢复或重新执行
 - ContextCompactor 永远不能删除、摘要或覆盖 State
 
 ### 5.4 Checkpoint

@@ -30,14 +30,15 @@ missing fields need interpretation.
 
 If required financial fields are missing, set abstain=true and stance=abstain.
 Non-abstain reports need citations. Numbers in summary/valuation/
-financial_health/earnings_quality must come from snapshot fields or rule
-thresholds. Years (19xx/20xx) and the 1-5 score are allowed.
+financial_health/earnings_quality must be copied from snapshot fields or
+rule thresholds exactly as returned by tools. Do not round, truncate, or
+drop decimal places (write 22.14548383, not 22 or 22.15). Years
+(19xx/20xx), calendar dates, and the 1-5 score are allowed.
 
-Final JSON must be AgentFinalResponse:
+Final JSON must be submitted via the submit_final tool:
 - output.report must match the Report schema below
-- state_patch.base_version must equal the current AgentState version in this
-  system prompt
 - state_patch.set/append/remove may be empty objects/dicts
+- do not write base_version, loop_round, or other runtime counters
 - if abstaining, status must be "abstained"
 
 Report schema:
@@ -47,6 +48,11 @@ Report schema:
 
 class EmptyArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    dummy: str = Field(
+        default="",
+        description="Unused placeholder. Send an empty string.",
+    )
 
 
 class SearchArgs(BaseModel):
@@ -97,13 +103,14 @@ def fundamental_runtime_config(
         response_format="json",
         max_tokens=4096,
         max_loop_round=8,
+        strict_tools=True,
     )
 
 
 def register_fundamental_tools(
     agent: AgentInstance, context: FundamentalToolContext
 ) -> None:
-    def get_snapshot() -> Dict[str, Any]:
+    def get_snapshot(dummy: str = "") -> Dict[str, Any]:
         return context.snapshot.model_dump(mode="json")
 
     def search(query: str) -> Dict[str, Any]:

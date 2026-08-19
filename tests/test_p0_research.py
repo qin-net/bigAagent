@@ -1,5 +1,4 @@
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -47,14 +46,12 @@ class ScriptedFundamentalLLM:
             )
 
         snapshot = _snapshot_from_request(request)
-        version = _version_from_request(request)
         report = _scripted_report(snapshot, unbound=self.unbound)
         payload = {
             "status": "abstained" if report["abstain"] else "completed",
             "output": {"report": report},
             "reflection": {"what_worked": ["used snapshot tool"]},
             "state_patch": {
-                "base_version": version,
                 "set": {},
                 "append": {},
                 "remove": {},
@@ -68,15 +65,6 @@ class ScriptedFundamentalLLM:
             reasoning_content="conclude from snapshot",
             finish_reason="stop",
         )
-
-
-def _version_from_request(request) -> int:
-    for message in request.messages:
-        if message.role == "system" and message.content:
-            match = re.search(r"version is (\d+)", message.content)
-            if match:
-                return int(match.group(1))
-    return 1
 
 
 def _snapshot_from_request(request) -> dict:

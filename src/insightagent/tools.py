@@ -57,7 +57,7 @@ def build_market_tools(service: MarketService) -> List[FunctionResource]:
     async def get_event_snapshot(stock_code: str) -> EventSnapshot:
         return await service.get_event_snapshot(stock_code)
 
-    async def get_macro_snapshot() -> MacroSnapshot:
+    async def get_macro_snapshot(dummy: str = "") -> MacroSnapshot:
         return await service.get_macro_snapshot()
 
     async def search_announcements(

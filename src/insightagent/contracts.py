@@ -39,13 +39,18 @@ class AgentState(BaseModel):
     meta: Dict[str, Any] = Field(default_factory=dict)
 
 
-class StatePatch(BaseModel):
+class ModelStatePatch(BaseModel):
+    """Patch ops the model may emit. No version or loop counters."""
+
     model_config = ConfigDict(extra="forbid")
 
-    base_version: int
     set: Dict[str, Any] = Field(default_factory=dict)
     append: Dict[str, List[Any]] = Field(default_factory=dict)
     remove: Dict[str, List[Any]] = Field(default_factory=dict)
+
+
+class StatePatch(ModelStatePatch):
+    base_version: int
 
 
 class ResourceType(str, Enum):
@@ -77,10 +82,15 @@ class ResourceSpec(BaseModel):
     version: str = "1"
 
     def to_deepseek_tool(self, strict: bool = False) -> Dict[str, Any]:
+        parameters = self.input_schema
+        if strict:
+            from .schema import to_strict_json_schema
+
+            parameters = to_strict_json_schema(parameters)
         function: Dict[str, Any] = {
             "name": self.name,
             "description": self.description,
-            "parameters": self.input_schema,
+            "parameters": parameters,
         }
         if strict:
             function["strict"] = True
@@ -176,6 +186,17 @@ class LLMResponse(BaseModel):
     ]
     usage: LLMUsage = Field(default_factory=LLMUsage)
     system_fingerprint: Optional[str] = None
+
+
+class ModelFinalResponse(BaseModel):
+    """JSON the model is asked to return. Runtime counters are omitted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["completed", "abstained", "degraded"] = "completed"
+    output: Dict[str, Any]
+    reflection: Dict[str, Any] = Field(default_factory=dict)
+    state_patch: ModelStatePatch = Field(default_factory=ModelStatePatch)
 
 
 class AgentFinalResponse(BaseModel):

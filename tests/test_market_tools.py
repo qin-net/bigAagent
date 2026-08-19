@@ -1,5 +1,4 @@
 import json
-import re
 
 import pytest
 
@@ -234,15 +233,6 @@ async def test_orchestrator_backoff_exhausts():
         )
 
 
-def _version(request) -> int:
-    for message in request.messages:
-        if message.role == "system" and message.content:
-            match = re.search(r"version is (\d+)", message.content)
-            if match:
-                return int(match.group(1))
-    return 1
-
-
 class ScriptedMarketLLM:
     def __init__(self) -> None:
         self.phase = "tools"
@@ -271,7 +261,6 @@ class ScriptedMarketLLM:
                 ],
                 finish_reason="tool_calls",
             )
-        version = _version(request)
         payload = {
             "status": "completed",
             "output": {
@@ -280,7 +269,6 @@ class ScriptedMarketLLM:
             },
             "reflection": {"what_worked": ["parallel market tools"]},
             "state_patch": {
-                "base_version": version,
                 "set": {"private_memory.memory_summary": "market tools ok"},
                 "append": {},
                 "remove": {},

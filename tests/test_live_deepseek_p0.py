@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+from insightagent.env import load_dotenv
 from insightagent.llm import DeepSeekChatAdapter, DeepSeekConfig
 from insightagent.persistence import SQLiteDatabase
 from insightagent.workflows.initial_research import analyze_stock
@@ -12,6 +13,7 @@ pytestmark = pytest.mark.live
 
 @pytest.mark.asyncio
 async def test_live_deepseek_fixture_analysis(tmp_path):
+    load_dotenv()
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         pytest.skip("DEEPSEEK_API_KEY is not set")

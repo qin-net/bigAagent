@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from .business_contracts import Report
 from .context import (
     ContextArchive,
     ContextBuffer,
@@ -17,7 +18,10 @@ from .contracts import (
     AgentState,
     LLMMessage,
     LLMRequest,
+    ModelFinalResponse,
+    ModelStatePatch,
     ResourceCall,
+    StatePatch,
     TaskStatus,
 )
 from .llm import LLMAdapter
@@ -29,6 +33,7 @@ from .resources import (
     ResourceRegistry,
 )
 from .retry import ExponentialBackoff
+from .schema import to_strict_json_schema
 from .state import InMemoryStateStore, StateConflictError, StateStore
 
 
@@ -46,6 +51,74 @@ class ContentFilteredError(RuntimeError):
 
 class InvalidModelOutputError(ValueError):
     pass
+
+
+SUBMIT_FINAL = "submit_final"
+
+
+class SubmitFinalOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report: Optional[Report] = None
+    summary: Optional[str] = None
+
+
+class ModelReflection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    what_worked: List[str] = Field(default_factory=list)
+    what_was_missing: List[str] = Field(default_factory=list)
+    process_errors: List[str] = Field(default_factory=list)
+
+
+class PathValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    value: str = ""
+
+
+class PathValues(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    values: List[str] = Field(default_factory=list)
+
+
+class SubmitStatePatch(BaseModel):
+    """Model-facing patch. Arrays stay DeepSeek-strict; dicts do not."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    set: List[PathValue] = Field(default_factory=list)
+    append: List[PathValues] = Field(default_factory=list)
+    remove: List[str] = Field(default_factory=list)
+
+
+class SubmitFinalArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["completed", "abstained", "degraded"] = "completed"
+    output: SubmitFinalOutput
+    reflection: ModelReflection = Field(default_factory=ModelReflection)
+    state_patch: SubmitStatePatch = Field(default_factory=SubmitStatePatch)
+
+
+def _submit_final_tool(*, strict: bool) -> Dict[str, Any]:
+    schema = SubmitFinalArgs.model_json_schema()
+    if strict:
+        schema = to_strict_json_schema(schema)
+    function: Dict[str, Any] = {
+        "name": SUBMIT_FINAL,
+        "description": (
+            "Submit the finished analysis. The scheduler stamps state "
+            "versions and increments loop rounds; do not send those fields."
+        ),
+        "parameters": schema,
+    }
+    if strict:
+        function["strict"] = True
+    return {"type": "function", "function": function}
 
 
 def _jsonable(value: Any) -> Any:
@@ -81,7 +154,7 @@ class RuntimeConfig:
     max_tokens: int = 4096
     max_loop_round: int = 15
     max_parallel_calls: int = 4
-    strict_tools: bool = False
+    strict_tools: bool = True
     user_id: Optional[str] = None
 
 
@@ -136,11 +209,7 @@ class AgentLocalScheduler:
                 state.status == TaskStatus.RUNNING
                 and state.loop_round < self.config.max_loop_round
             ):
-                resource_definitions = (
-                    self.resources.get_all_resource_definitions(
-                        strict=self.config.strict_tools
-                    )
-                )
+                resource_definitions = self._tool_definitions()
                 system_prompt = self._system_prompt(state)
                 compacted = await self.compactor.compact_before_llm(
                     context_buffer=context_buffer,
@@ -160,7 +229,11 @@ class AgentLocalScheduler:
                     tools=resource_definitions,
                     thinking_enabled=self.config.thinking_enabled,
                     reasoning_effort=self.config.reasoning_effort,
-                    response_format=self.config.response_format,
+                    response_format=(
+                        "text"
+                        if self.config.strict_tools
+                        else self.config.response_format
+                    ),
                     max_tokens=self.config.max_tokens,
                     user_id=self.config.user_id,
                 )
@@ -195,66 +268,26 @@ class AgentLocalScheduler:
                 )
 
                 if response.finish_reason == "tool_calls":
-                    if not response.tool_calls:
-                        raise InvalidModelOutputError(
-                            "finish_reason=tool_calls without tool calls"
-                        )
-                    calls = self._parse_tool_calls(response.tool_calls)
-                    self._trace("scheduler_dispatch", calls)
-                    results = await self.orchestrator.dispatch_calls(calls)
-                    self._trace(
-                        "tool_results",
-                        {call_id: result for call_id, result in results.items()},
+                    state, final = await self._handle_tool_calls(
+                        response, state, context_buffer
                     )
-                    for call in response.tool_calls:
-                        result = results[call.id]
-                        await context_buffer.append_tool(
-                            tool_call_id=call.id,
-                            content=json.dumps(
-                                result.model_dump(mode="json"),
-                                ensure_ascii=False,
-                                default=str,
-                            ),
-                        )
-                    state.loop_round += 1
-                    state.checkpoint = self._checkpoint(
-                        state, context_buffer
-                    )
-                    state = await self.state_store.save(
-                        state, expected_version=state.version
-                    )
-                    self._trace(
-                        "state_checkpoint",
-                        {
-                            "loop_round": state.loop_round,
-                            "version": state.version,
-                        },
-                    )
+                    if final is not None:
+                        return final
                     continue
 
                 if response.finish_reason == "stop":
-                    final = self._parse_final_response(
-                        response.content, state
+                    try:
+                        final = self._parse_final_response(
+                            response.content, state
+                        )
+                    except InvalidModelOutputError as error:
+                        state = await self._retry_invalid_output(
+                            state, context_buffer, error
+                        )
+                        continue
+                    return await self._complete_success(
+                        state, context_buffer, final
                     )
-                    self._trace("final_response", final)
-                    state = await self.state_store.apply_patch(
-                        state.session_id, final.state_patch
-                    )
-                    state.status = TaskStatus.SUCCESS
-                    state.checkpoint = self._checkpoint(
-                        state, context_buffer
-                    )
-                    await self.state_store.save(
-                        state, expected_version=state.version
-                    )
-                    self._trace(
-                        "loop_complete",
-                        {
-                            "status": state.status.value,
-                            "version": state.version,
-                        },
-                    )
-                    return final
 
                 if response.finish_reason == "length":
                     raise OutputTruncatedError(
@@ -279,22 +312,202 @@ class AgentLocalScheduler:
             await self._mark_failed(state.session_id, error)
             raise
 
+    def _tool_definitions(self) -> list[Dict[str, Any]]:
+        definitions = self.resources.get_all_resource_definitions(
+            strict=self.config.strict_tools
+        )
+        if self.config.strict_tools:
+            definitions.append(_submit_final_tool(strict=True))
+            definitions.sort(
+                key=lambda item: item.get("function", {}).get("name", "")
+            )
+        return definitions
+
+    async def _handle_tool_calls(
+        self,
+        response: Any,
+        state: AgentState,
+        context_buffer: ContextBuffer,
+    ) -> tuple:
+        if not response.tool_calls:
+            state = await self._retry_invalid_output(
+                state,
+                context_buffer,
+                InvalidModelOutputError(
+                    "finish_reason=tool_calls without tool calls"
+                ),
+            )
+            return state, None
+        try:
+            calls = self._parse_tool_calls(response.tool_calls)
+        except InvalidModelOutputError as error:
+            for call in response.tool_calls:
+                await context_buffer.append_tool(
+                    tool_call_id=call.id,
+                    content=json.dumps(
+                        {"status": "failed", "error": str(error)}
+                    ),
+                )
+            state = await self._retry_invalid_output(
+                state, context_buffer, error
+            )
+            return state, None
+
+        final_calls = [
+            call for call in calls if call.resource_name == SUBMIT_FINAL
+        ]
+        work_calls = [
+            call for call in calls if call.resource_name != SUBMIT_FINAL
+        ]
+        if work_calls:
+            self._trace("scheduler_dispatch", work_calls)
+            results = await self.orchestrator.dispatch_calls(work_calls)
+            self._trace(
+                "tool_results",
+                {call_id: result for call_id, result in results.items()},
+            )
+            for call in response.tool_calls:
+                if call.name == SUBMIT_FINAL:
+                    await context_buffer.append_tool(
+                        tool_call_id=call.id,
+                        content=json.dumps(
+                            {
+                                "status": "ignored",
+                                "error": (
+                                    "submit_final cannot mix with other tools"
+                                ),
+                            }
+                        ),
+                    )
+                    continue
+                result = results[call.id]
+                await context_buffer.append_tool(
+                    tool_call_id=call.id,
+                    content=json.dumps(
+                        result.model_dump(mode="json"),
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                )
+            state = await self._checkpoint_round(state, context_buffer)
+            return state, None
+
+        if not final_calls:
+            state = await self._retry_invalid_output(
+                state,
+                context_buffer,
+                InvalidModelOutputError("No dispatchable tool calls"),
+            )
+            return state, None
+
+        try:
+            final = self._parse_final_payload(
+                final_calls[0].arguments, state
+            )
+        except InvalidModelOutputError as error:
+            for call in response.tool_calls:
+                await context_buffer.append_tool(
+                    tool_call_id=call.id,
+                    content=json.dumps(
+                        {"status": "failed", "error": str(error)}
+                    ),
+                )
+            state = await self._retry_invalid_output(
+                state, context_buffer, error
+            )
+            return state, None
+
+        for call in response.tool_calls:
+            await context_buffer.append_tool(
+                tool_call_id=call.id,
+                content=json.dumps({"status": "accepted"}),
+            )
+        final = await self._complete_success(state, context_buffer, final)
+        return state, final
+
+    async def _complete_success(
+        self,
+        state: AgentState,
+        context_buffer: ContextBuffer,
+        final: AgentFinalResponse,
+    ) -> AgentFinalResponse:
+        self._trace("final_response", final)
+        state = await self.state_store.apply_patch(
+            state.session_id, final.state_patch
+        )
+        state.status = TaskStatus.SUCCESS
+        state.checkpoint = self._checkpoint(state, context_buffer)
+        await self.state_store.save(state, expected_version=state.version)
+        self._trace(
+            "loop_complete",
+            {
+                "status": state.status.value,
+                "version": state.version,
+            },
+        )
+        return final
+
+    async def _checkpoint_round(
+        self, state: AgentState, context_buffer: ContextBuffer
+    ) -> AgentState:
+        state.loop_round += 1
+        state.checkpoint = self._checkpoint(state, context_buffer)
+        state = await self.state_store.save(
+            state, expected_version=state.version
+        )
+        self._trace(
+            "state_checkpoint",
+            {
+                "loop_round": state.loop_round,
+                "version": state.version,
+            },
+        )
+        return state
+
+    async def _retry_invalid_output(
+        self,
+        state: AgentState,
+        context_buffer: ContextBuffer,
+        error: Exception,
+    ) -> AgentState:
+        self._trace(
+            "output_rejected",
+            {"type": type(error).__name__, "message": str(error)},
+        )
+        await context_buffer.append_user(
+            "Your previous final output was rejected: {}. "
+            "Call submit_final with a valid payload. "
+            "Do not include base_version, loop_round, or version; "
+            "the scheduler owns those counters.".format(error)
+        )
+        return await self._checkpoint_round(state, context_buffer)
+
     def _trace(self, stage: str, payload: Any = None) -> None:
         if self.tracer is not None:
             self.tracer.emit(stage, payload)
 
-    def _system_prompt(self, state: AgentState) -> str:
-        schema = AgentFinalResponse.model_json_schema()
+    def _system_prompt(self, _state: AgentState) -> str:
+        if self.config.strict_tools:
+            return (
+                "{base}\n\n"
+                "Call tools as needed. Finish by calling submit_final. "
+                "That tool's JSON Schema is the only allowed final payload. "
+                "Do not put the final answer in message content. "
+                "Do not include base_version, loop_round, or version; "
+                "the scheduler increments rounds and stamps state versions. "
+                "Do not expose hidden reasoning_content."
+            ).format(base=self.config.system_prompt)
+        schema = ModelFinalResponse.model_json_schema()
         return (
             "{base}\n\n"
             "Return JSON for final answers. Follow this JSON schema exactly:\n"
             "{schema}\n\n"
-            "Current AgentState version is {version}; state_patch.base_version "
-            "must equal it. Do not expose hidden reasoning_content."
+            "Do not include state versions, loop rounds, or other runtime "
+            "counters. The scheduler owns those. Do not expose hidden "
+            "reasoning_content."
         ).format(
             base=self.config.system_prompt,
             schema=json.dumps(schema, ensure_ascii=False),
-            version=state.version,
         )
 
     @staticmethod
@@ -322,25 +535,85 @@ class AgentLocalScheduler:
             )
         return parsed
 
-    @staticmethod
+    _MODEL_COUNTER_KEYS = ("base_version", "loop_round", "version")
+
     def _parse_final_response(
-        content: Optional[str], state: AgentState
+        self, content: Optional[str], state: AgentState
     ) -> AgentFinalResponse:
         if not content or not content.strip():
             raise InvalidModelOutputError("Model returned empty JSON content")
         try:
-            final = AgentFinalResponse.model_validate_json(content)
-        except ValidationError as error:
+            payload = json.loads(content)
+        except json.JSONDecodeError as error:
             raise InvalidModelOutputError(
-                "Final response failed schema validation"
+                "Final response is not valid JSON"
             ) from error
-        if final.state_patch.base_version != state.version:
-            raise StateConflictError(
-                "Final response patch uses version {}, expected {}".format(
-                    final.state_patch.base_version, state.version
-                )
+        if not isinstance(payload, dict):
+            raise InvalidModelOutputError(
+                "Final response must be a JSON object"
             )
-        return final
+        return self._parse_final_payload(payload, state)
+
+    def _parse_final_payload(
+        self, payload: Dict[str, Any], state: AgentState
+    ) -> AgentFinalResponse:
+        claimed = None
+        patch = payload.get("state_patch")
+        if isinstance(patch, dict):
+            claimed = patch.get("base_version")
+            for key in self._MODEL_COUNTER_KEYS:
+                patch.pop(key, None)
+        payload.pop("loop_round", None)
+        payload.pop("base_version", None)
+
+        output: Dict[str, Any]
+        try:
+            submitted = SubmitFinalArgs.model_validate(payload)
+            output = submitted.output.model_dump(
+                mode="json", exclude_none=True
+            )
+            reflection = submitted.reflection.model_dump(mode="json")
+            status = submitted.status
+            patch_body = ModelStatePatch(
+                set={item.path: item.value for item in submitted.state_patch.set},
+                append={
+                    item.path: item.values
+                    for item in submitted.state_patch.append
+                },
+                remove={name: [] for name in submitted.state_patch.remove},
+            )
+        except ValidationError:
+            try:
+                visible = ModelFinalResponse.model_validate(payload)
+            except ValidationError as error:
+                raise InvalidModelOutputError(
+                    "Final response failed schema validation"
+                ) from error
+            output = visible.output
+            reflection = visible.reflection
+            status = visible.status
+            patch_body = visible.state_patch
+
+        if claimed is not None and claimed != state.version:
+            self._trace(
+                "state_patch_version_ignored",
+                {
+                    "model_base_version": claimed,
+                    "live_version": state.version,
+                },
+            )
+
+        return AgentFinalResponse(
+            status=status,
+            output=output,
+            reflection=reflection,
+            state_patch=StatePatch(
+                base_version=state.version,
+                set=patch_body.set,
+                append=patch_body.append,
+                remove=patch_body.remove,
+            ),
+        )
 
     @staticmethod
     def _checkpoint(

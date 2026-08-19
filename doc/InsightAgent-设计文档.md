@@ -349,7 +349,7 @@ class ProcessRecord:
 }
 ```
 
-Agent 不直接写数据库。每次运行在交付物中返回 `state_patch`；本 Agent 的 LocalScheduler 校验字段白名单、引用有效性和 `base_version` 后提交，并保留旧版本。版本冲突时不覆盖，重新加载最新 State 后恢复、重新运行或进入人工处理。
+Agent 不直接写数据库。每次运行在交付物中返回 `state_patch` 的业务字段（set/append/remove）。`base_version` 和 `loop_round` 是运行时记账，由 LocalScheduler 盖章，不让模型填写。调度器校验字段白名单和引用后提交，并保留旧版本。真正的版本冲突（Store 中的 version 与调度器内存不一致）不覆盖，重新加载最新 State 后恢复、重新运行或进入人工处理。
 
 这里的 `memory_summary`、`lessons` 和 `reflection` 都是简洁、结构化、可给真人审阅的结论，不要求也不保存模型的原始思维链。
 

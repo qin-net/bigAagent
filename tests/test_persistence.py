@@ -181,7 +181,6 @@ async def test_runtime_recovers_from_sqlite_with_safe_context(tmp_path):
             "output": {"summary": "first"},
             "reflection": {},
             "state_patch": {
-                "base_version": 2,
                 "set": {},
                 "append": {},
                 "remove": {},
@@ -243,7 +242,6 @@ async def test_runtime_recovers_from_sqlite_with_safe_context(tmp_path):
             "output": {"summary": "second"},
             "reflection": {},
             "state_patch": {
-                "base_version": 5,
                 "set": {},
                 "append": {},
                 "remove": {},

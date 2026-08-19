@@ -7,7 +7,7 @@ from insightagent.contracts import (
     LLMRequest,
     LLMToolCall,
 )
-from insightagent.llm import DeepSeekChatAdapter, DeepSeekConfig
+from insightagent.llm import DEEPSEEK_BETA_URL, DeepSeekChatAdapter, DeepSeekConfig
 from insightagent.retry import RetryableProviderError
 
 
@@ -54,6 +54,10 @@ def raw_response(finish_reason="stop"):
             ),
         ),
     )
+
+
+def test_deepseek_defaults_to_beta_url_for_strict_tools():
+    assert DeepSeekConfig(api_key="test").base_url == DEEPSEEK_BETA_URL
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,11 @@ class StockCodeInput(BaseModel):
 class EmptyInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    dummy: str = Field(
+        default="",
+        description="Unused placeholder. Send an empty string.",
+    )
+
 
 class SearchAnnouncementsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
