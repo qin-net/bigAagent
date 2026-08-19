@@ -3,7 +3,7 @@
 > 状态：可转交实现  
 > 日期：2026-08-19  
 > 运行时：**复用现有 `AgentInstance`，禁止另起框架**  
-> 模板：`未命名/src/insightagent/fundamental_agent.py`
+> 模板：`src/insightagent/fundamental_agent.py`
 
 系统已冻结 **4 个分析角色 + 1 个追踪角色**。本次只把其中两个分析角色交给你实现：
 

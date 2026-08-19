@@ -1,0 +1,10 @@
+---
+description: 项目文档只写在与 src 同级的 doc/
+alwaysApply: true
+---
+
+# 项目文档位置
+
+- 设计文档、任务书、落盘规格只写到本仓库的 `doc/`（与 `src/` 同级）。
+- 禁止写入上一级 `Aagent/doc/`。那是旧位置，不再维护。
+- 新文档用相对仓库根的路径，例如 `doc/InsightAgent-设计文档.md`，不要写成 `未命名/doc/...`。
