@@ -20,8 +20,10 @@ from insightagent.workflows.initial_research import analyze_stock, format_cli_te
 FIXTURES = default_fixtures_dir()
 
 
-class ScriptedFundamentalLLM:
-    def __init__(self, *, unbound: bool = False) -> None:
+class ScriptedAgentLLM:
+    def __init__(self, role: str, *, abstain: bool = False, unbound: bool = False) -> None:
+        self.role = role
+        self.abstain = abstain
         self.unbound = unbound
         self.phase = "tool"
         self.requests = []
@@ -30,6 +32,11 @@ class ScriptedFundamentalLLM:
         self.requests.append(request)
         if self.phase == "tool":
             self.phase = "final"
+            tool_name = {
+                "fundamental": "get_fundamental_snapshot",
+                "technical": "get_indicator_snapshot",
+                "sentiment": "get_event_snapshot",
+            }[self.role]
             return LLMResponse(
                 id="tool-1",
                 model="fake",
@@ -38,7 +45,7 @@ class ScriptedFundamentalLLM:
                 tool_calls=[
                     LLMToolCall(
                         id="call-1",
-                        name="get_fundamental_snapshot",
+                        name=tool_name,
                         arguments="{}",
                     )
                 ],
@@ -46,7 +53,7 @@ class ScriptedFundamentalLLM:
             )
 
         snapshot = _snapshot_from_request(request)
-        report = _scripted_report(snapshot, unbound=self.unbound)
+        report = _scripted_report(self.role, snapshot, abstain=self.abstain, unbound=self.unbound)
         payload = {
             "status": "abstained" if report["abstain"] else "completed",
             "output": {"report": report},
@@ -78,7 +85,17 @@ def _snapshot_from_request(request) -> dict:
     raise AssertionError("Scripted LLM did not receive a snapshot")
 
 
-def _scripted_report(snapshot: dict, *, unbound: bool) -> dict:
+def _scripted_report(role: str, snapshot: dict, *, abstain: bool, unbound: bool = False) -> dict:
+    if role == "fundamental":
+        return _scripted_fundamental_report(snapshot, abstain=abstain, unbound=unbound)
+    if role == "technical":
+        return _scripted_technical_report(snapshot, abstain=abstain)
+    if role == "sentiment":
+        return _scripted_sentiment_report(snapshot, abstain=abstain)
+    raise ValueError(role)
+
+
+def _scripted_fundamental_report(snapshot: dict, *, abstain: bool = False, unbound: bool = False) -> dict:
     flags = snapshot.get("computed_flags") or []
     citations = [
         {
@@ -134,46 +151,147 @@ def _scripted_report(snapshot: dict, *, unbound: bool) -> dict:
     }
 
 
-async def _analyze(tmp_path: Path, stock_code: str, llm, **kwargs):
+def _scripted_technical_report(snapshot: dict, *, abstain: bool) -> dict:
+    if abstain:
+        return {
+            "schema_version": "1",
+            "role": "technical",
+            "score": 3,
+            "stance": "abstain",
+            "summary": "K线不足，无法形成技术面判断。",
+            "citations": [],
+            "risks": ["技术指标缺失"],
+            "degraded": True,
+            "abstain": True,
+            "missing_information": ["indicator"],
+        }
+    return {
+        "schema_version": "1",
+        "role": "technical",
+        "score": 4,
+        "stance": "hold",
+        "summary": "均线多头排列，趋势偏多。",
+        "citations": [
+            {
+                "ref_id": "ma20",
+                "kind": "field",
+                "id": "ma20",
+                "source": "get_indicator_snapshot",
+                "note": "MA20 from snapshot",
+            }
+        ],
+        "risks": ["量能不足"],
+        "degraded": False,
+        "abstain": False,
+        "missing_information": [],
+        "trend": "bullish",
+        "setup": "ma_bull_align",
+        "key_levels": "support: ma20=115.0",
+    }
+
+
+def _scripted_sentiment_report(snapshot: dict, *, abstain: bool) -> dict:
+    if abstain:
+        return {
+            "schema_version": "1",
+            "role": "sentiment",
+            "score": 3,
+            "stance": "abstain",
+            "summary": "无有效事件，无法形成情绪面判断。",
+            "citations": [],
+            "risks": ["事件信息缺失"],
+            "degraded": True,
+            "abstain": True,
+            "missing_information": ["events"],
+        }
+    return {
+        "schema_version": "1",
+        "role": "sentiment",
+        "score": 3,
+        "stance": "hold",
+        "summary": "存在减持事件，但无重大利空。",
+        "citations": [
+            {
+                "ref_id": "evt-1",
+                "kind": "event",
+                "id": "holder_reduction",
+                "source": "get_event_snapshot",
+                "note": "holder reduction event",
+            }
+        ],
+        "risks": ["股东减持压力"],
+        "degraded": False,
+        "abstain": False,
+        "missing_information": [],
+        "event_flags": ["holder_reduction"],
+        "crowd_risk": "medium",
+    }
+
+
+async def _analyze(
+    tmp_path: Path,
+    stock_code: str,
+    fundamental_llm,
+    technical_llm=None,
+    sentiment_llm=None,
+    **kwargs,
+):
     database = SQLiteDatabase(str(tmp_path / "insightagent.db"))
     await database.initialize()
     return await analyze_stock(
         stock_code,
         database=database,
-        llm_adapter=llm,
+        llm_adapter=fundamental_llm,
         artifact_root=str(tmp_path / "artifacts"),
         fixture=True,
         fixtures_dir=str(FIXTURES),
+        technical_llm_adapter=technical_llm,
+        sentiment_llm_adapter=sentiment_llm,
         **kwargs,
+    )
+
+
+def _make_three_agent_llms():
+    return (
+        ScriptedAgentLLM("fundamental"),
+        ScriptedAgentLLM("technical"),
+        ScriptedAgentLLM("sentiment"),
     )
 
 
 @pytest.mark.asyncio
 async def test_fixture_stock_persists_legal_report_and_decision(tmp_path):
-    outcome = await _analyze(tmp_path, "000858", ScriptedFundamentalLLM())
+    fund_llm, tech_llm, sent_llm = _make_three_agent_llms()
+    outcome = await _analyze(
+        tmp_path, "000858", fund_llm, tech_llm, sent_llm
+    )
     assert outcome.error is None
     assert outcome.report is not None
+    assert outcome.technical_report is not None
+    assert outcome.sentiment_report is not None
     assert outcome.decision is not None
     assert outcome.run.status in {"success", "degraded"}
-    assert outcome.decision.timing_score is None
-    assert outcome.decision.confidence <= 0.65
-    assert "technical" in outcome.decision.dimensions_missing
-    assert "sentiment" in outcome.decision.dimensions_missing
-    assert "macro" in outcome.decision.dimensions_missing
+    assert outcome.decision.timing_score is not None
+    assert outcome.decision.value_score is not None
+    assert outcome.decision.dimensions_missing == ["macro"]
+    assert outcome.decision.dimensions_used == [
+        "fundamental", "technical", "sentiment"
+    ]
 
     database = SQLiteDatabase(str(tmp_path / "insightagent.db"))
     stored = await ResearchStore(database).get_run(outcome.run.run_id)
     assert stored is not None
+    assert len(stored["reports"]) == 3
     assert stored["reports"][0]["stance"] == outcome.report.stance
     assert stored["decisions"][0]["rating"] == outcome.decision.rating
     text = format_cli_text(outcome)
     assert "非投资建议" in text
-    assert "未评估" in text
+    assert "未评估" not in text
 
 
 @pytest.mark.asyncio
 async def test_missing_financials_abstain_without_llm(tmp_path):
-    llm = ScriptedFundamentalLLM()
+    llm = ScriptedAgentLLM("fundamental")
     outcome = await _analyze(tmp_path, "999999", llm)
     assert outcome.report is not None
     assert outcome.report.abstain is True
@@ -192,7 +310,10 @@ async def test_cashflow_lag_is_flagged_and_cited(tmp_path):
     snapshot = await adapter.fetch_fundamental("000858")
     assert "cashflow_lag" in snapshot.computed_flags
 
-    outcome = await _analyze(tmp_path, "000858", ScriptedFundamentalLLM())
+    fund_llm, tech_llm, sent_llm = _make_three_agent_llms()
+    outcome = await _analyze(
+        tmp_path, "000858", fund_llm, tech_llm, sent_llm
+    )
     cited = [
         citation
         for citation in outcome.report.citations
@@ -203,10 +324,14 @@ async def test_cashflow_lag_is_flagged_and_cited(tmp_path):
 
 @pytest.mark.asyncio
 async def test_unbound_number_fails_the_run(tmp_path):
+    fund_llm = ScriptedAgentLLM("fundamental", unbound=True)
+    tech_llm, sent_llm = ScriptedAgentLLM("technical"), ScriptedAgentLLM("sentiment")
     outcome = await _analyze(
         tmp_path,
         "000858",
-        ScriptedFundamentalLLM(unbound=True),
+        fund_llm,
+        tech_llm,
+        sent_llm,
         unbound_policy="fail",
     )
     assert outcome.run.status == "failed"
@@ -221,7 +346,7 @@ async def test_decision_timing_and_confidence_rules():
         await adapter.fetch_fundamental("000858")
     )
     report = Report.model_validate(
-        _scripted_report(snapshot.model_dump(mode="json"), unbound=False)
+        _scripted_fundamental_report(snapshot.model_dump(mode="json"), unbound=False)
     )
     bind_report_evidence(report, snapshot)
     decision = build_p0_decision(report, snapshot)
@@ -238,7 +363,8 @@ async def test_decision_timing_and_confidence_rules():
 @pytest.mark.asyncio
 async def test_fixture_path_does_not_import_akshare(tmp_path):
     sys.modules.pop("akshare", None)
-    await _analyze(tmp_path, "000858", ScriptedFundamentalLLM())
+    fund_llm, tech_llm, sent_llm = _make_three_agent_llms()
+    await _analyze(tmp_path, "000858", fund_llm, tech_llm, sent_llm)
     assert "akshare" not in sys.modules
 
 
@@ -247,7 +373,7 @@ async def test_unbound_summary_is_rejected():
     adapter = FixtureFundamentalAdapter.from_directory(FIXTURES)
     snapshot = await adapter.fetch_fundamental("000858")
     report = Report.model_validate(
-        _scripted_report(snapshot.model_dump(mode="json"), unbound=True)
+        _scripted_fundamental_report(snapshot.model_dump(mode="json"), unbound=True)
     )
     with pytest.raises(EvidenceBindingError):
         bind_report_evidence(report, snapshot)

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Protocol
 
 from .business_contracts import FundamentalSnapshot, RuleHit
 from .contracts import utc_now
+from .market import AkshareMarketClient, FixtureMarketClient, MarketService
 
 REQUIRED_FIELDS = (
     "pe",
@@ -255,3 +256,35 @@ def search_methodology(query: str) -> List[Dict[str, str]]:
                 }
             )
     return results[:5]
+
+
+class AkshareTechnicalAdapter:
+    def __init__(self) -> None:
+        self.service = MarketService(AkshareMarketClient())
+
+    async def fetch_technical(self, stock_code: str) -> Dict[str, Any]:
+        return await self.service.compose_technical_fields(stock_code)
+
+
+class FixtureTechnicalAdapter:
+    def __init__(self, fixtures: Optional[Dict[str, Any]] = None) -> None:
+        self.service = MarketService(FixtureMarketClient(fixtures))
+
+    async def fetch_technical(self, stock_code: str) -> Dict[str, Any]:
+        return await self.service.compose_technical_fields(stock_code)
+
+
+class AkshareSentimentAdapter:
+    def __init__(self) -> None:
+        self.service = MarketService(AkshareMarketClient())
+
+    async def fetch_sentiment(self, stock_code: str) -> Dict[str, Any]:
+        return await self.service.compose_sentiment_fields(stock_code)
+
+
+class FixtureSentimentAdapter:
+    def __init__(self, fixtures: Optional[Dict[str, Any]] = None) -> None:
+        self.service = MarketService(FixtureMarketClient(fixtures))
+
+    async def fetch_sentiment(self, stock_code: str) -> Dict[str, Any]:
+        return await self.service.compose_sentiment_fields(stock_code)

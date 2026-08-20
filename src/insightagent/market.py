@@ -1059,6 +1059,30 @@ class MarketService:
             "non_recurring_profit_ratio": financials.non_recurring_profit_ratio,
         }
 
+    async def compose_technical_fields(self, stock_code: str) -> Dict[str, Any]:
+        code = normalize_stock_code(stock_code)
+        indicator = await self.get_indicator_snapshot(code)
+        kline = await self.get_kline_snapshot(code)
+        quote = await self.fetch_quote(code)
+        return {
+            "indicator": indicator.model_dump(mode="json"),
+            "kline": kline.model_dump(mode="json"),
+            "price": quote.model_dump(mode="json"),
+        }
+
+    async def compose_sentiment_fields(self, stock_code: str) -> Dict[str, Any]:
+        code = normalize_stock_code(stock_code)
+        events = await self.get_event_snapshot(code)
+        holders = await self.get_holder_changes(code)
+        news = await self.search_news(code, limit=20)
+        announcements = await self.search_announcements(code, limit=20)
+        return {
+            "events": events.model_dump(mode="json"),
+            "holders": holders.model_dump(mode="json"),
+            "news": news.model_dump(mode="json"),
+            "announcements": announcements.model_dump(mode="json"),
+        }
+
 
 def synthetic_market_fixture(stock_code: str) -> Dict[str, Any]:
     code = normalize_stock_code(stock_code)

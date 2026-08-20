@@ -5,6 +5,7 @@ from typing import List, Optional
 from .business_contracts import Decision, EvidenceRef, FundamentalSnapshot, Report
 from .contracts import utc_now
 
+DIMENSIONS_ALL = ["fundamental", "technical", "sentiment", "macro"]
 DIMENSIONS_MISSING = ["technical", "sentiment", "macro"]
 CONFIDENCE_BY_SCORE = {1: 0.45, 2: 0.55, 3: 0.7, 4: 0.85, 5: 0.95}
 
@@ -109,3 +110,174 @@ def _risks(report: Report, extra: Optional[List[str]] = None) -> List[str]:
     if len(risks) < 2:
         risks.append("财务快照可能滞后，实际披露或与当前数据不一致")
     return risks[:3]
+
+
+def build_multi_factor_decision(
+    fundamental_report: Report,
+    technical_report: Report,
+    sentiment_report: Report,
+    fundamental_snapshot: FundamentalSnapshot,
+) -> Decision:
+    reports = {
+        "fundamental": fundamental_report,
+        "technical": technical_report,
+        "sentiment": sentiment_report,
+    }
+    used = [
+        dim
+        for dim in ["fundamental", "technical", "sentiment"]
+        if not reports[dim].abstain
+    ]
+    missing = [dim for dim in ["macro"] if dim not in used]
+
+    fundamental = fundamental_report
+    technical = technical_report
+    sentiment = sentiment_report
+
+    value_score = None if fundamental.abstain else fundamental.score
+    timing_score = None if technical.abstain else technical.score
+
+    stances = [r.stance for r in reports.values() if not r.abstain]
+    if not stances:
+        rating = "abstain"
+    elif len(set(stances)) == 1:
+        rating = stances[0]
+    else:
+        rating = _majority_stance(stances)
+
+    if fundamental.abstain:
+        confidence = p0_confidence(0.5)
+    else:
+        base = CONFIDENCE_BY_SCORE.get(fundamental.score, 0.5)
+        confidence = min(0.85, base)
+        for _ in missing:
+            confidence *= 0.6
+        if len(set(stances)) > 1:
+            confidence *= 0.8
+        confidence = min(0.85, round(confidence, 4))
+
+    rationale_parts = []
+    if not fundamental.abstain:
+        rationale_parts.append(
+            "基本面：{stance}，score={score}。".format(
+                stance=fundamental.stance, score=fundamental.score
+            )
+        )
+    else:
+        rationale_parts.append("基本面弃权。")
+    if not technical.abstain:
+        rationale_parts.append(
+            "技术面：{stance}，score={score}。".format(
+                stance=technical.stance, score=technical.score
+            )
+        )
+    else:
+        rationale_parts.append("技术面弃权。")
+    if not sentiment.abstain:
+        rationale_parts.append(
+            "情绪面：{stance}。".format(stance=sentiment.stance)
+        )
+    else:
+        rationale_parts.append("情绪面弃权。")
+    if missing:
+        rationale_parts.append("宏观未评估。")
+    rationale = "".join(rationale_parts)
+
+    disagreements = []
+    non_abstain = [
+        (dim, r.stance) for dim, r in reports.items() if not r.abstain
+    ]
+    if len(non_abstain) >= 2:
+        stances_set = {s for _, s in non_abstain}
+        if len(stances_set) > 1:
+            for dim, stance in non_abstain:
+                for other_dim, other_stance in non_abstain:
+                    if dim != other_dim and stance != other_stance:
+                        disagreements.append(
+                            "{dim} 为 {stance}，{other} 为 {other_stance}".format(
+                                dim=dim,
+                                stance=stance,
+                                other=other_dim,
+                                other_stance=other_stance,
+                            )
+                        )
+            disagreements = list(dict.fromkeys(disagreements))[:3]
+
+    falsifiers = _merge_falsifiers(reports.values())
+
+    risks = _merge_risks(reports.values())
+
+    if fundamental.abstain:
+        advice = "信息不足，本次不形成方向判断。"
+    elif value_score is not None and timing_score is not None:
+        advice = (
+            "价值面 {value}/5，时机面 {timing}/5，综合 {rating}。".format(
+                value=value_score, timing=timing_score, rating=rating
+            )
+        )
+    elif value_score is not None:
+        advice = "价值面 {value}/5，时机未评估，综合 {rating}。".format(
+            value=value_score, rating=rating
+        )
+    else:
+        advice = "价值面未评估，综合 {rating}。".format(rating=rating)
+
+    if fundamental.abstain:
+        citations = [
+            EvidenceRef(
+                ref_id="missing-fields",
+                kind="field",
+                id="missing_fields",
+                observed_at=fundamental_snapshot.as_of or utc_now(),
+                source="fundamental_snapshot",
+                note="required fields unavailable",
+            )
+        ]
+    else:
+        citations = list(fundamental.citations)
+        seen = {c.ref_id for c in citations}
+        for r in [technical, sentiment]:
+            for c in r.citations:
+                if c.ref_id not in seen:
+                    citations.append(c)
+                    seen.add(c.ref_id)
+
+    return Decision(
+        rating=rating,
+        value_score=value_score,
+        timing_score=timing_score,
+        confidence=confidence,
+        rationale=rationale,
+        disagreements=disagreements,
+        falsifiers=falsifiers,
+        risks=risks,
+        advice_one_liner=advice,
+        citations=citations,
+        dimensions_used=used,
+        dimensions_missing=missing,
+    )
+
+
+def _majority_stance(stances: List[str]) -> str:
+    counts: dict[str, int] = {}
+    for s in stances:
+        counts[s] = counts.get(s, 0) + 1
+    return max(counts, key=counts.get)
+
+
+def _merge_falsifiers(reports: List[Report]) -> List[str]:
+    # Report schema does not carry falsifiers; Decision owns them.
+    return ["若后续新增信息与当前判断方向相反，则本次判断失效"]
+
+
+def _merge_risks(reports: List[Report]) -> List[str]:
+    merged: List[str] = []
+    for report in reports:
+        for item in report.risks:
+            if item and item not in merged:
+                merged.append(item)
+    if len(merged) < 2:
+        merged.append("部分维度未评估，判断基础不完整")
+    if len(merged) < 3:
+        merged.append("数据快照可能滞后于实时市场变化")
+    return merged[:3]

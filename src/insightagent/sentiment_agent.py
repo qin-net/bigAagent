@@ -114,7 +114,7 @@ def sentiment_runtime_config(
         thinking_enabled=thinking_enabled,
         reasoning_effort="high",
         response_format="json",
-        max_tokens=4096,
+        max_tokens=32768,
         max_loop_round=8,
         strict_tools=True,
     )
@@ -136,12 +136,12 @@ def register_sentiment_tools(
     async def search_announcements(
         stock_code: str, query: str = "", limit: int = 10
     ) -> Dict[str, Any]:
-        return {"hits": [], "query": query, "limit": limit}
+        return {"stock_code": stock_code, "query": query, "hits": []}
 
     async def search_news(
         stock_code: str, query: str = "", limit: int = 10
     ) -> Dict[str, Any]:
-        return {"hits": [], "query": query, "limit": limit}
+        return {"stock_code": stock_code, "query": query, "hits": []}
 
     def search(query: str) -> Dict[str, Any]:
         return {"entries": search_methodology(query)}

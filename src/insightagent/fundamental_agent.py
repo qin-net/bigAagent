@@ -101,7 +101,7 @@ def fundamental_runtime_config(
         thinking_enabled=thinking_enabled,
         reasoning_effort="high",
         response_format="json",
-        max_tokens=4096,
+        max_tokens=32768,
         max_loop_round=8,
         strict_tools=True,
     )
