@@ -12,7 +12,7 @@
 | 基本面 `fundamental` | 重 | 已有，不要改 |
 | **技术面 `technical`** | 重 | **任务 A，你写** |
 | **情绪 `sentiment`** | 中 | **任务 B，你写** |
-| 宏观 `macro` | 轻 | 不做 |
+| 宏观 `macro` | 轻 | 另见 `分Agent实现任务-宏观.md` |
 | 追踪 `tracking` | 中 | 不做（调度方以后写） |
 
 两个分 Agent 都是分析角色，不是追踪、不是综合决策。框架、落盘表、audit API 都已有；你负责产出能被这些表吃进去的 `Report` / `state_patch`。不要自己建日志库。
@@ -287,7 +287,7 @@ P0 现在 missing 含 technical/sentiment/macro。你交作业后 used 纳入对
 - DeepSeek `reasoning_content` / 隐藏思维链
 - API Key、密钥、cookie
 - 未外置的全量 K 线、公告全文（只存 artifact_ref）
-- 事后盈亏、事后涨跌（不能当过程标签）
+- 事后盈亏作为旧 Decision 上的标签列（结果层放 Case / 复盘，不回写 reports/decisions）
 - `LoopTracer` 内存事件（除非编排另做导出，默认不入库）
 
 ---
