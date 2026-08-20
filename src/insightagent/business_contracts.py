@@ -72,6 +72,11 @@ class Report(BaseModel):
     valuation: Optional[str] = None
     financial_health: Optional[str] = None
     earnings_quality: Optional[str] = None
+    trend: Optional[str] = None
+    setup: Optional[str] = None
+    key_levels: Optional[str] = None
+    event_flags: List[str] = Field(default_factory=list)
+    crowd_risk: Optional[Literal["low", "medium", "high"]] = None
 
     @model_validator(mode="after")
     def validate_abstain_and_citations(self) -> "Report":

@@ -100,6 +100,7 @@ class IndicatorSnapshot(BaseModel):
     rsi14: Optional[float] = None
     volume_ratio: Optional[float] = None
     bars_used: int = 0
+    computed_flags: List[str] = Field(default_factory=list)
     source: str = "computed"
     missing_fields: List[str] = Field(default_factory=list)
 
@@ -169,6 +170,7 @@ class EventSnapshot(BaseModel):
     stock_code: str
     as_of: datetime = Field(default_factory=utc_now)
     events: List[EventItem] = Field(default_factory=list)
+    computed_flags: List[str] = Field(default_factory=list)
     source: str = "unknown"
 
 
