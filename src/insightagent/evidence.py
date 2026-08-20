@@ -5,6 +5,7 @@ import re
 from typing import Iterable, List, Sequence, Set
 
 from .business_contracts import FundamentalSnapshot, Report
+from .data_contracts import MacroSnapshot
 
 YEAR_RE = re.compile(r"^(?:19|20)\d{2}$")
 SCORE_RE = re.compile(r"^[1-5]$")
@@ -67,7 +68,8 @@ def strip_dates(text: str) -> str:
 def extract_candidate_numbers(text: str, stock_code: str) -> List[float]:
     cleaned = strip_dates(text)
     cleaned = STOCK_CODE_RE.sub(" ", cleaned)
-    cleaned = cleaned.replace(stock_code, " ")
+    if stock_code:
+        cleaned = cleaned.replace(stock_code, " ")
     numbers: List[float] = []
     for token in NUMBER_RE.findall(cleaned):
         if YEAR_RE.fullmatch(token) or SCORE_RE.fullmatch(token):
@@ -102,6 +104,37 @@ def bind_report_evidence(report: Report, snapshot: FundamentalSnapshot) -> None:
     if not report.abstain and not report.citations:
         raise EvidenceBindingError([])
     require_cashflow_lag_citation(report, snapshot)
+
+
+def macro_report_text(report: Report) -> str:
+    parts = [
+        report.summary,
+        report.cycle_tag or "",
+        report.market_bias or "",
+        report.relevance_to_stock or "",
+        " ".join(report.risks),
+        " ".join(report.missing_information),
+    ]
+    return " ".join(part for part in parts if part)
+
+
+def bind_macro_report_evidence(report: Report, macro: MacroSnapshot) -> None:
+    allowed = {
+        float(value)
+        for value in [macro.lpr_1y, macro.lpr_5y, macro.shibor_overnight]
+        if value is not None
+    }
+    unbound = [
+        number
+        for number in extract_candidate_numbers(
+            macro_report_text(report), "000000"
+        )
+        if not number_is_allowed(number, allowed)
+    ]
+    if unbound:
+        raise EvidenceBindingError(unbound)
+    if not report.abstain and not report.citations:
+        raise EvidenceBindingError([])
 
 
 def require_cashflow_lag_citation(

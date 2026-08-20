@@ -36,6 +36,7 @@ class ScriptedAgentLLM:
                 "fundamental": "get_fundamental_snapshot",
                 "technical": "get_indicator_snapshot",
                 "sentiment": "get_event_snapshot",
+                "macro": "get_macro_snapshot",
             }[self.role]
             return LLMResponse(
                 id="tool-1",
@@ -92,6 +93,8 @@ def _scripted_report(role: str, snapshot: dict, *, abstain: bool, unbound: bool 
         return _scripted_technical_report(snapshot, abstain=abstain)
     if role == "sentiment":
         return _scripted_sentiment_report(snapshot, abstain=abstain)
+    if role == "macro":
+        return _scripted_macro_report(snapshot, abstain=abstain)
     raise ValueError(role)
 
 
@@ -228,12 +231,56 @@ def _scripted_sentiment_report(snapshot: dict, *, abstain: bool) -> dict:
     }
 
 
+def _scripted_macro_report(snapshot: dict, *, abstain: bool) -> dict:
+    if abstain or "low_relevance" in (snapshot.get("computed_flags") or []):
+        return {
+            "schema_version": "1",
+            "role": "macro",
+            "score": 2,
+            "stance": "abstain",
+            "summary": "与当前利率环境相关性低，本维不形成方向。",
+            "citations": [],
+            "risks": ["宏观相关性低", "宏观面未形成方向"],
+            "degraded": True,
+            "abstain": True,
+            "missing_information": ["relevance"],
+            "cycle_tag": "rate_data_available",
+            "relevance_to_stock": "low",
+        }
+    macro = snapshot.get("macro") or {}
+    return {
+        "schema_version": "1",
+        "role": "macro",
+        "score": 4,
+        "stance": "hold",
+        "summary": "LPR 1年期为{}，5年期为{}，隔夜Shibor为{}。".format(
+            macro.get("lpr_1y"), macro.get("lpr_5y"), macro.get("shibor_overnight")
+        ),
+        "citations": [
+            {
+                "ref_id": "macro-lpr",
+                "kind": "field",
+                "id": "lpr_1y",
+                "source": "get_macro_snapshot",
+            }
+        ],
+        "risks": ["利率数据仅反映当前快照"],
+        "degraded": False,
+        "abstain": False,
+        "missing_information": [],
+        "cycle_tag": "rate_data_available",
+        "market_bias": "neutral",
+        "relevance_to_stock": "high",
+    }
+
+
 async def _analyze(
     tmp_path: Path,
     stock_code: str,
     fundamental_llm,
     technical_llm=None,
     sentiment_llm=None,
+    macro_llm=None,
     **kwargs,
 ):
     database = SQLiteDatabase(str(tmp_path / "insightagent.db"))
@@ -247,6 +294,7 @@ async def _analyze(
         fixtures_dir=str(FIXTURES),
         technical_llm_adapter=technical_llm,
         sentiment_llm_adapter=sentiment_llm,
+        macro_llm_adapter=macro_llm,
         **kwargs,
     )
 
@@ -259,11 +307,20 @@ def _make_three_agent_llms():
     )
 
 
+def _make_four_agent_llms():
+    return (
+        ScriptedAgentLLM("fundamental"),
+        ScriptedAgentLLM("technical"),
+        ScriptedAgentLLM("sentiment"),
+        ScriptedAgentLLM("macro"),
+    )
+
+
 @pytest.mark.asyncio
 async def test_fixture_stock_persists_legal_report_and_decision(tmp_path):
-    fund_llm, tech_llm, sent_llm = _make_three_agent_llms()
+    fund_llm, tech_llm, sent_llm, macro_llm = _make_four_agent_llms()
     outcome = await _analyze(
-        tmp_path, "000858", fund_llm, tech_llm, sent_llm
+        tmp_path, "000858", fund_llm, tech_llm, sent_llm, macro_llm
     )
     assert outcome.error is None
     assert outcome.report is not None
@@ -281,7 +338,9 @@ async def test_fixture_stock_persists_legal_report_and_decision(tmp_path):
     database = SQLiteDatabase(str(tmp_path / "insightagent.db"))
     stored = await ResearchStore(database).get_run(outcome.run.run_id)
     assert stored is not None
-    assert len(stored["reports"]) == 3
+    assert len(stored["reports"]) == 4
+    assert outcome.macro_report is not None
+    assert outcome.macro_report.abstain is True
     assert stored["reports"][0]["stance"] == outcome.report.stance
     assert stored["decisions"][0]["rating"] == outcome.decision.rating
     text = format_cli_text(outcome)
@@ -310,9 +369,9 @@ async def test_cashflow_lag_is_flagged_and_cited(tmp_path):
     snapshot = await adapter.fetch_fundamental("000858")
     assert "cashflow_lag" in snapshot.computed_flags
 
-    fund_llm, tech_llm, sent_llm = _make_three_agent_llms()
+    fund_llm, tech_llm, sent_llm, macro_llm = _make_four_agent_llms()
     outcome = await _analyze(
-        tmp_path, "000858", fund_llm, tech_llm, sent_llm
+        tmp_path, "000858", fund_llm, tech_llm, sent_llm, macro_llm
     )
     cited = [
         citation
@@ -326,12 +385,14 @@ async def test_cashflow_lag_is_flagged_and_cited(tmp_path):
 async def test_unbound_number_fails_the_run(tmp_path):
     fund_llm = ScriptedAgentLLM("fundamental", unbound=True)
     tech_llm, sent_llm = ScriptedAgentLLM("technical"), ScriptedAgentLLM("sentiment")
+    macro_llm = ScriptedAgentLLM("macro")
     outcome = await _analyze(
         tmp_path,
         "000858",
         fund_llm,
         tech_llm,
         sent_llm,
+        macro_llm,
         unbound_policy="fail",
     )
     assert outcome.run.status == "failed"
@@ -363,8 +424,8 @@ async def test_decision_timing_and_confidence_rules():
 @pytest.mark.asyncio
 async def test_fixture_path_does_not_import_akshare(tmp_path):
     sys.modules.pop("akshare", None)
-    fund_llm, tech_llm, sent_llm = _make_three_agent_llms()
-    await _analyze(tmp_path, "000858", fund_llm, tech_llm, sent_llm)
+    fund_llm, tech_llm, sent_llm, macro_llm = _make_four_agent_llms()
+    await _analyze(tmp_path, "000858", fund_llm, tech_llm, sent_llm, macro_llm)
     assert "akshare" not in sys.modules
 
 

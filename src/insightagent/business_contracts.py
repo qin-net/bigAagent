@@ -77,6 +77,9 @@ class Report(BaseModel):
     key_levels: Optional[str] = None
     event_flags: List[str] = Field(default_factory=list)
     crowd_risk: Optional[Literal["low", "medium", "high"]] = None
+    cycle_tag: Optional[Literal["rate_data_available", "insufficient"]] = None
+    market_bias: Optional[Literal["neutral", "unclear"]] = None
+    relevance_to_stock: Optional[Literal["high", "low", "unknown"]] = None
 
     @model_validator(mode="after")
     def validate_abstain_and_citations(self) -> "Report":
@@ -84,6 +87,8 @@ class Report(BaseModel):
             raise ValueError("abstain=true requires stance=abstain")
         if not self.abstain and not self.citations:
             raise ValueError("non-abstain report requires citations")
+        if self.role == "macro" and self.stance not in {"hold", "abstain"}:
+            raise ValueError("macro report stance must be hold or abstain")
         return self
 
 
