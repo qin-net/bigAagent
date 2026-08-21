@@ -12,7 +12,7 @@ from uuid import uuid4
 from .contracts import AgentState, LLMMessage, LLMToolCall, StatePatch, utc_now
 from .state import StateConflictError, apply_patch_to_state
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 MIGRATION_1 = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -161,6 +161,63 @@ CREATE TABLE IF NOT EXISTS methodology_versions (
 );
 """
 
+MIGRATION_2 = """
+CREATE TABLE IF NOT EXISTS user_utterances (
+    utterance_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    moment TEXT NOT NULL,
+    effect TEXT NOT NULL,
+    tags TEXT NOT NULL,
+    intent_id TEXT NOT NULL,
+    stock_code TEXT NOT NULL,
+    thesis_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_intents (
+    intent_id TEXT PRIMARY KEY,
+    utterance_id TEXT NOT NULL,
+    effect TEXT NOT NULL,
+    tags TEXT NOT NULL,
+    fundamental TEXT NOT NULL,
+    technical TEXT NOT NULL,
+    sentiment TEXT NOT NULL,
+    macro TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    tracking TEXT NOT NULL,
+    not_evidence TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(utterance_id) REFERENCES user_utterances(utterance_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_preferences (
+    preference_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    current_version TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    stock_code TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    title TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_preference_versions (
+    preference_id TEXT NOT NULL,
+    version TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(preference_id, version),
+    FOREIGN KEY(preference_id) REFERENCES user_preferences(preference_id)
+        ON DELETE CASCADE
+);
+"""
+
 EXPECTED_TABLES = frozenset(
     {
         "schema_migrations",
@@ -176,6 +233,10 @@ EXPECTED_TABLES = frozenset(
         "tracking_timeline",
         "methodology_entries",
         "methodology_versions",
+        "user_utterances",
+        "user_intents",
+        "user_preferences",
+        "user_preference_versions",
     }
 )
 
@@ -202,6 +263,22 @@ class SQLiteDatabase:
                 return
             await asyncio.to_thread(self._initialize_sync)
             self._initialized = True
+
+    def _apply_migration(
+        self, connection: sqlite3.Connection, version: int, sql: str
+    ) -> None:
+        try:
+            applied_at = utc_now().isoformat().replace("'", "''")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + sql
+                + "\nINSERT INTO schema_migrations("
+                "version, applied_at) VALUES ({}, '{}');\n"
+                "COMMIT;".format(version, applied_at)
+            )
+        except Exception:
+            _rollback_if_needed(connection)
+            raise
 
     def connect(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -244,18 +321,11 @@ class SQLiteDatabase:
                     )
                 )
             if current_version < 1:
-                try:
-                    applied_at = utc_now().isoformat().replace("'", "''")
-                    connection.executescript(
-                        "BEGIN IMMEDIATE;\n"
-                        + MIGRATION_1
-                        + "\nINSERT INTO schema_migrations("
-                        "version, applied_at) VALUES (1, '{}');\n"
-                        "COMMIT;".format(applied_at)
-                    )
-                except Exception:
-                    _rollback_if_needed(connection)
-                    raise
+                self._apply_migration(connection, 1, MIGRATION_1)
+                current_version = 1
+            if current_version < 2:
+                self._apply_migration(connection, 2, MIGRATION_2)
+                current_version = 2
         finally:
             connection.close()
 

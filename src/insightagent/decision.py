@@ -117,6 +117,7 @@ def build_multi_factor_decision(
     technical_report: Report,
     sentiment_report: Report,
     fundamental_snapshot: FundamentalSnapshot,
+    user_constraint: str = "none",
 ) -> Decision:
     reports = {
         "fundamental": fundamental_report,
@@ -182,6 +183,8 @@ def build_multi_factor_decision(
     if missing:
         rationale_parts.append("宏观未评估。")
     rationale = "".join(rationale_parts)
+    if user_constraint != "none":
+        rationale = "用户决策口径：" + user_constraint[:200] + "。" + rationale
 
     disagreements = []
     non_abstain = [

@@ -46,13 +46,22 @@ from ..persistence import (
 from ..research_store import ResearchStore
 from ..retry import ExponentialBackoff
 from ..runtime import AgentInstance, InvalidModelOutputError
+from ..state import StateConflictError
 from ..sentiment_agent import (
     SentimentToolContext,
     parse_sentiment_report,
     register_sentiment_tools,
     sentiment_runtime_config,
 )
-from ..state import StateConflictError
+from ..user_contracts import NONE
+from ..user_intent import (
+    build_expert_user_query,
+    build_intent,
+    build_utterance,
+    extract_slots,
+    parse_tags,
+)
+from ..user_store import UserStore
 from ..technical_agent import (
     TechnicalToolContext,
     parse_technical_report,
@@ -163,11 +172,16 @@ async def analyze_stock(
     adapter: Optional[MarketDataAdapter] = None,
     technical_llm_adapter: Optional[LLMAdapter] = None,
     sentiment_llm_adapter: Optional[LLMAdapter] = None,
+    user_prompt: str = NONE,
+    user_id: str = "local",
+    extract_llm_adapter: Optional[LLMAdapter] = None,
 ) -> AnalysisOutcome:
     code = normalize_stock_code(stock_code)
     artifacts = FileArtifactStore(database, artifact_root)
     store = ResearchStore(database)
     audit = SQLiteAuditLog(database)
+    user_store = UserStore(database)
+    extract_llm = extract_llm_adapter or llm_adapter
     fundamental_adapter = adapter or build_market_adapter_for(
         fixture=fixture, dimension="fundamental", fixtures_dir=fixtures_dir
     )
@@ -184,6 +198,28 @@ async def analyze_stock(
         "run_started",
         {"stock_code": code, "fixture": fixture},
         run_id=run.run_id,
+    )
+    intent = await _prepare_intent(
+        user_prompt=user_prompt,
+        user_id=user_id,
+        run=run,
+        code=code,
+        llm_adapter=extract_llm,
+        model=model,
+        user_store=user_store,
+        audit=audit,
+    )
+    fund_prefs = await user_store.active_preferences(
+        user_id=user_id, scope="fundamental", stock_code=code
+    )
+    tech_prefs = await user_store.active_preferences(
+        user_id=user_id, scope="technical", stock_code=code
+    )
+    sent_prefs = await user_store.active_preferences(
+        user_id=user_id, scope="sentiment", stock_code=code
+    )
+    decision_prefs = await user_store.active_preferences(
+        user_id=user_id, scope="decision", stock_code=code
     )
 
     try:
@@ -253,6 +289,7 @@ async def analyze_stock(
                 technical_report,
                 sentiment_report,
                 snapshot,
+                user_constraint=_decision_constraint(intent, decision_prefs),
             )
             return await _complete(
                 store,
@@ -274,6 +311,14 @@ async def analyze_stock(
             llm_adapter=llm_adapter,
             model=model,
             thinking_enabled=thinking_enabled,
+            user_query=build_expert_user_query(
+                run_id=run.run_id,
+                stock_code=code,
+                as_of=snapshot.as_of.isoformat(),
+                dim="fundamental",
+                intent=intent,
+                preference_statements=[item.statement for item in fund_prefs],
+            ),
         )
         technical_future = _run_technical_agent(
             tech_fields=tech_fields,
@@ -283,6 +328,14 @@ async def analyze_stock(
             llm_adapter=technical_llm_adapter or llm_adapter,
             model=model,
             thinking_enabled=thinking_enabled,
+            user_query=build_expert_user_query(
+                run_id=run.run_id,
+                stock_code=code,
+                as_of=snapshot.as_of.isoformat(),
+                dim="technical",
+                intent=intent,
+                preference_statements=[item.statement for item in tech_prefs],
+            ),
         )
         sentiment_future = _run_sentiment_agent(
             sent_fields=sent_fields,
@@ -292,6 +345,14 @@ async def analyze_stock(
             llm_adapter=sentiment_llm_adapter or llm_adapter,
             model=model,
             thinking_enabled=thinking_enabled,
+            user_query=build_expert_user_query(
+                run_id=run.run_id,
+                stock_code=code,
+                as_of=snapshot.as_of.isoformat(),
+                dim="sentiment",
+                intent=intent,
+                preference_statements=[item.statement for item in sent_prefs],
+            ),
         )
 
         fundamental_result, technical_result, sentiment_result = (
@@ -405,6 +466,7 @@ async def analyze_stock(
             technical_report,
             sentiment_report,
             snapshot,
+            user_constraint=_decision_constraint(intent, decision_prefs),
         )
         status = "success"
         if any(
@@ -450,6 +512,59 @@ async def analyze_stock(
         )
 
 
+async def _prepare_intent(
+    *,
+    user_prompt: str,
+    user_id: str,
+    run: RunRecord,
+    code: str,
+    llm_adapter: LLMAdapter,
+    model: str,
+    user_store: UserStore,
+    audit: SQLiteAuditLog,
+):
+    parsed = parse_tags(user_prompt)
+    utterance_id = str(uuid4())
+    slots, audit_type = await extract_slots(llm_adapter, parsed.body, model)
+    intent = build_intent(
+        utterance_id=utterance_id, parsed=parsed, slots=slots
+    )
+    utterance = build_utterance(
+        utterance_id=utterance_id,
+        intent=intent,
+        parsed=parsed,
+        stock_code=code,
+        thesis_id=run.thesis_id,
+        run_id=run.run_id,
+        created_at=utc_now().isoformat(),
+        user_id=user_id,
+    )
+    await user_store.save_utterance(utterance)
+    await user_store.save_intent(intent)
+    await audit.append(
+        audit_type,
+        {
+            "intent_id": intent.intent_id,
+            "effect": intent.effect,
+            "tags": intent.tags,
+        },
+        run_id=run.run_id,
+    )
+    await user_store.persist_remember(intent=intent, utterance=utterance)
+    return intent
+
+
+def _decision_constraint(intent, prefs) -> str:
+    parts = []
+    if intent.decision != NONE:
+        parts.append(intent.decision[:200])
+    for item in prefs:
+        parts.append(item.statement[:80])
+    if not parts:
+        return NONE
+    return "；".join(parts)
+
+
 async def _run_fundamental_agent(
     *,
     snapshot: FundamentalSnapshot,
@@ -459,6 +574,7 @@ async def _run_fundamental_agent(
     llm_adapter: LLMAdapter,
     model: str,
     thinking_enabled: bool,
+    user_query: str,
 ) -> tuple[Report, str]:
     session_id = str(uuid4())
     run.session_ids["fundamental"] = session_id
@@ -473,19 +589,6 @@ async def _run_fundamental_agent(
     )
     register_fundamental_tools(
         agent, FundamentalToolContext(snapshot=snapshot, artifacts=artifacts)
-    )
-    user_query = json.dumps(
-        {
-            "run_id": run.run_id,
-            "stock_code": snapshot.stock_code,
-            "as_of": snapshot.as_of.isoformat(),
-            "output_schema_version": "1",
-            "instruction": (
-                "Analyze this stock from the precomputed snapshot. "
-                "Call get_fundamental_snapshot, then return the final JSON."
-            ),
-        },
-        ensure_ascii=False,
     )
     try:
         final = await agent.run(
@@ -575,6 +678,7 @@ async def _run_technical_agent(
     llm_adapter: LLMAdapter,
     model: str,
     thinking_enabled: bool,
+    user_query: str,
 ) -> tuple[Report, str]:
     session_id = str(uuid4())
     run.session_ids["technical"] = session_id
@@ -595,19 +699,6 @@ async def _run_technical_agent(
         TechnicalToolContext(
             indicator=indicator, price=price, kline=kline, artifacts=artifacts
         ),
-    )
-    user_query = json.dumps(
-        {
-            "run_id": run.run_id,
-            "stock_code": indicator.stock_code,
-            "as_of": indicator.as_of.isoformat(),
-            "output_schema_version": "1",
-            "instruction": (
-                "Analyze this stock from the precomputed snapshot. "
-                "Call get_indicator_snapshot first, then return the final JSON."
-            ),
-        },
-        ensure_ascii=False,
     )
     try:
         final = await agent.run(
@@ -633,6 +724,7 @@ async def _run_sentiment_agent(
     llm_adapter: LLMAdapter,
     model: str,
     thinking_enabled: bool,
+    user_query: str,
 ) -> tuple[Report, str]:
     session_id = str(uuid4())
     run.session_ids["sentiment"] = session_id
@@ -652,19 +744,6 @@ async def _run_sentiment_agent(
         SentimentToolContext(
             events=events, holders=holders, artifacts=artifacts
         ),
-    )
-    user_query = json.dumps(
-        {
-            "run_id": run.run_id,
-            "stock_code": events.stock_code,
-            "as_of": events.as_of.isoformat(),
-            "output_schema_version": "1",
-            "instruction": (
-                "Analyze this stock from the precomputed snapshot. "
-                "Call get_event_snapshot first, then return the final JSON."
-            ),
-        },
-        ensure_ascii=False,
     )
     try:
         final = await agent.run(

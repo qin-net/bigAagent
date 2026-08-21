@@ -52,6 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--model", default="deepseek-v4-flash")
     analyze.add_argument("--json", action="store_true", dest="as_json")
     analyze.add_argument(
+        "--prompt",
+        default="none",
+        help="Optional user intent prompt with optional #tags",
+    )
+    analyze.add_argument(
         "--no-thinking",
         action="store_true",
         help="Disable DeepSeek thinking mode",
@@ -140,6 +145,7 @@ async def _run_analyze(args: argparse.Namespace) -> int:
         model=args.model,
         thinking_enabled=not args.no_thinking,
         unbound_policy="abstain",
+        user_prompt=args.prompt,
     )
     write_run_json(outcome, args.path)
     if args.as_json:

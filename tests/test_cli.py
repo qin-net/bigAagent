@@ -23,7 +23,7 @@ def test_database_cli_init_and_status(tmp_path):
     )
     init_payload = json.loads(initialized.stdout)
     assert init_payload["initialized"] is True
-    assert init_payload["schema_version"] == 1
+    assert init_payload["schema_version"] == 2
 
     status = subprocess.run(
         [
