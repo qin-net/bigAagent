@@ -12,9 +12,20 @@ from pydantic import ValidationError
 
 from ..business_contracts import Decision, Report, RunRecord
 from ..contracts import utc_now
-from ..data_contracts import EventSnapshot, HolderChangeSnapshot, IndicatorSnapshot, KlineSnapshot, PriceSnapshot
+from ..data_contracts import (
+    EventSnapshot,
+    HolderChangeSnapshot,
+    IndicatorSnapshot,
+    KlineSnapshot,
+    MacroSnapshot,
+    PriceSnapshot,
+)
 from ..decision import build_multi_factor_decision
-from ..evidence import EvidenceBindingError, bind_report_evidence
+from ..evidence import (
+    EvidenceBindingError,
+    bind_macro_report_evidence,
+    bind_report_evidence,
+)
 from ..fundamental_agent import (
     FundamentalToolContext,
     default_fixtures_dir,
@@ -25,9 +36,11 @@ from ..fundamental_agent import (
 from ..fundamentals import (
     REQUIRED_FIELDS,
     AkshareFundamentalAdapter,
+    AkshareMacroAdapter,
     AkshareSentimentAdapter,
     AkshareTechnicalAdapter,
     FixtureFundamentalAdapter,
+    FixtureMacroAdapter,
     FixtureSentimentAdapter,
     FixtureTechnicalAdapter,
     FundamentalSnapshot,
@@ -35,6 +48,12 @@ from ..fundamentals import (
     apply_fundamental_rules,
 )
 from ..llm import LLMAdapter
+from ..macro_agent import (
+    MacroToolContext,
+    macro_runtime_config,
+    parse_macro_report,
+    register_macro_tools,
+)
 from ..market import synthetic_market_fixture
 from ..persistence import (
     FileArtifactStore,
@@ -84,6 +103,7 @@ class AnalysisOutcome:
     report: Optional[Report]
     technical_report: Optional[Report] = None
     sentiment_report: Optional[Report] = None
+    macro_report: Optional[Report] = None
     decision: Optional[Decision] = None
     error: Optional[str] = None
 
@@ -102,6 +122,11 @@ class AnalysisOutcome:
             "sentiment_report": (
                 self.sentiment_report.model_dump(mode="json")
                 if self.sentiment_report
+                else None
+            ),
+            "macro_report": (
+                self.macro_report.model_dump(mode="json")
+                if self.macro_report
                 else None
             ),
             "decision": (
@@ -155,6 +180,10 @@ def build_market_adapter_for(
         if fixture:
             return FixtureSentimentAdapter(fixture_payload)
         return AkshareSentimentAdapter()
+    if dimension == "macro":
+        if fixture:
+            return FixtureMacroAdapter(fixture_payload)
+        return AkshareMacroAdapter()
     raise ValueError("unknown dimension {}".format(dimension))
 
 
@@ -172,6 +201,7 @@ async def analyze_stock(
     adapter: Optional[MarketDataAdapter] = None,
     technical_llm_adapter: Optional[LLMAdapter] = None,
     sentiment_llm_adapter: Optional[LLMAdapter] = None,
+    macro_llm_adapter: Optional[LLMAdapter] = None,
     user_prompt: str = NONE,
     user_id: str = "local",
     extract_llm_adapter: Optional[LLMAdapter] = None,
@@ -218,6 +248,9 @@ async def analyze_stock(
     sent_prefs = await user_store.active_preferences(
         user_id=user_id, scope="sentiment", stock_code=code
     )
+    macro_prefs = await user_store.active_preferences(
+        user_id=user_id, scope="macro", stock_code=code
+    )
     decision_prefs = await user_store.active_preferences(
         user_id=user_id, scope="decision", stock_code=code
     )
@@ -238,6 +271,9 @@ async def analyze_stock(
         sent_fixture_payload = (
             synthetic_market_fixture(code) if fixture else None
         )
+        macro_fixture_payload = (
+            synthetic_market_fixture(code) if fixture else None
+        )
         technical_adapter = build_market_adapter_for(
             fixture=fixture,
             dimension="technical",
@@ -248,6 +284,11 @@ async def analyze_stock(
             dimension="sentiment",
             fixture_payload=sent_fixture_payload,
         )
+        macro_adapter = build_market_adapter_for(
+            fixture=fixture,
+            dimension="macro",
+            fixture_payload=macro_fixture_payload,
+        )
 
         tech_fields = await fetch_retry.execute(
             technical_adapter.fetch_technical, code
@@ -255,16 +296,31 @@ async def analyze_stock(
         sent_fields = await fetch_retry.execute(
             sentiment_adapter.fetch_sentiment, code
         )
+        macro_fetch_error: Optional[Exception] = None
+        try:
+            macro_fields = await fetch_retry.execute(macro_adapter.fetch_macro, code)
+        except Exception as error:
+            macro_fetch_error = error
+            macro_fields = {
+                "macro": MacroSnapshot().model_dump(mode="json"),
+                "industry": "",
+                "stock_code": code,
+                "company_name": snapshot.company_name or "",
+            }
         tech_artifact_ref = await artifacts.put(
             json.dumps(tech_fields, ensure_ascii=False)
         )
         sent_artifact_ref = await artifacts.put(
             json.dumps(sent_fields, ensure_ascii=False)
         )
+        macro_artifact_ref = await artifacts.put(
+            json.dumps(macro_fields, ensure_ascii=False)
+        )
         run.snapshot_refs = {
             "fundamental": fundamental_artifact_ref,
             "technical": tech_artifact_ref,
             "sentiment": sent_artifact_ref,
+            "macro": macro_artifact_ref,
         }
         run.updated_at = utc_now()
         await store.save_run(run)
@@ -274,6 +330,7 @@ async def analyze_stock(
                 "fundamental_artifact_ref": fundamental_artifact_ref,
                 "technical_artifact_ref": tech_artifact_ref,
                 "sentiment_artifact_ref": sent_artifact_ref,
+                "macro_artifact_ref": macro_artifact_ref,
                 "missing_fields": snapshot.missing_fields,
                 "computed_flags": snapshot.computed_flags,
             },
@@ -284,10 +341,12 @@ async def analyze_stock(
             fundamental_report = _abstain_for_missing(snapshot)
             technical_report = _abstain_technical()
             sentiment_report = _abstain_sentiment()
+            macro_report = _abstain_macro()
             decision = build_multi_factor_decision(
                 fundamental_report,
                 technical_report,
                 sentiment_report,
+                macro_report,
                 snapshot,
                 user_constraint=_decision_constraint(intent, decision_prefs),
             )
@@ -299,6 +358,7 @@ async def analyze_stock(
                 fundamental_report,
                 technical_report,
                 sentiment_report,
+                macro_report,
                 decision,
                 status="degraded",
             )
@@ -354,12 +414,36 @@ async def analyze_stock(
                 preference_statements=[item.statement for item in sent_prefs],
             ),
         )
+        macro_future = (
+            _run_macro_agent(
+                macro_fields=macro_fields,
+                run=run,
+                database=database,
+                artifacts=artifacts,
+                llm_adapter=macro_llm_adapter or llm_adapter,
+                model=model,
+                thinking_enabled=thinking_enabled,
+                user_query=build_expert_user_query(
+                    run_id=run.run_id,
+                    stock_code=code,
+                    as_of=snapshot.as_of.isoformat(),
+                    dim="macro",
+                    intent=intent,
+                    preference_statements=[
+                        item.statement for item in macro_prefs
+                    ],
+                ),
+            )
+            if macro_fetch_error is None
+            else _immediate_macro_abstention()
+        )
 
-        fundamental_result, technical_result, sentiment_result = (
+        fundamental_result, technical_result, sentiment_result, macro_result = (
             await asyncio.gather(
                 fundamental_future,
                 technical_future,
                 sentiment_future,
+                macro_future,
                 return_exceptions=True,
             )
         )
@@ -379,6 +463,9 @@ async def analyze_stock(
             if isinstance(sentiment_result, Exception)
             else None
         )
+        macro_exception = (
+            macro_result if isinstance(macro_result, Exception) else None
+        )
 
         if fundamental_exception is not None:
             raise fundamental_exception
@@ -393,6 +480,11 @@ async def analyze_stock(
             sentiment_result[0]
             if not isinstance(sentiment_result, Exception)
             else _abstain_sentiment()
+        )
+        macro_report = (
+            macro_result[0]
+            if not isinstance(macro_result, Exception)
+            else _abstain_macro()
         )
 
         if technical_exception is not None:
@@ -412,6 +504,16 @@ async def analyze_stock(
                     "agent": "sentiment",
                     "error_type": type(sentiment_exception).__name__,
                     "message": str(sentiment_exception),
+                },
+                run_id=run.run_id,
+            )
+        if macro_exception is not None:
+            await audit.append(
+                "agent_failed",
+                {
+                    "agent": "macro",
+                    "error_type": type(macro_exception).__name__,
+                    "message": str(macro_exception),
                 },
                 run_id=run.run_id,
             )
@@ -452,6 +554,16 @@ async def analyze_stock(
             run_id=run.run_id,
             session_id=run.session_ids.get("sentiment"),
         )
+        await audit.append(
+            "agent_completed",
+            {
+                "status": "completed" if not macro_report.abstain else "abstained",
+                "stance": macro_report.stance,
+                "score": macro_report.score,
+            },
+            run_id=run.run_id,
+            session_id=run.session_ids.get("macro"),
+        )
 
         try:
             bind_report_evidence(fundamental_report, snapshot)
@@ -460,11 +572,21 @@ async def analyze_stock(
                 fundamental_report = _abstain_for_unbound(snapshot, error)
             else:
                 raise
+        try:
+            bind_macro_report_evidence(
+                macro_report, MacroSnapshot(**macro_fields["macro"])
+            )
+        except EvidenceBindingError as error:
+            if unbound_policy == "abstain":
+                macro_report = _abstain_macro("证据绑定失败，改为弃权。")
+            else:
+                raise
 
         decision = build_multi_factor_decision(
             fundamental_report,
             technical_report,
             sentiment_report,
+            macro_report,
             snapshot,
             user_constraint=_decision_constraint(intent, decision_prefs),
         )
@@ -475,6 +597,7 @@ async def analyze_stock(
                 fundamental_report,
                 technical_report,
                 sentiment_report,
+                macro_report,
             ]
         ):
             status = "degraded"
@@ -485,7 +608,8 @@ async def analyze_stock(
             snapshot,
             fundamental_report,
             technical_report,
-            sentiment_report,
+                sentiment_report,
+                macro_report,
             decision,
             status=status,
         )
@@ -498,6 +622,16 @@ async def analyze_stock(
             {"type": type(error).__name__, "message": str(error)},
             run_id=run.run_id,
         )
+        if macro_fetch_error is not None:
+            await audit.append(
+                "agent_failed",
+                {
+                    "agent": "macro",
+                    "error_type": type(macro_fetch_error).__name__,
+                    "message": str(macro_fetch_error),
+                },
+                run_id=run.run_id,
+            )
         return AnalysisOutcome(
             run=run,
             snapshot=locals().get(
@@ -507,6 +641,7 @@ async def analyze_stock(
             report=None,
             technical_report=None,
             sentiment_report=None,
+            macro_report=None,
             decision=None,
             error="{}: {}".format(type(error).__name__, error),
         )
@@ -669,6 +804,26 @@ def _abstain_sentiment() -> Report:
     )
 
 
+def _abstain_macro(summary: str = "宏观数据不足或与个股相关性低，无法形成环境标签。") -> Report:
+    return Report(
+        role="macro",
+        score=2,
+        stance="abstain",
+        summary=summary,
+        citations=[],
+        risks=["宏观环境未形成有效参考", "利率数据或行业相关性不足"],
+        degraded=True,
+        abstain=True,
+        missing_information=["macro"],
+        cycle_tag="insufficient",
+        relevance_to_stock="unknown",
+    )
+
+
+async def _immediate_macro_abstention() -> tuple[Report, str]:
+    return _abstain_macro(), ""
+
+
 async def _run_technical_agent(
     *,
     tech_fields: Dict[str, Any],
@@ -760,6 +915,52 @@ async def _run_sentiment_agent(
     return parse_sentiment_report(final.output), session_id
 
 
+async def _run_macro_agent(
+    *,
+    macro_fields: Dict[str, Any],
+    run: RunRecord,
+    database: SQLiteDatabase,
+    artifacts: FileArtifactStore,
+    llm_adapter: LLMAdapter,
+    model: str,
+    thinking_enabled: bool,
+    user_query: str,
+) -> tuple[Report, str]:
+    session_id = str(uuid4())
+    run.session_ids["macro"] = session_id
+    macro = MacroSnapshot(**macro_fields["macro"])
+    agent = AgentInstance(
+        name="macro",
+        llm_adapter=llm_adapter,
+        config=macro_runtime_config(model=model, thinking_enabled=thinking_enabled),
+        state_store=SQLiteStateStore(database),
+        context_archive=SQLiteContextArchive(database),
+    )
+    register_macro_tools(
+        agent,
+        MacroToolContext(
+            macro=macro,
+            industry=macro_fields["industry"],
+            stock_code=macro_fields["stock_code"],
+            company_name=macro_fields["company_name"],
+            artifacts=artifacts,
+        ),
+    )
+    try:
+        final = await agent.run(
+            user_query,
+            session_id=session_id,
+            business_context={
+                "stock_code": macro_fields["stock_code"],
+                "thesis_id": run.thesis_id,
+                "run_id": run.run_id,
+            },
+        )
+    except (InvalidModelOutputError, StateConflictError, ValidationError):
+        raise
+    return parse_macro_report(final.output), session_id
+
+
 async def _complete(
     store: ResearchStore,
     audit: SQLiteAuditLog,
@@ -768,6 +969,7 @@ async def _complete(
     fundamental_report: Report,
     technical_report: Optional[Report],
     sentiment_report: Optional[Report],
+    macro_report: Optional[Report],
     decision: Decision,
     *,
     status: str,
@@ -777,6 +979,8 @@ async def _complete(
         await store.save_report(run.run_id, "technical", technical_report)
     if sentiment_report is not None:
         await store.save_report(run.run_id, "sentiment", sentiment_report)
+    if macro_report is not None:
+        await store.save_report(run.run_id, "macro", macro_report)
     await store.save_decision(run.run_id, decision)
     run.status = status
     run.updated_at = utc_now()
@@ -800,6 +1004,7 @@ async def _complete(
         report=fundamental_report,
         technical_report=technical_report,
         sentiment_report=sentiment_report,
+        macro_report=macro_report,
         decision=decision,
     )
 
@@ -808,6 +1013,7 @@ def format_cli_text(outcome: AnalysisOutcome) -> str:
     report = outcome.report
     technical_report = outcome.technical_report
     sentiment_report = outcome.sentiment_report
+    macro_report = outcome.macro_report
     decision = outcome.decision
     company = outcome.snapshot.company_name or "-"
     lines = [
@@ -843,6 +1049,18 @@ def format_cli_text(outcome: AnalysisOutcome) -> str:
                     sentiment_report.stance, sentiment_report.abstain
                 ),
                 "情绪面 summary: {}".format(sentiment_report.summary),
+            ]
+        )
+    if macro_report:
+        lines.extend(
+            [
+                "宏观 stance / score / abstain / relevance: {} / {} / {} / {}".format(
+                    macro_report.stance,
+                    macro_report.score,
+                    macro_report.abstain,
+                    macro_report.relevance_to_stock or "unknown",
+                ),
+                "宏观 summary: {}".format(macro_report.summary),
             ]
         )
     if decision:

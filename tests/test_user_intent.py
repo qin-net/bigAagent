@@ -18,7 +18,7 @@ from insightagent.user_intent import (
 )
 from insightagent.user_store import UserStore
 
-from test_p0_research import _analyze, _make_three_agent_llms
+from test_p0_research import _analyze, _make_four_agent_llms
 
 
 def _slots_payload(**overrides) -> dict:
@@ -187,13 +187,14 @@ async def test_schema_v2_migrates_from_v1(tmp_path):
 async def test_remember_does_not_store_raw_prompt(tmp_path):
     secret = "绝对不能写进库的那句话XYZUNIQUE"
     extract = _extract_llm(_slots_payload(fundamental="对比经营现金流"))
-    fund_llm, tech_llm, sent_llm = _make_three_agent_llms()
+    fund_llm, tech_llm, sent_llm, macro_llm = _make_four_agent_llms()
     outcome = await _analyze(
         tmp_path,
         "000858",
         fund_llm,
         tech_llm,
         sent_llm,
+        macro_llm,
         user_prompt="#remember " + secret,
         extract_llm_adapter=extract,
     )
@@ -214,9 +215,9 @@ async def test_remember_does_not_store_raw_prompt(tmp_path):
 
 @pytest.mark.asyncio
 async def test_prompt_none_matches_existing_fixture_run(tmp_path):
-    fund_llm, tech_llm, sent_llm = _make_three_agent_llms()
+    fund_llm, tech_llm, sent_llm, macro_llm = _make_four_agent_llms()
     outcome = await _analyze(
-        tmp_path, "000858", fund_llm, tech_llm, sent_llm, user_prompt=NONE
+        tmp_path, "000858", fund_llm, tech_llm, sent_llm, macro_llm, user_prompt=NONE
     )
     assert outcome.error is None
     payload = _user_payload(fund_llm)
@@ -228,13 +229,14 @@ async def test_prompt_none_matches_existing_fixture_run(tmp_path):
 @pytest.mark.asyncio
 async def test_extracted_slot_lands_in_expert_task(tmp_path):
     extract = _extract_llm(_slots_payload(fundamental="对比现金流质量"))
-    fund_llm, tech_llm, sent_llm = _make_three_agent_llms()
+    fund_llm, tech_llm, sent_llm, macro_llm = _make_four_agent_llms()
     outcome = await _analyze(
         tmp_path,
         "000858",
         fund_llm,
         tech_llm,
         sent_llm,
+        macro_llm,
         user_prompt="对比现金流质量",
         extract_llm_adapter=extract,
     )
@@ -249,7 +251,7 @@ def test_decision_constraint_none_keeps_rationale_prefix_free():
     from insightagent.business_contracts import FundamentalSnapshot, Report
 
     reports = {}
-    for role in ("fundamental", "technical", "sentiment"):
+    for role in ("fundamental", "technical", "sentiment", "macro"):
         reports[role] = Report(
             role=role,
             score=3,
@@ -266,12 +268,14 @@ def test_decision_constraint_none_keeps_rationale_prefix_free():
         reports["fundamental"],
         reports["technical"],
         reports["sentiment"],
+        reports["macro"],
         snapshot,
     )
     same = build_multi_factor_decision(
         reports["fundamental"],
         reports["technical"],
         reports["sentiment"],
+        reports["macro"],
         snapshot,
         user_constraint=NONE,
     )
@@ -279,6 +283,7 @@ def test_decision_constraint_none_keeps_rationale_prefix_free():
         reports["fundamental"],
         reports["technical"],
         reports["sentiment"],
+        reports["macro"],
         snapshot,
         user_constraint="偏谨慎",
     )

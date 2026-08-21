@@ -44,6 +44,10 @@ DEFAULT_INSTRUCTION = {
         "Analyze this stock from the precomputed snapshot. "
         "Call get_event_snapshot first, then return the final JSON."
     ),
+    "macro": (
+        "Analyze macro relevance from the precomputed snapshot. "
+        "Call get_macro_snapshot first, then return the final JSON."
+    ),
 }
 
 MAX_SLOT_CHARS = 200

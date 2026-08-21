@@ -47,6 +47,13 @@ METHODOLOGY_ENTRIES = [
         "trigger": "估值 pe 分位 安全边际",
         "text": "估值应对照自身历史分位，而不是只看单一 PE。",
     },
+    {
+        "id": "kb_macro_rates",
+        "scope": ["macro"],
+        "status": "approved",
+        "trigger": "lpr 利率 宏观",
+        "text": "宏观只提供环境标签，不构成个股买卖理由。",
+    },
 ]
 
 
@@ -288,3 +295,19 @@ class FixtureSentimentAdapter:
 
     async def fetch_sentiment(self, stock_code: str) -> Dict[str, Any]:
         return await self.service.compose_sentiment_fields(stock_code)
+
+
+class AkshareMacroAdapter:
+    def __init__(self) -> None:
+        self.service = MarketService(AkshareMarketClient())
+
+    async def fetch_macro(self, stock_code: str) -> Dict[str, Any]:
+        return await self.service.compose_macro_fields(stock_code)
+
+
+class FixtureMacroAdapter:
+    def __init__(self, fixtures: Optional[Dict[str, Any]] = None) -> None:
+        self.service = MarketService(FixtureMarketClient(fixtures))
+
+    async def fetch_macro(self, stock_code: str) -> Dict[str, Any]:
+        return await self.service.compose_macro_fields(stock_code)

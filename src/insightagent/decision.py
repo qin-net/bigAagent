@@ -116,6 +116,7 @@ def build_multi_factor_decision(
     fundamental_report: Report,
     technical_report: Report,
     sentiment_report: Report,
+    macro_report: Report,
     fundamental_snapshot: FundamentalSnapshot,
     user_constraint: str = "none",
 ) -> Decision:
@@ -123,13 +124,18 @@ def build_multi_factor_decision(
         "fundamental": fundamental_report,
         "technical": technical_report,
         "sentiment": sentiment_report,
+        "macro": macro_report,
     }
     used = [
         dim
-        for dim in ["fundamental", "technical", "sentiment"]
+        for dim in ["fundamental", "technical", "sentiment", "macro"]
         if not reports[dim].abstain
     ]
-    missing = [dim for dim in ["macro"] if dim not in used]
+    missing = [
+        dim
+        for dim in ["fundamental", "technical", "sentiment", "macro"]
+        if reports[dim].abstain
+    ]
 
     fundamental = fundamental_report
     technical = technical_report
@@ -138,7 +144,8 @@ def build_multi_factor_decision(
     value_score = None if fundamental.abstain else fundamental.score
     timing_score = None if technical.abstain else technical.score
 
-    stances = [r.stance for r in reports.values() if not r.abstain]
+    voting_reports = [fundamental, technical, sentiment]
+    stances = [r.stance for r in voting_reports if not r.abstain]
     if not stances:
         rating = "abstain"
     elif len(set(stances)) == 1:
@@ -180,7 +187,15 @@ def build_multi_factor_decision(
         )
     else:
         rationale_parts.append("情绪面弃权。")
-    if missing:
+    macro = macro_report
+    if not macro.abstain:
+        rationale_parts.append(
+            "宏观：{cycle_tag}，相关性 {relevance}。".format(
+                cycle_tag=macro.cycle_tag or "未标注",
+                relevance=macro.relevance_to_stock or "unknown",
+            )
+        )
+    else:
         rationale_parts.append("宏观未评估。")
     rationale = "".join(rationale_parts)
     if user_constraint != "none":
@@ -188,7 +203,9 @@ def build_multi_factor_decision(
 
     disagreements = []
     non_abstain = [
-        (dim, r.stance) for dim, r in reports.items() if not r.abstain
+        (dim, r.stance)
+        for dim, r in reports.items()
+        if dim != "macro" and not r.abstain
     ]
     if len(non_abstain) >= 2:
         stances_set = {s for _, s in non_abstain}
@@ -238,12 +255,14 @@ def build_multi_factor_decision(
         ]
     else:
         citations = list(fundamental.citations)
-        seen = {c.ref_id for c in citations}
-        for r in [technical, sentiment]:
-            for c in r.citations:
-                if c.ref_id not in seen:
-                    citations.append(c)
-                    seen.add(c.ref_id)
+    seen = {c.ref_id for c in citations}
+    for r in [technical, sentiment, macro]:
+        if r.abstain:
+            continue
+        for c in r.citations:
+            if c.ref_id not in seen:
+                citations.append(c)
+                seen.add(c.ref_id)
 
     return Decision(
         rating=rating,

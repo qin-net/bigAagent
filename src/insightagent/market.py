@@ -1083,6 +1083,17 @@ class MarketService:
             "announcements": announcements.model_dump(mode="json"),
         }
 
+    async def compose_macro_fields(self, stock_code: str) -> Dict[str, Any]:
+        code = normalize_stock_code(stock_code)
+        macro = await self.get_macro_snapshot()
+        profile = await self.fetch_stock_profile(code)
+        return {
+            "macro": macro.model_dump(mode="json"),
+            "industry": profile.industry or "",
+            "stock_code": code,
+            "company_name": profile.company_name or "",
+        }
+
 
 def synthetic_market_fixture(stock_code: str) -> Dict[str, Any]:
     code = normalize_stock_code(stock_code)
