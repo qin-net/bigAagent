@@ -54,3 +54,25 @@ SQLite runs in-process; no database server is required.
 
 The default database is `data/insightagent.db`. Database files, WAL files, and
 artifact data are ignored by Git.
+
+## PDF to Markdown
+
+Convert source PDFs locally before they are reviewed and distilled into short
+methodology entries. This command does not call an LLM or upload files.
+
+```bash
+python -m pip install -e ".[docs]"
+python -m insightagent pdf2md
+```
+
+The default input directory is `data/kb/incoming/`; Markdown is written to
+`data/kb/markdown/`. Specify a file or directory when needed:
+
+```bash
+python -m insightagent pdf2md path/to/file.pdf
+python -m insightagent pdf2md path/to/dir --out data/kb/markdown
+```
+
+The generated Markdown contains source hashes and page headings for review.
+Scanned or empty PDFs are marked `needs_ocr` or `empty_text` and return a
+nonzero exit code rather than producing invented body text.

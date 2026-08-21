@@ -21,6 +21,9 @@ akshare = [
   "akshare",
   "pandas",
 ]
+docs = [
+  "pymupdf",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -4,11 +4,18 @@ import argparse
 import asyncio
 import json
 import os
+from pathlib import Path
 from typing import Optional, Sequence
 
 from .env import load_dotenv
 from .llm import DeepSeekChatAdapter, DeepSeekConfig
 from .persistence import SQLiteDatabase
+from .pdfmd import (
+    DEFAULT_INCOMING_DIR,
+    DEFAULT_MARKDOWN_DIR,
+    PdfMdError,
+    convert_path,
+)
 from .workflows.initial_research import (
     analyze_stock,
     format_cli_text,
@@ -61,6 +68,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable DeepSeek thinking mode",
     )
+    pdf2md = commands.add_parser(
+        "pdf2md", help="Convert local PDF files to reviewable Markdown"
+    )
+    pdf2md.add_argument("input", nargs="?", default=str(DEFAULT_INCOMING_DIR))
+    pdf2md.add_argument("--out", default=str(DEFAULT_MARKDOWN_DIR))
+    pdf2md.add_argument("--force", action="store_true")
+    pdf2md.add_argument("--json", action="store_true", dest="as_json")
     return parser
 
 
@@ -79,6 +93,8 @@ def build_llm(model: str) -> DeepSeekChatAdapter:
 async def _run(args: argparse.Namespace) -> int:
     if args.command == "analyze":
         return await _run_analyze(args)
+    if args.command == "pdf2md":
+        return _run_pdf2md(args)
 
     database = SQLiteDatabase(args.path)
     if args.db_command == "init":
@@ -106,6 +122,49 @@ async def _run(args: argparse.Namespace) -> int:
         )
         return 0
     raise RuntimeError("Unknown database command")
+
+
+def _run_pdf2md(args: argparse.Namespace) -> int:
+    try:
+        results = convert_path(
+            Path(args.input), output_dir=Path(args.out), force=args.force
+        )
+    except PdfMdError as error:
+        print("pdf2md error: {}".format(error))
+        return 1
+    except Exception as error:
+        print("pdf2md error: {}: {}".format(type(error).__name__, error))
+        return 1
+
+    if args.as_json:
+        print(
+            json.dumps(
+                [
+                    {
+                        "source_path": str(result.source_path),
+                        "output_path": str(result.output_path),
+                        "source_sha256": result.source_sha256,
+                        "page_count": result.page_count,
+                        "status": result.status,
+                        "skipped": result.skipped,
+                    }
+                    for result in results
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    else:
+        if not results:
+            print("pdf2md: no PDF files found in {}".format(args.input))
+        for result in results:
+            state = "skipped" if result.skipped else "written"
+            print(
+                "{}: {} -> {} ({})".format(
+                    state, result.source_path, result.output_path, result.status
+                )
+            )
+    return 1 if any(result.status in {"needs_ocr", "empty_text"} for result in results) else 0
 
 
 async def _run_analyze(args: argparse.Namespace) -> int:
