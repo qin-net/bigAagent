@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
+from .business_contracts import Report
 from .data_contracts import IndicatorSnapshot, KlineSnapshot, PriceSnapshot
 
 
@@ -104,3 +106,20 @@ def _describe_setup(flags: List[str]) -> Optional[str]:
     if "volume_spike" in flags:
         parts.append("放量")
     return "；".join(parts) if parts else "无明显结构信号"
+
+
+def apply_computed_technical_semantics(
+    report: Report, rules: Dict[str, Any]
+) -> Report:
+    if report.abstain:
+        return report
+    suggested = rules.get("key_levels") or ""
+    if _has_digit(report.key_levels):
+        return report
+    if _has_digit(suggested):
+        return report.model_copy(update={"key_levels": suggested})
+    return report
+
+
+def _has_digit(text: Optional[str]) -> bool:
+    return bool(text and re.search(r"\d", text))

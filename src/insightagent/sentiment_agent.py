@@ -25,8 +25,13 @@ Work only from tools. Call get_event_snapshot first.
 Use get_holder_changes if shareholder changes need detail.
 event_id values look like event:CODE:DIGEST and are for citations only.
 If no_material_event is the only flag, set abstain=true and stance=abstain.
+If no_recent_events is present, set abstain=true, stance=abstain,
+degraded=false, and missing_information must include no_recent_events.
+Stale events (in_window=false or age_days>60) are clues only and cannot
+support buy/hold/sell.
 News alone cannot support a non-abstain conclusion; it is clues only.
 Crowd_risk must be low|medium|high and map to event_flags.
+Include 1-3 falsifiers a tracker can check against later filings.
 Do not invent tools. Empty methodology results are normal; submit from
 the snapshot.
 

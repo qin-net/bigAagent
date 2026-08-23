@@ -69,6 +69,7 @@ class Report(BaseModel):
     degraded: bool = False
     abstain: bool = False
     missing_information: List[str] = Field(default_factory=list)
+    falsifiers: List[str] = Field(default_factory=list)
     valuation: Optional[str] = None
     financial_health: Optional[str] = None
     earnings_quality: Optional[str] = None
@@ -90,6 +91,51 @@ class Report(BaseModel):
         if self.role == "macro" and self.stance not in {"hold", "abstain"}:
             raise ValueError("macro report stance must be hold or abstain")
         return self
+
+
+_ROLE_ONLY_FIELDS = {
+    "fundamental": ("valuation", "financial_health", "earnings_quality"),
+    "technical": ("trend", "setup", "key_levels"),
+    "sentiment": ("event_flags", "crowd_risk"),
+    "macro": ("cycle_tag", "market_bias", "relevance_to_stock"),
+}
+_ALL_ROLE_FIELDS = (
+    "valuation",
+    "financial_health",
+    "earnings_quality",
+    "trend",
+    "setup",
+    "key_levels",
+    "event_flags",
+    "crowd_risk",
+    "cycle_tag",
+    "market_bias",
+    "relevance_to_stock",
+)
+
+
+def sanitize_report(report: Report) -> Report:
+    """Drop other-role fields and collapse mashed citation ids."""
+    keep = set(_ROLE_ONLY_FIELDS[report.role])
+    updates = {}
+    for name in _ALL_ROLE_FIELDS:
+        if name in keep:
+            continue
+        updates[name] = [] if name == "event_flags" else None
+    citations = []
+    seen = set()
+    for citation in report.citations:
+        cid = (citation.id or "").split("/")[0].strip()
+        if not cid:
+            continue
+        cleaned = citation.model_copy(update={"id": cid})
+        key = (cleaned.kind, cleaned.id, cleaned.ref_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        citations.append(cleaned)
+    updates["citations"] = citations
+    return report.model_copy(update=updates)
 
 
 class Decision(BaseModel):

@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from .business_contracts import Decision, EvidenceRef, FundamentalSnapshot, Report
 from .contracts import utc_now
+from .events import NO_RECENT_EVENTS
 
 DIMENSIONS_ALL = ["fundamental", "technical", "sentiment", "macro"]
 DIMENSIONS_MISSING = ["technical", "sentiment", "macro"]
@@ -247,6 +248,8 @@ def build_multi_factor_decision(
         )
     else:
         advice = "价值面未评估，综合 {rating}。".format(rating=rating)
+    if disagreements:
+        advice = advice.rstrip("。") + "；" + disagreements[0]
 
     if fundamental.abstain:
         citations = [
@@ -287,14 +290,18 @@ def build_multi_factor_decision(
 
 
 def dimension_is_missing(dim: str, report: Report) -> bool:
-    """Low-relevance macro abstain is a completed N/A judgment, not a hole."""
+    """Low-relevance macro or stale-only sentiment is a completed N/A, not a hole."""
     if dim == "macro" and report.relevance_to_stock == "low":
+        return False
+    if dim == "sentiment" and NO_RECENT_EVENTS in report.missing_information:
         return False
     return bool(report.abstain)
 
 
 def report_degrades_run(dim: str, report: Report) -> bool:
     if dim == "macro" and report.relevance_to_stock == "low":
+        return False
+    if dim == "sentiment" and NO_RECENT_EVENTS in report.missing_information:
         return False
     return bool(report.abstain or report.degraded)
 
@@ -306,9 +313,49 @@ def _majority_stance(stances: List[str]) -> str:
     return max(counts, key=counts.get)
 
 
+_BOILERPLATE_FALSIFIERS = (
+    "方向相反",
+    "新增信息与当前判断",
+    "本次判断失效",
+)
+
+
+def _usable_falsifier(text: str) -> bool:
+    if not text or len(text.strip()) < 8:
+        return False
+    if any(token in text for token in _BOILERPLATE_FALSIFIERS):
+        return False
+    return True
+
+
 def _merge_falsifiers(reports: List[Report]) -> List[str]:
-    # Report schema does not carry falsifiers; Decision owns them.
-    return ["若后续新增信息与当前判断方向相反，则本次判断失效"]
+    items: List[str] = []
+
+    def add(text: Optional[str]) -> None:
+        if text and _usable_falsifier(text) and text not in items:
+            items.append(text)
+
+    for report in reports:
+        for item in report.falsifiers:
+            add(item)
+        if report.abstain:
+            continue
+        if report.role == "technical" and report.key_levels:
+            add("若收盘有效跌破本次关键位：" + report.key_levels[:120])
+        if report.role == "fundamental" and report.risks:
+            add("若出现：" + report.risks[0][:80] + "，则当前基本面判断失效")
+        if report.role == "sentiment" and report.event_flags:
+            add("若60日窗口内新增控股股东减持或监管问询，则当前情绪判断失效")
+        if (
+            report.role == "macro"
+            and report.relevance_to_stock == "high"
+        ):
+            add("若1年期LPR相对本次快照出现明显变动，则当前利率环境标签失效")
+    if not items:
+        items.append(
+            "若关键价位、财报字段或60日窗口内重大事件与本次依据相反，则判断失效"
+        )
+    return items[:3]
 
 
 def _merge_risks(reports: List[Report]) -> List[str]:

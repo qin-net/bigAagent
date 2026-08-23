@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "stock_code": "000333",
+  "company_name": "美的集团",
+  "as_of": "2026-06-30T00:00:00+00:00",
+  "price": 72.4,
+  "pe": 14.2,
+  "pb": 2.8,
+  "pe_percentile_5y": 40.0,
+  "pb_percentile_5y": 38.0,
+  "roe": 18.6,
+  "roe_stable": true,
+  "revenue_yoy": 7.2,
+  "profit_yoy": 9.1,
+  "gross_margin": 26.4,
+  "debt_ratio": 62.8,
+  "current_ratio": 1.4,
+  "operating_cf": 48.0,
+  "net_profit": 36.0,
+  "goodwill": 4.2,
+  "non_recurring_profit_ratio": 3.5
+}

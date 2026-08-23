@@ -1100,8 +1100,19 @@ class MarketService:
         }
 
 
+_FIXTURE_PROFILES = {
+    "000858": ("五粮液", "白酒"),
+    "600519": ("贵州茅台", "白酒"),
+    "000001": ("平安银行", "银行"),
+    "600036": ("招商银行", "银行"),
+    "601318": ("中国平安", "保险"),
+    "000333": ("美的集团", "家用电器"),
+}
+
+
 def synthetic_market_fixture(stock_code: str) -> Dict[str, Any]:
     code = normalize_stock_code(stock_code)
+    company_name, industry = _FIXTURE_PROFILES.get(code, ("测试公司", "食品"))
     close = 120.0
     hist = []
     start = datetime(2026, 1, 5, tzinfo=timezone.utc)
@@ -1125,8 +1136,8 @@ def synthetic_market_fixture(stock_code: str) -> Dict[str, Any]:
         "stock_code": code,
         "profile": {
             "stock_code": code,
-            "company_name": "五粮液",
-            "industry": "白酒",
+            "company_name": company_name,
+            "industry": industry,
             "listing_date": "1998-04-27",
             "source": "fixture",
         },
@@ -1176,7 +1187,7 @@ def synthetic_market_fixture(stock_code: str) -> Dict[str, Any]:
         "announcements": [
             {
                 "title": "关于控股股东拟减持股份的提示性公告",
-                "published_at": "2026-06-01",
+                "published_at": "2026-07-20",
                 "notice_type": "减持",
                 "url": "https://example.invalid/reduce",
                 "source": "fixture",
@@ -1189,7 +1200,7 @@ def synthetic_market_fixture(stock_code: str) -> Dict[str, Any]:
             },
             {
                 "title": "关于回购公司股份的进展公告",
-                "published_at": "2026-05-12",
+                "published_at": "2026-08-01",
                 "notice_type": "回购",
                 "source": "fixture",
             },
@@ -1203,10 +1214,10 @@ def synthetic_market_fixture(stock_code: str) -> Dict[str, Any]:
         },
         "news": [
             {
-                "title": "五粮液渠道库存去化进展报道",
-                "published_at": "2026-06-02",
+                "title": "{}渠道库存去化进展报道".format(company_name),
+                "published_at": "2026-07-28",
                 "source": "fixture",
-                "summary": "白酒渠道库存继续下降",
+                "summary": "{}渠道库存继续下降".format(industry),
             }
         ],
         "holder_changes": [
@@ -1214,7 +1225,7 @@ def synthetic_market_fixture(stock_code: str) -> Dict[str, Any]:
                 "holder_name": "宜宾市国资",
                 "change_type": "increase",
                 "change_shares": 1200000,
-                "published_at": "2026-06-08",
+                "published_at": "2026-08-08",
                 "note": "增持公司股份",
             }
         ],

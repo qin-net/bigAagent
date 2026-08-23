@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "stock_code": "000001",
+  "company_name": "平安银行",
+  "as_of": "2026-06-30T00:00:00+00:00",
+  "price": 11.2,
+  "pe": 5.4,
+  "pb": 0.6,
+  "pe_percentile_5y": 28.0,
+  "pb_percentile_5y": 22.0,
+  "roe": 11.2,
+  "roe_stable": true,
+  "revenue_yoy": 3.1,
+  "profit_yoy": 1.8,
+  "gross_margin": null,
+  "debt_ratio": 91.4,
+  "current_ratio": null,
+  "operating_cf": 120.0,
+  "net_profit": 45.0,
+  "goodwill": 0.0,
+  "non_recurring_profit_ratio": 1.2
+}

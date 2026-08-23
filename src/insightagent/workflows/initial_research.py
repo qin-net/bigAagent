@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from ..business_contracts import Decision, Report, RunRecord
+from ..business_contracts import Decision, Report, RunRecord, sanitize_report
 from ..contracts import utc_now
 from ..data_contracts import (
     EventSnapshot,
@@ -54,6 +54,8 @@ from ..macro_agent import (
     parse_macro_report,
     register_macro_tools,
 )
+from ..events import apply_computed_sentiment_semantics, apply_event_rules
+from ..macros import apply_computed_macro_semantics
 from ..market import synthetic_market_fixture
 from ..persistence import (
     FileArtifactStore,
@@ -87,6 +89,7 @@ from ..technical_agent import (
     register_technical_tools,
     technical_runtime_config,
 )
+from ..technicals import apply_computed_technical_semantics, apply_technical_rules
 
 STOCK_CODE_RE = re.compile(r"^\d{6}$")
 UnboundPolicy = Literal["fail", "abstain"]
@@ -734,7 +737,7 @@ async def _run_fundamental_agent(
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
-    return parse_report(final.output), session_id
+    return sanitize_report(parse_report(final.output)), session_id
 
 
 def _severely_missing(snapshot: FundamentalSnapshot) -> bool:
@@ -859,6 +862,7 @@ async def _run_technical_agent(
     indicator = IndicatorSnapshot(**tech_fields["indicator"])
     price = PriceSnapshot(**tech_fields["price"])
     kline = KlineSnapshot(**tech_fields["kline"])
+    tech_rules = apply_technical_rules(indicator, price, kline)
     agent = AgentInstance(
         name="technical",
         llm_adapter=llm_adapter,
@@ -886,7 +890,11 @@ async def _run_technical_agent(
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
-    return parse_technical_report(final.output), session_id
+    report = apply_computed_technical_semantics(
+        sanitize_report(parse_technical_report(final.output)),
+        tech_rules,
+    )
+    return report, session_id
 
 
 async def _run_sentiment_agent(
@@ -928,7 +936,12 @@ async def _run_sentiment_agent(
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
-    return parse_sentiment_report(final.output), session_id
+    flags = apply_event_rules(events, holders)["flags"]
+    report = apply_computed_sentiment_semantics(
+        sanitize_report(parse_sentiment_report(final.output)),
+        flags,
+    )
+    return report, session_id
 
 
 async def _run_macro_agent(
@@ -972,7 +985,13 @@ async def _run_macro_agent(
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
-    return parse_macro_report(final.output), session_id
+    report = sanitize_report(
+        apply_computed_macro_semantics(
+            parse_macro_report(final.output),
+            macro=macro,
+        )
+    )
+    return report, session_id
 
 
 async def _complete(

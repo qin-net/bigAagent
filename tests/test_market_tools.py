@@ -8,6 +8,7 @@ from insightagent.market import (
     FixtureMarketClient,
     FlakyMarketClient,
     MarketService,
+    synthetic_market_fixture,
     bars_from_value_rows,
     compute_indicators,
     em_dot_symbol,
@@ -124,6 +125,22 @@ async def test_each_market_tool_returns_typed_snapshot():
     )
     assert fundamental["company_name"] == "五粮液"
     assert "cashflow_lag" in fundamental["computed_flags"]
+
+
+def test_synthetic_fixture_profiles_are_not_all_baijiu():
+    liquor = synthetic_market_fixture("000858")
+    bank = synthetic_market_fixture("000001")
+    appliance = synthetic_market_fixture("000333")
+    assert liquor["profile"]["industry"] == "白酒"
+    assert bank["profile"] == {
+        "stock_code": "000001",
+        "company_name": "平安银行",
+        "industry": "银行",
+        "listing_date": "1998-04-27",
+        "source": "fixture",
+    }
+    assert appliance["profile"]["industry"] == "家用电器"
+    assert appliance["profile"]["company_name"] == "美的集团"
 
 
 def test_scale_and_value_row_indicator_fallback():

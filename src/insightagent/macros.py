@@ -1,28 +1,58 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
+from .business_contracts import Report
 from .data_contracts import MacroSnapshot
 
 
-RATE_SENSITIVE_TERMS = ("银行", "地产", "房地产", "保险", "证券", "信托")
-
-
-def apply_macro_rules(
-    macro: MacroSnapshot, industry: Optional[str]
-) -> Dict[str, Any]:
+def apply_macro_rules(macro: MacroSnapshot) -> Dict[str, Any]:
     flags = []
     if macro.lpr_1y is None:
         flags.append("lpr_missing")
-
-    industry_text = industry or ""
-    rate_sensitive = any(term in industry_text for term in RATE_SENSITIVE_TERMS)
-    flags.append("rate_sensitive" if rate_sensitive else "low_relevance")
-
     return {
         "flags": flags,
         "cycle_tag": "rate_data_available"
         if macro.lpr_1y is not None
         else "insufficient",
-        "relevance": "high" if rate_sensitive else "low",
     }
+
+
+def apply_computed_macro_semantics(
+    report: Report,
+    *,
+    macro: MacroSnapshot,
+) -> Report:
+    """Normalize report against LPR availability and the model's relevance call.
+
+    Relevance is the expert's judgment, not an industry keyword list.
+    """
+    updates: Dict[str, Any] = {}
+    if macro.lpr_1y is None:
+        updates["abstain"] = True
+        updates["stance"] = "abstain"
+        updates["degraded"] = True
+        if report.relevance_to_stock is None:
+            updates["relevance_to_stock"] = "unknown"
+        if report.cycle_tag is None:
+            updates["cycle_tag"] = "insufficient"
+        return report.model_copy(update=updates)
+
+    relevance = report.relevance_to_stock
+    if relevance is None or relevance == "unknown":
+        updates["relevance_to_stock"] = "unknown"
+        updates["abstain"] = True
+        updates["stance"] = "abstain"
+        updates["degraded"] = True
+    elif relevance == "low":
+        updates["abstain"] = True
+        updates["stance"] = "abstain"
+        updates["degraded"] = False
+    else:
+        updates["abstain"] = False
+        if report.stance == "abstain":
+            updates["stance"] = "hold"
+        updates["degraded"] = False
+    if report.cycle_tag is None:
+        updates["cycle_tag"] = "rate_data_available"
+    return report.model_copy(update=updates)

@@ -101,6 +101,7 @@ class IndicatorSnapshot(BaseModel):
     volume_ratio: Optional[float] = None
     bars_used: int = 0
     computed_flags: List[str] = Field(default_factory=list)
+    suggested_key_levels: Optional[str] = None
     source: str = "computed"
     missing_fields: List[str] = Field(default_factory=list)
 
@@ -161,6 +162,8 @@ class EventItem(BaseModel):
     source: str = "unknown"
     url: Optional[str] = None
     summary: Optional[str] = None
+    age_days: Optional[int] = None
+    in_window: Optional[bool] = None
 
 
 class EventSnapshot(BaseModel):
@@ -233,6 +236,8 @@ class HolderChangeItem(BaseModel):
     change_shares: Optional[float] = None
     published_at: Optional[str] = None
     note: Optional[str] = None
+    age_days: Optional[int] = None
+    in_window: Optional[bool] = None
 
 
 class HolderChangeSnapshot(BaseModel):

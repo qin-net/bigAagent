@@ -15,7 +15,7 @@ from insightagent.macro_agent import (
     macro_runtime_config,
     register_macro_tools,
 )
-from insightagent.macros import apply_macro_rules
+from insightagent.macros import apply_computed_macro_semantics, apply_macro_rules
 from insightagent.runtime import AgentInstance
 
 
@@ -28,14 +28,75 @@ def _macro_snapshot(*, lpr_1y: Optional[float] = 3.0) -> MacroSnapshot:
     )
 
 
-def test_macro_rules_classify_relevance_and_missing_lpr():
+def test_macro_rules_only_flag_missing_lpr():
     available = _macro_snapshot()
-    assert apply_macro_rules(available, "白酒")["flags"] == ["low_relevance"]
-    assert apply_macro_rules(available, "")["flags"] == ["low_relevance"]
-    assert apply_macro_rules(available, "银行")["flags"] == ["rate_sensitive"]
-    assert "lpr_missing" in apply_macro_rules(
-        _macro_snapshot(lpr_1y=None), "银行"
-    )["flags"]
+    assert apply_macro_rules(available)["flags"] == []
+    assert apply_macro_rules(available)["cycle_tag"] == "rate_data_available"
+    missing = apply_macro_rules(_macro_snapshot(lpr_1y=None))
+    assert missing["flags"] == ["lpr_missing"]
+    assert missing["cycle_tag"] == "insufficient"
+
+
+def test_computed_semantics_follow_model_relevance_not_industry_words():
+    omitted = Report(
+        role="macro",
+        score=1,
+        stance="abstain",
+        summary="forgot relevance field",
+        citations=[],
+        risks=["宏观相关性未标注", "宏观面未形成方向"],
+        abstain=True,
+        relevance_to_stock=None,
+    )
+    hole = apply_computed_macro_semantics(omitted, macro=_macro_snapshot())
+    assert hole.relevance_to_stock == "unknown"
+    assert hole.abstain is True
+    assert hole.degraded is True
+
+    liquor_high = apply_computed_macro_semantics(
+        Report(
+            role="macro",
+            score=4,
+            stance="hold",
+            summary="LPR 1年期为3.0。",
+            citations=[
+                {
+                    "ref_id": "lpr_1y",
+                    "kind": "field",
+                    "id": "lpr_1y",
+                    "source": "get_macro_snapshot",
+                }
+            ],
+            risks=["利率数据仅反映当前快照"],
+            relevance_to_stock="high",
+        ),
+        macro=_macro_snapshot(),
+    )
+    assert liquor_high.relevance_to_stock == "high"
+    assert liquor_high.abstain is False
+
+    insurer_low = apply_computed_macro_semantics(
+        Report(
+            role="macro",
+            score=2,
+            stance="hold",
+            summary="LPR 1年期为3.0。",
+            citations=[
+                {
+                    "ref_id": "lpr_1y",
+                    "kind": "field",
+                    "id": "lpr_1y",
+                    "source": "get_macro_snapshot",
+                }
+            ],
+            risks=["宏观相关性低", "宏观面未形成方向"],
+            relevance_to_stock="low",
+        ),
+        macro=_macro_snapshot(),
+    )
+    assert insurer_low.abstain is True
+    assert insurer_low.stance == "abstain"
+    assert insurer_low.degraded is False
 
 
 def _fake_llm() -> FakeLLMAdapter:

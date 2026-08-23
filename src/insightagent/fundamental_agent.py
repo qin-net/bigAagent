@@ -34,8 +34,10 @@ get_artifact is optional and only accepts this run's artifact:// SHA-256.
 Never pass event_id, announcement id, or citation id. If get_artifact fails,
 do not retry with another key; submit_final from snapshot tools.
 Call get_fundamental_snapshot first. If computed_flags contains cashflow_lag,
-you must cite kind=rule and id=cashflow_lag. Search methodology when flags or
-missing fields need interpretation.
+you must cite kind=rule and id=cashflow_lag. Search methodology at most once,
+and only when a computed flag needs interpretation.
+Include 1-3 falsifiers a tracker can check against later filings
+(cash flow, ROE, valuation percentile). Do not fill technical or macro fields.
 
 If required financial fields are missing, set abstain=true and stance=abstain.
 Non-abstain reports need citations. Numbers in summary/valuation/

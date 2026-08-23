@@ -527,7 +527,13 @@ class AgentLocalScheduler:
                 arguments = json.loads(call.arguments)
             except json.JSONDecodeError as error:
                 raise InvalidModelOutputError(
-                    "Invalid JSON arguments for {}".format(call.name)
+                    "Invalid JSON arguments for {}. "
+                    "submit_final needs one JSON object, no duplicate keys, "
+                    "and output.report must include role, score, and stance.".format(
+                        call.name
+                    )
+                    if call.name == "submit_final"
+                    else "Invalid JSON arguments for {}".format(call.name)
                 ) from error
             if not isinstance(arguments, dict):
                 raise InvalidModelOutputError(

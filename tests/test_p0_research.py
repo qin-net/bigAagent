@@ -4,9 +4,19 @@ from pathlib import Path
 
 import pytest
 
-from insightagent.business_contracts import EvidenceRef, FundamentalSnapshot, Report
+from insightagent.business_contracts import (
+    EvidenceRef,
+    FundamentalSnapshot,
+    Report,
+    sanitize_report,
+)
 from insightagent.contracts import LLMResponse, LLMToolCall
-from insightagent.decision import build_multi_factor_decision, build_p0_decision
+from insightagent.decision import (
+    build_multi_factor_decision,
+    build_p0_decision,
+    report_degrades_run,
+)
+from insightagent.events import NO_RECENT_EVENTS
 from insightagent.evidence import EvidenceBindingError, bind_report_evidence
 from insightagent.fundamental_agent import default_fixtures_dir
 from insightagent.fundamentals import (
@@ -21,10 +31,18 @@ FIXTURES = default_fixtures_dir()
 
 
 class ScriptedAgentLLM:
-    def __init__(self, role: str, *, abstain: bool = False, unbound: bool = False) -> None:
+    def __init__(
+        self,
+        role: str,
+        *,
+        abstain: bool = False,
+        unbound: bool = False,
+        omit_relevance: bool = False,
+    ) -> None:
         self.role = role
         self.abstain = abstain
         self.unbound = unbound
+        self.omit_relevance = omit_relevance
         self.phase = "tool"
         self.requests = []
 
@@ -55,6 +73,8 @@ class ScriptedAgentLLM:
 
         snapshot = _snapshot_from_request(request)
         report = _scripted_report(self.role, snapshot, abstain=self.abstain, unbound=self.unbound)
+        if self.omit_relevance:
+            report.pop("relevance_to_stock", None)
         payload = {
             "status": "abstained" if report["abstain"] else "completed",
             "output": {"report": report},
@@ -151,6 +171,9 @@ def _scripted_fundamental_report(snapshot: dict, *, abstain: bool = False, unbou
             profit=snapshot.get("net_profit"),
             cf=snapshot.get("operating_cf"),
         ),
+        "falsifiers": [
+            "若经营现金流持续无法覆盖净利润，则盈利质量假设被证伪"
+        ],
     }
 
 
@@ -190,6 +213,7 @@ def _scripted_technical_report(snapshot: dict, *, abstain: bool) -> dict:
         "trend": "bullish",
         "setup": "ma_bull_align",
         "key_levels": "support: ma20=115.0",
+        "falsifiers": ["若收盘跌破 MA20 115.0，则本次技术结构失效"],
     }
 
 
@@ -228,11 +252,20 @@ def _scripted_sentiment_report(snapshot: dict, *, abstain: bool) -> dict:
         "missing_information": [],
         "event_flags": ["holder_reduction"],
         "crowd_risk": "medium",
+        "falsifiers": [
+            "若60日窗口内新增控股股东减持公告，则当前情绪判断失效"
+        ],
     }
 
 
 def _scripted_macro_report(snapshot: dict, *, abstain: bool) -> dict:
-    if abstain or "low_relevance" in (snapshot.get("computed_flags") or []):
+    industry = str(snapshot.get("industry") or "")
+    company = str(snapshot.get("company_name") or "")
+    judged_high = any(
+        token in industry or token in company
+        for token in ("银行", "保险", "证券", "信托", "地产", "房地产", "金融")
+    )
+    if abstain or not judged_high:
         return {
             "schema_version": "1",
             "role": "macro",
@@ -348,6 +381,51 @@ async def test_fixture_stock_persists_legal_report_and_decision(tmp_path):
     text = format_cli_text(outcome)
     assert "非投资建议" in text
     assert "未评估" not in text
+    assert outcome.macro_report.relevance_to_stock == "low"
+    assert outcome.run.status == "success"
+    assert "新增信息与当前判断" not in "".join(outcome.decision.falsifiers)
+    assert any(ch.isdigit() for ch in (outcome.technical_report.key_levels or ""))
+
+
+@pytest.mark.asyncio
+async def test_macro_omitted_relevance_is_treated_as_unknown_hole(tmp_path):
+    fund_llm, tech_llm, sent_llm, _ = _make_four_agent_llms()
+    macro_llm = ScriptedAgentLLM("macro", omit_relevance=True)
+    outcome = await _analyze(
+        tmp_path, "000858", fund_llm, tech_llm, sent_llm, macro_llm
+    )
+    assert outcome.macro_report is not None
+    assert outcome.macro_report.relevance_to_stock == "unknown"
+    assert "macro" in outcome.decision.dimensions_missing
+    assert outcome.run.status == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_fixture_bank_macro_model_can_call_high(tmp_path):
+    fund_llm, tech_llm, sent_llm, macro_llm = _make_four_agent_llms()
+    outcome = await _analyze(
+        tmp_path, "000001", fund_llm, tech_llm, sent_llm, macro_llm
+    )
+    assert outcome.snapshot.company_name == "平安银行"
+    assert outcome.macro_report is not None
+    assert outcome.macro_report.abstain is False
+    assert outcome.macro_report.relevance_to_stock == "high"
+    assert "macro" in outcome.decision.dimensions_used
+    assert "本维不形成方向" not in outcome.decision.rationale
+
+
+@pytest.mark.asyncio
+async def test_fixture_appliance_macro_model_can_call_low(tmp_path):
+    fund_llm, tech_llm, sent_llm, macro_llm = _make_four_agent_llms()
+    outcome = await _analyze(
+        tmp_path, "000333", fund_llm, tech_llm, sent_llm, macro_llm
+    )
+    assert outcome.snapshot.company_name == "美的集团"
+    assert outcome.macro_report is not None
+    assert outcome.macro_report.relevance_to_stock == "low"
+    assert outcome.macro_report.abstain is True
+    assert "macro" in outcome.decision.dimensions_used
+    assert "macro" not in outcome.decision.dimensions_missing
 
 
 @pytest.mark.asyncio
@@ -489,6 +567,70 @@ def test_low_relevance_macro_counts_as_used_not_missing():
     assert hole.dimensions_missing == ["macro"]
     assert "宏观未评估" in hole.rationale
     assert judged.confidence > hole.confidence
+
+
+def test_stale_sentiment_does_not_degrade_or_count_as_hole():
+    snapshot = FundamentalSnapshot(stock_code="000001")
+    stale = Report(
+        role="sentiment",
+        score=3,
+        stance="abstain",
+        summary="近60日无有效事件",
+        citations=[],
+        risks=["无近窗事件", "情绪面未形成方向"],
+        abstain=True,
+        degraded=False,
+        missing_information=[NO_RECENT_EVENTS],
+    )
+    decision = build_multi_factor_decision(
+        _hold_report("fundamental"),
+        _hold_report("technical"),
+        stale,
+        Report(
+            role="macro",
+            score=4,
+            stance="hold",
+            summary="LPR 1年期为3.0。",
+            citations=[
+                EvidenceRef(ref_id="x", kind="field", id="lpr_1y", source="test")
+            ],
+            risks=["利率数据仅反映当前快照", "宏观不构成买卖"],
+            relevance_to_stock="high",
+        ),
+        snapshot,
+    )
+    assert report_degrades_run("sentiment", stale) is False
+    assert "sentiment" in decision.dimensions_used
+    assert "sentiment" not in decision.dimensions_missing
+    assert "方向相反" not in "".join(decision.falsifiers)
+
+
+def test_sanitize_report_drops_foreign_fields_and_mashed_ids():
+    dirty = Report(
+        role="fundamental",
+        score=3,
+        stance="hold",
+        summary="ok",
+        citations=[
+            EvidenceRef(
+                ref_id="a", kind="field", id="ma5/ma10/ma20", source="test"
+            ),
+            EvidenceRef(
+                ref_id="a", kind="field", id="ma5", source="test"
+            ),
+        ],
+        risks=["a", "b"],
+        valuation="PE 10",
+        key_levels="should drop",
+        relevance_to_stock="high",
+        cycle_tag="insufficient",
+    )
+    clean = sanitize_report(dirty)
+    assert clean.key_levels is None
+    assert clean.relevance_to_stock is None
+    assert clean.cycle_tag is None
+    assert clean.valuation == "PE 10"
+    assert [c.id for c in clean.citations] == ["ma5"]
 
 
 @pytest.mark.asyncio

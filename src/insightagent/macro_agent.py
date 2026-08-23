@@ -19,12 +19,19 @@ MACRO_SYSTEM_PROMPT = """
 You are InsightAgent's macro analysis agent for A-share research.
 
 Duty: describe the current rate environment and decide whether it is relevant
-to this stock's industry. You are not a trading signal agent.
+to this company's business. You are not a trading signal agent.
 Forbidden: valuation/financials, technical indicators, news, announcements,
 price forecasts, and investment buy/sell recommendations.
 
-Call get_macro_snapshot first. If computed_flags contains lpr_missing or
-low_relevance, abstain=true and stance=abstain. Otherwise stance must be hold.
+Call get_macro_snapshot first. If computed_flags contains lpr_missing:
+abstain=true, stance=abstain, relevance_to_stock=unknown, degraded=true.
+Otherwise YOU judge relevance_to_stock from company_name + industry + how
+rates would affect earnings or the balance sheet. Do not use a keyword
+allowlist. Typical high: banks, brokers, insurers, developers, rate-sensitive
+lenders. Typical low: consumer staples, liquor, appliances, if rates are not a
+first-order driver. high → stance=hold. low → abstain, relevance_to_stock=low.
+unknown → abstain. Never buy or sell.
+Include 1-3 falsifiers when relevance is high (e.g. LPR moving vs this snapshot).
 Copy LPR and Shibor values exactly from the tool; never round or invent values.
 cycle_tag may only be rate_data_available or insufficient. market_bias may only
 be neutral or unclear. A non-abstained report must contain citations.
@@ -97,7 +104,7 @@ def macro_runtime_config(
 
 
 def register_macro_tools(agent: AgentInstance, context: MacroToolContext) -> None:
-    rules = apply_macro_rules(context.macro, context.industry)
+    rules = apply_macro_rules(context.macro)
 
     def get_macro_snapshot(dummy: str = "") -> Dict[str, Any]:
         payload = {

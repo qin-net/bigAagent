@@ -28,8 +28,15 @@ calling other agents, or writing the methodology library.
 Work only from tools. Do not compute indicators yourself.
 Call get_indicator_snapshot first. If computed_flags contains
 insufficient_bars or ma20 is null, set abstain=true and stance=abstain.
-Key levels must reference only K-line observed highs/lows or MA values.
+stance may be buy, hold, or sell when the snapshot supports it; do not
+default to hold if trend and key levels are clear.
+key_levels MUST contain copied numbers (MA values and/or observed
+highs/lows from the K-line). Copy suggested_key_levels if present.
+Do not write adjective-only levels such as "下方支撑".
+Citation id must be a single field name (ma20, not ma5/ma10/ma20).
+Only cite kb_rsi_overbought when rsi14>=70 is in the snapshot.
 Numbers must be copied exactly from tool outputs.
+Include 1-3 falsifiers a tracker can check (e.g. close breaking MA60).
 Do not invent tools. Empty methodology results are normal; submit from
 the snapshot tools.
 
@@ -103,6 +110,7 @@ def register_technical_tools(
     def get_indicator_snapshot(dummy: str = "") -> Dict[str, Any]:
         payload = context.indicator.model_dump(mode="json")
         payload["computed_flags"] = rules["flags"]
+        payload["suggested_key_levels"] = rules["key_levels"]
         return payload
 
     def get_price_snapshot(dummy: str = "") -> Dict[str, Any]:
