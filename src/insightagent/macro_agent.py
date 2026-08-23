@@ -11,7 +11,6 @@ from .contracts import ResourceType
 from .data_contracts import MacroSnapshot
 from .fundamentals import search_methodology
 from .macros import apply_macro_rules
-from .persistence import FileArtifactStore
 from .resources import FunctionResource
 from .runtime import AgentInstance, RuntimeConfig
 
@@ -29,6 +28,8 @@ low_relevance, abstain=true and stance=abstain. Otherwise stance must be hold.
 Copy LPR and Shibor values exactly from the tool; never round or invent values.
 cycle_tag may only be rate_data_available or insufficient. market_bias may only
 be neutral or unclear. A non-abstained report must contain citations.
+Do not invent tools. Empty methodology results are normal; submit from
+get_macro_snapshot.
 
 Final answer via submit_final:
 - output.report must match the Report schema below
@@ -58,19 +59,6 @@ class SearchOutput(BaseModel):
     entries: List[Dict[str, str]]
 
 
-class ArtifactArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ref: str = Field(min_length=1)
-
-
-class ArtifactOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ref: str
-    content: str
-
-
 class MacroToolSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -87,7 +75,6 @@ class MacroToolContext:
     industry: str
     stock_code: str
     company_name: str
-    artifacts: FileArtifactStore
 
 
 def macro_runtime_config(
@@ -123,11 +110,7 @@ def register_macro_tools(agent: AgentInstance, context: MacroToolContext) -> Non
         return payload
 
     def search(query: str) -> Dict[str, Any]:
-        return {"entries": search_methodology(query)}
-
-    async def get_artifact(ref: str) -> Dict[str, Any]:
-        content = await context.artifacts.get(ref)
-        return {"ref": ref, "content": content}
+        return {"entries": search_methodology(query, scope="macro")}
 
     agent.register_tool(
         FunctionResource(
@@ -142,19 +125,13 @@ def register_macro_tools(agent: AgentInstance, context: MacroToolContext) -> Non
         FunctionResource(
             func=search,
             name="search_methodology",
-            description="Search approved macro methodology snippets.",
+            description=(
+                "Search approved macro methodology snippets. "
+                "Empty results are normal; finish from get_macro_snapshot."
+            ),
             input_model=SearchArgs,
             output_model=SearchOutput,
             resource_type=ResourceType.KNOWLEDGE_BASE,
-        )
-    )
-    agent.register_tool(
-        FunctionResource(
-            func=get_artifact,
-            name="get_artifact",
-            description="Load the original macro artifact by ref.",
-            input_model=ArtifactArgs,
-            output_model=ArtifactOutput,
         )
     )
 

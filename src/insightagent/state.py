@@ -191,6 +191,49 @@ def _get_or_create_list(root: Dict[str, Any], path: str) -> list[Any]:
     return value
 
 
+def drop_immutable_patch_paths(
+    patch: StatePatch,
+    mutable_roots: Iterable[str] = InMemoryStateStore.DEFAULT_MUTABLE_ROOTS,
+) -> tuple[StatePatch, list[str]]:
+    """Keep report-side patches from crashing the run.
+
+    Model submit_final may stuff report fields into state_patch. Those paths
+    are not memory. Drop them; legal private_memory writes still apply.
+    """
+    allowed = frozenset(mutable_roots)
+    dropped: list[str] = []
+
+    def allowed_path(path: str) -> bool:
+        root = path.split(".", 1)[0] if path else ""
+        if root in allowed:
+            return True
+        dropped.append(path)
+        return False
+
+    return (
+        patch.model_copy(
+            update={
+                "set": {
+                    path: value
+                    for path, value in patch.set.items()
+                    if allowed_path(path)
+                },
+                "append": {
+                    path: values
+                    for path, values in patch.append.items()
+                    if allowed_path(path)
+                },
+                "remove": {
+                    path: values
+                    for path, values in patch.remove.items()
+                    if allowed_path(path)
+                },
+            }
+        ),
+        dropped,
+    )
+
+
 def apply_patch_to_state(
     current: AgentState,
     patch: StatePatch,

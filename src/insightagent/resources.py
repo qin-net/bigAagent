@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Protocol, Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from .contracts import (
     ResourceCall,
@@ -15,6 +15,7 @@ from .contracts import (
     ResourceType,
     SideEffect,
 )
+from .persistence import ArtifactIntegrityError
 from .retry import ExponentialBackoff
 
 
@@ -247,43 +248,61 @@ class CallOrchestrator:
         return results
 
     async def _execute(self, call: ResourceCall) -> ResourceResult:
-        resource = self.registry.get(call.resource_name)
-        resource.validate_input(call.arguments)
-        retry = self.retry_policies.get(
-            resource.spec.retry_policy, self.retry_policies["default"]
-        )
         started_at = datetime.now(timezone.utc)
         attempts = 0
+        try:
+            resource = self.registry.get(call.resource_name)
+            resource.validate_input(call.arguments)
+            retry = self.retry_policies.get(
+                resource.spec.retry_policy, self.retry_policies["default"]
+            )
 
-        async def operation() -> Any:
-            nonlocal attempts
-            attempts += 1
-            async with self._semaphore:
-                return await asyncio.wait_for(
-                    resource.invoke(
-                        call.arguments,
-                        idempotency_key=_idempotency_key(call),
-                    ),
-                    timeout=resource.spec.timeout_seconds,
-                )
+            async def operation() -> Any:
+                nonlocal attempts
+                attempts += 1
+                async with self._semaphore:
+                    return await asyncio.wait_for(
+                        resource.invoke(
+                            call.arguments,
+                            idempotency_key=_idempotency_key(call),
+                        ),
+                        timeout=resource.spec.timeout_seconds,
+                    )
 
-        data = await retry.execute(operation)
-        return ResourceResult(
-            call_id=call.call_id,
-            resource=call.resource_name,
-            status="success",
-            data=data,
-            started_at=started_at,
-            finished_at=datetime.now(timezone.utc),
-            attempts=attempts,
-        )
+            data = await retry.execute(operation)
+            return ResourceResult(
+                call_id=call.call_id,
+                resource=call.resource_name,
+                status="success",
+                data=data,
+                started_at=started_at,
+                finished_at=datetime.now(timezone.utc),
+                attempts=attempts,
+            )
+        except (
+            UnknownResourceError,
+            ValidationError,
+            PermissionError,
+            KeyError,
+            ArtifactIntegrityError,
+        ) as error:
+            return _failed_result(
+                call,
+                error,
+                started_at=started_at,
+                attempts=max(attempts, 1),
+                available=(
+                    sorted(item.spec.name for item in self.registry.list_all())
+                    if isinstance(error, UnknownResourceError)
+                    else None
+                ),
+            )
 
     def _validate_graph(self, calls: list[ResourceCall]) -> None:
         call_ids = {call.call_id for call in calls}
         if len(call_ids) != len(calls):
             raise CallDependencyError("Duplicate call_id")
         for call in calls:
-            self.registry.get(call.resource_name)
             unknown = set(call.depends_on) - call_ids
             if unknown:
                 raise CallDependencyError(
@@ -307,6 +326,35 @@ async def _gather_cancel_on_error(
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         raise
+
+
+def _failed_result(
+    call: ResourceCall,
+    error: Exception,
+    *,
+    started_at: datetime,
+    attempts: int,
+    available: Optional[list[str]] = None,
+) -> ResourceResult:
+    if isinstance(error, UnknownResourceError):
+        names = ", ".join(available or []) or "(none)"
+        message = (
+            "Unknown tool {!r}. Registered tools: {}. "
+            "Do not invent tool names."
+        ).format(call.resource_name, names)
+        error_type = "UnknownResourceError"
+    else:
+        message = str(error)
+        error_type = type(error).__name__
+    return ResourceResult(
+        call_id=call.call_id,
+        resource=call.resource_name,
+        status="failed",
+        error={"type": error_type, "message": message},
+        started_at=started_at,
+        finished_at=datetime.now(timezone.utc),
+        attempts=attempts,
+    )
 
 
 def _idempotency_key(call: ResourceCall) -> str:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -14,9 +13,7 @@ from insightagent.data_contracts import (
     PriceSnapshot,
 )
 from insightagent.llm import FakeLLMAdapter
-from insightagent.persistence import FileArtifactStore, SQLiteDatabase
-from insightagent.resources import FunctionResource
-from insightagent.runtime import AgentInstance, RuntimeConfig
+from insightagent.runtime import AgentInstance
 from insightagent.technical_agent import (
     TechnicalToolContext,
     technical_runtime_config,
@@ -180,11 +177,7 @@ def _fake_llm_abstain() -> FakeLLMAdapter:
 
 
 @pytest.mark.asyncio
-async def test_technical_agent_returns_valid_report(tmp_path: Path):
-    db = SQLiteDatabase(str(tmp_path / "test.db"))
-    await db.initialize()
-    store = FileArtifactStore(db, str(tmp_path / "artifacts"))
-
+async def test_technical_agent_returns_valid_report():
     agent = AgentInstance(
         name="technical",
         llm_adapter=_fake_llm_success(),
@@ -194,7 +187,6 @@ async def test_technical_agent_returns_valid_report(tmp_path: Path):
         indicator=_indicator_snapshot(),
         price=_price_snapshot(),
         kline=_kline_snapshot(),
-        artifacts=store,
     )
     register_technical_tools(agent, ctx)
 
@@ -213,11 +205,7 @@ async def test_technical_agent_returns_valid_report(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_technical_agent_abstains_when_insufficient_bars(tmp_path: Path):
-    db = SQLiteDatabase(str(tmp_path / "test.db"))
-    await db.initialize()
-    store = FileArtifactStore(db, str(tmp_path / "artifacts"))
-
+async def test_technical_agent_abstains_when_insufficient_bars():
     indicator = IndicatorSnapshot(
         stock_code="000858",
         ma5=118.5,
@@ -234,7 +222,6 @@ async def test_technical_agent_abstains_when_insufficient_bars(tmp_path: Path):
         indicator=indicator,
         price=_price_snapshot(),
         kline=_kline_snapshot(),
-        artifacts=store,
     )
     register_technical_tools(agent, ctx)
 
@@ -247,3 +234,26 @@ async def test_technical_agent_abstains_when_insufficient_bars(tmp_path: Path):
     assert report.abstain is True
     assert report.stance == "abstain"
     assert report.degraded is True
+
+
+def test_technical_registers_only_snapshot_tools():
+    agent = AgentInstance(
+        name="technical",
+        llm_adapter=_fake_llm_success(),
+        config=technical_runtime_config(),
+    )
+    register_technical_tools(
+        agent,
+        TechnicalToolContext(
+            indicator=_indicator_snapshot(),
+            price=_price_snapshot(),
+            kline=_kline_snapshot(),
+        ),
+    )
+    names = {item.spec.name for item in agent.resource_registry.list_all()}
+    assert names == {
+        "get_indicator_snapshot",
+        "get_price_snapshot",
+        "get_kline_snapshot",
+        "search_methodology",
+    }

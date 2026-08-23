@@ -271,6 +271,13 @@ def diff_snapshots(
     return SnapshotDiff(changed_fields=changed, unchanged_count=unchanged)
 
 
+def make_event_id(stock_code: str, material: str, *, kind: str = "") -> str:
+    digest = hashlib.sha256(str(material).encode("utf-8")).hexdigest()[:12]
+    if kind:
+        return "event:{}:{}:{}".format(stock_code, kind, digest)
+    return "event:{}:{}".format(stock_code, digest)
+
+
 def events_from_announcements(
     stock_code: str,
     announcements: Iterable[Dict[str, Any]],
@@ -281,10 +288,9 @@ def events_from_announcements(
         event_type = classify_event(title)
         if event_type == "announcement":
             continue
-        digest = hashlib.sha256(title.encode("utf-8")).hexdigest()[:12]
         events.append(
             EventItem(
-                event_id="{}-{}".format(stock_code, digest),
+                event_id=make_event_id(stock_code, title),
                 event_type=event_type,
                 title=title,
                 published_at=item.get("published_at"),
@@ -980,10 +986,9 @@ class MarketService:
         holders = await self.client.holder_changes(code, limit=10)
         for item in holders:
             title = item.get("note") or item.get("holder_name") or "股东持股变动"
-            digest = hashlib.sha256(str(title).encode("utf-8")).hexdigest()[:12]
             snapshot.events.append(
                 EventItem(
-                    event_id="{}-holder-{}".format(code, digest),
+                    event_id=make_event_id(code, str(title), kind="holder"),
                     event_type=str(item.get("change_type") or "holder_change"),
                     title=str(title),
                     published_at=_text(item.get("published_at")),

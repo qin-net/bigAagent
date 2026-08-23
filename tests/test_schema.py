@@ -1,3 +1,7 @@
+import pytest
+from pydantic import ValidationError
+
+from insightagent.artifact_access import ArtifactArgs
 from insightagent.business_contracts import Report
 from insightagent.contracts import ResourceSpec, ResourceType
 from insightagent.fundamental_agent import EmptyArgs, SearchArgs
@@ -21,6 +25,14 @@ def test_empty_args_are_strict_compatible():
     assert_strict_compatible(schema)
 
 
+def test_artifact_args_pattern_is_stripped_for_strict_tools():
+    raw = ArtifactArgs.model_json_schema()
+    assert "pattern" in raw["properties"]["ref"]
+    schema = to_strict_json_schema(raw)
+    assert "pattern" not in schema["properties"]["ref"]
+    assert_strict_compatible(schema)
+
+
 def test_defs_are_rewritten_and_datetime_format_stripped():
     schema = to_strict_json_schema(Report.model_json_schema())
     assert "$defs" not in schema
@@ -30,16 +42,18 @@ def test_defs_are_rewritten_and_datetime_format_stripped():
     assert_strict_compatible(schema)
 
 
-def test_submit_final_anyof_branches_have_type():
+def test_submit_final_requires_report_object_not_null():
     schema = to_strict_json_schema(SubmitFinalArgs.model_json_schema())
     assert_strict_compatible(schema)
-    report = schema["$def"]["SubmitFinalOutput"]["properties"]["report"]
-    assert "type" not in report or report.get("anyOf")
-    types = {item.get("type") for item in report["anyOf"]}
-    assert "object" in types
-    assert "null" in types
-    assert all("type" in item for item in report["anyOf"])
-    assert "$ref" not in report["anyOf"][0]
+    output = schema["$def"]["SubmitFinalOutput"]
+    assert output["required"] == ["report"]
+    report = output["properties"]["report"]
+    assert report == {"$ref": "#/$def/Report"}
+    assert "anyOf" not in report
+    report_schema = schema["$def"]["Report"]
+    for field in ("role", "score", "stance", "summary"):
+        assert field in report_schema["required"]
+        assert field in report_schema["properties"]
 
 
 def test_submit_final_tool_is_strict_and_has_no_runtime_counters():
@@ -62,6 +76,29 @@ def test_submit_final_tool_is_strict_and_has_no_runtime_counters():
     tool = spec.to_deepseek_tool(strict=True)
     assert tool["function"]["strict"] is True
     assert_strict_compatible(tool["function"]["parameters"])
+
+
+def test_submit_final_args_reject_summary_without_report():
+    with pytest.raises(ValidationError):
+        SubmitFinalArgs.model_validate(
+            {
+                "status": "completed",
+                "output": {"summary": "多头排列，短线持观望。"},
+                "reflection": {},
+                "state_patch": {"set": [], "append": [], "remove": []},
+            }
+        )
+    with pytest.raises(ValidationError):
+        SubmitFinalArgs.model_validate(
+            {
+                "status": "completed",
+                "output": {
+                    "report": {"summary": "多头排列，短线持观望。"}
+                },
+                "reflection": {},
+                "state_patch": {"set": [], "append": [], "remove": []},
+            }
+        )
 
 
 def test_submit_final_args_accept_report_without_counters():
@@ -88,7 +125,6 @@ def test_submit_final_args_accept_report_without_counters():
 
 def test_strict_tool_schemas_have_no_empty_objects():
     from insightagent.data_contracts import EmptyInput
-    from insightagent.fundamental_agent import ArtifactArgs
 
     for model in (EmptyArgs, SearchArgs, ArtifactArgs, EmptyInput, SubmitFinalArgs):
         schema = to_strict_json_schema(model.model_json_schema())

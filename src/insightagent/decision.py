@@ -129,12 +129,12 @@ def build_multi_factor_decision(
     used = [
         dim
         for dim in ["fundamental", "technical", "sentiment", "macro"]
-        if not reports[dim].abstain
+        if not dimension_is_missing(dim, reports[dim])
     ]
     missing = [
         dim
         for dim in ["fundamental", "technical", "sentiment", "macro"]
-        if reports[dim].abstain
+        if dimension_is_missing(dim, reports[dim])
     ]
 
     fundamental = fundamental_report
@@ -188,11 +188,17 @@ def build_multi_factor_decision(
     else:
         rationale_parts.append("情绪面弃权。")
     macro = macro_report
-    if not macro.abstain:
+    if not dimension_is_missing("macro", macro):
+        suffix = (
+            "，本维不形成方向。"
+            if macro.abstain
+            else "。"
+        )
         rationale_parts.append(
-            "宏观：{cycle_tag}，相关性 {relevance}。".format(
+            "宏观：{cycle_tag}，相关性 {relevance}{suffix}".format(
                 cycle_tag=macro.cycle_tag or "未标注",
                 relevance=macro.relevance_to_stock or "unknown",
+                suffix=suffix,
             )
         )
     else:
@@ -278,6 +284,19 @@ def build_multi_factor_decision(
         dimensions_used=used,
         dimensions_missing=missing,
     )
+
+
+def dimension_is_missing(dim: str, report: Report) -> bool:
+    """Low-relevance macro abstain is a completed N/A judgment, not a hole."""
+    if dim == "macro" and report.relevance_to_stock == "low":
+        return False
+    return bool(report.abstain)
+
+
+def report_degrades_run(dim: str, report: Report) -> bool:
+    if dim == "macro" and report.relevance_to_stock == "low":
+        return False
+    return bool(report.abstain or report.degraded)
 
 
 def _majority_stance(stances: List[str]) -> str:

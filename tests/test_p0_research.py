@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from insightagent.business_contracts import Report
+from insightagent.business_contracts import EvidenceRef, FundamentalSnapshot, Report
 from insightagent.contracts import LLMResponse, LLMToolCall
-from insightagent.decision import build_p0_decision
+from insightagent.decision import build_multi_factor_decision, build_p0_decision
 from insightagent.evidence import EvidenceBindingError, bind_report_evidence
 from insightagent.fundamental_agent import default_fixtures_dir
 from insightagent.fundamentals import (
@@ -327,13 +327,15 @@ async def test_fixture_stock_persists_legal_report_and_decision(tmp_path):
     assert outcome.technical_report is not None
     assert outcome.sentiment_report is not None
     assert outcome.decision is not None
-    assert outcome.run.status in {"success", "degraded"}
+    assert outcome.run.status == "success"
     assert outcome.decision.timing_score is not None
     assert outcome.decision.value_score is not None
-    assert outcome.decision.dimensions_missing == ["macro"]
+    assert outcome.decision.dimensions_missing == []
     assert outcome.decision.dimensions_used == [
-        "fundamental", "technical", "sentiment"
+        "fundamental", "technical", "sentiment", "macro"
     ]
+    assert "宏观未评估" not in outcome.decision.rationale
+    assert "相关性 low" in outcome.decision.rationale
 
     database = SQLiteDatabase(str(tmp_path / "insightagent.db"))
     stored = await ResearchStore(database).get_run(outcome.run.run_id)
@@ -361,6 +363,8 @@ async def test_missing_financials_abstain_without_llm(tmp_path):
     assert outcome.decision.confidence <= 0.65
     assert llm.requests == []
     assert outcome.run.status == "degraded"
+    assert "macro" in outcome.decision.dimensions_missing
+    assert "宏观未评估" in outcome.decision.rationale
 
 
 @pytest.mark.asyncio
@@ -421,12 +425,99 @@ async def test_decision_timing_and_confidence_rules():
     }
 
 
+def _hold_report(role: str) -> Report:
+    return Report(
+        role=role,
+        score=4,
+        stance="hold",
+        summary="ok",
+        citations=[
+            EvidenceRef(ref_id="x", kind="field", id="pe", source="test")
+        ],
+        risks=["a", "b"],
+    )
+
+
+def test_low_relevance_macro_counts_as_used_not_missing():
+    snapshot = FundamentalSnapshot(stock_code="000858")
+    low = Report(
+        role="macro",
+        score=2,
+        stance="abstain",
+        summary="与当前利率环境相关性低",
+        citations=[],
+        risks=["宏观相关性低", "宏观面未形成方向"],
+        degraded=True,
+        abstain=True,
+        cycle_tag="rate_data_available",
+        relevance_to_stock="low",
+    )
+    unknown = Report(
+        role="macro",
+        score=2,
+        stance="abstain",
+        summary="宏观数据不足",
+        citations=[],
+        risks=["宏观环境未形成有效参考", "利率数据或行业相关性不足"],
+        degraded=True,
+        abstain=True,
+        cycle_tag="insufficient",
+        relevance_to_stock="unknown",
+    )
+    judged = build_multi_factor_decision(
+        _hold_report("fundamental"),
+        _hold_report("technical"),
+        _hold_report("sentiment"),
+        low,
+        snapshot,
+    )
+    hole = build_multi_factor_decision(
+        _hold_report("fundamental"),
+        _hold_report("technical"),
+        _hold_report("sentiment"),
+        unknown,
+        snapshot,
+    )
+    assert judged.dimensions_used == [
+        "fundamental",
+        "technical",
+        "sentiment",
+        "macro",
+    ]
+    assert judged.dimensions_missing == []
+    assert "本维不形成方向" in judged.rationale
+    assert hole.dimensions_missing == ["macro"]
+    assert "宏观未评估" in hole.rationale
+    assert judged.confidence > hole.confidence
+
+
 @pytest.mark.asyncio
 async def test_fixture_path_does_not_import_akshare(tmp_path):
     sys.modules.pop("akshare", None)
     fund_llm, tech_llm, sent_llm, macro_llm = _make_four_agent_llms()
     await _analyze(tmp_path, "000858", fund_llm, tech_llm, sent_llm, macro_llm)
     assert "akshare" not in sys.modules
+
+
+class _BoomLLM:
+    async def complete(self, request):
+        raise RuntimeError("simulated sentiment crash")
+
+
+@pytest.mark.asyncio
+async def test_sentiment_crash_does_not_claim_missing_events(tmp_path):
+    fund_llm, tech_llm, _, macro_llm = _make_four_agent_llms()
+    outcome = await _analyze(
+        tmp_path, "000858", fund_llm, tech_llm, _BoomLLM(), macro_llm
+    )
+    assert outcome.error is None
+    assert outcome.report is not None
+    assert outcome.sentiment_report is not None
+    assert outcome.sentiment_report.abstain is True
+    assert "数据不足" not in outcome.sentiment_report.summary
+    assert "RuntimeError" in outcome.sentiment_report.summary
+    assert "agent_error" in outcome.sentiment_report.missing_information
+    assert outcome.decision is not None
 
 
 @pytest.mark.asyncio

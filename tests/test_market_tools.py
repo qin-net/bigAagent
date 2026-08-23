@@ -82,6 +82,7 @@ async def test_each_market_tool_returns_typed_snapshot():
     types = {item["event_type"] for item in events["events"]}
     assert "reduction" in types
     assert "buyback" in types
+    assert all(item["event_id"].startswith("event:") for item in events["events"])
 
     macro = await tools["get_macro_snapshot"].invoke({}, idempotency_key="9")
     assert macro["lpr_1y"] == 3.0

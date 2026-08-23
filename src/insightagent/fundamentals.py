@@ -54,6 +54,34 @@ METHODOLOGY_ENTRIES = [
         "trigger": "lpr 利率 宏观",
         "text": "宏观只提供环境标签，不构成个股买卖理由。",
     },
+    {
+        "id": "kb_event_reduction",
+        "scope": ["sentiment", "event"],
+        "status": "approved",
+        "trigger": "减持 reduction 控股股东 情绪 事件",
+        "text": "控股股东减持会抬升风险感知，写入 event_flags；不能单独作为买卖点。",
+    },
+    {
+        "id": "kb_event_buyback",
+        "scope": ["sentiment", "event"],
+        "status": "approved",
+        "trigger": "回购 buyback 增持 问询 inquiry",
+        "text": "回购或增持可对冲减持压力，仍以公告事件为准；新闻不能单独支撑非弃权。",
+    },
+    {
+        "id": "kb_ma_align",
+        "scope": ["technical"],
+        "status": "approved",
+        "trigger": "均线 多头 ma_bull_align 排列",
+        "text": "均线多头排列描述趋势结构，不构成买卖点；关键位只能引用均线或K线高低。",
+    },
+    {
+        "id": "kb_rsi_overbought",
+        "scope": ["technical"],
+        "status": "approved",
+        "trigger": "rsi 超买 overbought macd",
+        "text": "RSI 超买或 MACD 走弱只说明短线过热，趋势判断仍以均线结构为准。",
+    },
 ]
 
 
@@ -245,11 +273,15 @@ def _map_akshare(stock_code: str, info: Any, indicators: Any) -> Dict[str, Any]:
     }
 
 
-def search_methodology(query: str) -> List[Dict[str, str]]:
+def search_methodology(
+    query: str, *, scope: Optional[str] = None
+) -> List[Dict[str, str]]:
     tokens = [token.lower() for token in query.replace("/", " ").split() if token]
     results = []
     for entry in METHODOLOGY_ENTRIES:
         if entry["status"] != "approved":
+            continue
+        if scope is not None and scope not in entry["scope"]:
             continue
         haystack = " ".join(
             [entry["id"], entry["trigger"], entry["text"]]

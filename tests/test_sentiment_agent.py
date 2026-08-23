@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -14,13 +13,11 @@ from insightagent.data_contracts import (
     HolderChangeSnapshot,
 )
 from insightagent.llm import FakeLLMAdapter
-from insightagent.persistence import FileArtifactStore, SQLiteDatabase
-from insightagent.resources import FunctionResource
-from insightagent.runtime import AgentInstance, RuntimeConfig
+from insightagent.runtime import AgentInstance, LoopTracer
 from insightagent.sentiment_agent import (
     SentimentToolContext,
-    sentiment_runtime_config,
     register_sentiment_tools,
+    sentiment_runtime_config,
 )
 
 
@@ -29,14 +26,14 @@ def _event_snapshot_with_reduction() -> EventSnapshot:
         stock_code="000858",
         events=[
             EventItem(
-                event_id="000858-red-1",
+                event_id="event:000858:red-1",
                 event_type="reduction",
                 title="控股股东拟减持不超过 2% 股份",
                 published_at="2026-08-15",
                 source="announcement",
             ),
             EventItem(
-                event_id="000858-inq-1",
+                event_id="event:000858:inq-1",
                 event_type="inquiry",
                 title="收到交易所问询函",
                 published_at="2026-08-16",
@@ -85,7 +82,7 @@ def _fake_llm_with_events() -> FakeLLMAdapter:
                         {
                             "ref_id": "e1",
                             "kind": "event",
-                            "id": "000858-red-1",
+                            "id": "event:000858:red-1",
                             "observed_at": "2026-08-15T00:00:00Z",
                             "source": "get_event_snapshot",
                             "note": None,
@@ -182,23 +179,19 @@ def _fake_llm_no_events() -> FakeLLMAdapter:
 
 
 @pytest.mark.asyncio
-async def test_sentiment_agent_flags_reduction_and_inquiry(tmp_path: Path):
-    db = SQLiteDatabase(str(tmp_path / "test.db"))
-    await db.initialize()
-    store = FileArtifactStore(db, str(tmp_path / "artifacts"))
-
+async def test_sentiment_agent_flags_reduction_and_inquiry():
     agent = AgentInstance(
         name="sentiment",
         llm_adapter=_fake_llm_with_events(),
         config=sentiment_runtime_config(),
     )
-    ctx = SentimentToolContext(
-        events=_event_snapshot_with_reduction(),
-        holders=_holder_reduction(),
-        artifacts=store,
+    register_sentiment_tools(
+        agent,
+        SentimentToolContext(
+            events=_event_snapshot_with_reduction(),
+            holders=_holder_reduction(),
+        ),
     )
-    register_sentiment_tools(agent, ctx)
-
     result = await agent.run(
         "Analyze 000858 sentiment",
         session_id="sent-1",
@@ -214,23 +207,19 @@ async def test_sentiment_agent_flags_reduction_and_inquiry(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_sentiment_agent_abstains_when_no_material_event(tmp_path: Path):
-    db = SQLiteDatabase(str(tmp_path / "test.db"))
-    await db.initialize()
-    store = FileArtifactStore(db, str(tmp_path / "artifacts"))
-
+async def test_sentiment_agent_abstains_when_no_material_event():
     agent = AgentInstance(
         name="sentiment",
         llm_adapter=_fake_llm_no_events(),
         config=sentiment_runtime_config(),
     )
-    ctx = SentimentToolContext(
-        events=_event_snapshot_empty(),
-        holders=_holder_empty(),
-        artifacts=store,
+    register_sentiment_tools(
+        agent,
+        SentimentToolContext(
+            events=_event_snapshot_empty(),
+            holders=_holder_empty(),
+        ),
     )
-    register_sentiment_tools(agent, ctx)
-
     result = await agent.run(
         "Analyze 000858 sentiment",
         session_id="sent-2",
@@ -240,3 +229,143 @@ async def test_sentiment_agent_abstains_when_no_material_event(tmp_path: Path):
     assert report.abstain is True
     assert report.stance == "abstain"
     assert report.degraded is True
+
+
+def test_sentiment_registers_only_snapshot_tools():
+    agent = AgentInstance(
+        name="sentiment",
+        llm_adapter=_fake_llm_with_events(),
+        config=sentiment_runtime_config(),
+    )
+    register_sentiment_tools(
+        agent,
+        SentimentToolContext(
+            events=_event_snapshot_with_reduction(),
+            holders=_holder_reduction(),
+        ),
+    )
+    names = {item.spec.name for item in agent.resource_registry.list_all()}
+    assert names == {
+        "get_event_snapshot",
+        "get_holder_changes",
+        "search_methodology",
+    }
+
+
+@pytest.mark.asyncio
+async def test_sentiment_recovers_after_unknown_get_artifact():
+    payload = json.dumps(
+        {
+            "status": "completed",
+            "output": {
+                "report": {
+                    "role": "sentiment",
+                    "score": 3,
+                    "stance": "hold",
+                    "summary": "本期出现减持和问询函，风险偏好下降。",
+                    "event_flags": [
+                        "has_reduction",
+                        "has_inquiry",
+                        "holder_reduction",
+                    ],
+                    "crowd_risk": "high",
+                    "citations": [
+                        {
+                            "ref_id": "e1",
+                            "kind": "event",
+                            "id": "event:000858:red-1",
+                            "observed_at": "2026-08-15T00:00:00Z",
+                            "source": "get_event_snapshot",
+                            "note": None,
+                        }
+                    ],
+                    "risks": [
+                        "减持可能释放估值压力",
+                        "问询函可能导致信披成本上升",
+                    ],
+                }
+            },
+            "reflection": {"what_worked": ["ignored unknown tool"]},
+            "state_patch": {"set": {}, "append": {}, "remove": {}},
+        }
+    )
+    tracer = LoopTracer()
+    fake = FakeLLMAdapter(
+        [
+            LLMResponse(
+                id="tool-1",
+                model="deepseek-v4-pro",
+                content="inspecting",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call-1",
+                        name="get_event_snapshot",
+                        arguments='{"dummy":""}',
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+            LLMResponse(
+                id="tool-2",
+                model="deepseek-v4-pro",
+                content="wrong tool",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call-2",
+                        name="get_artifact",
+                        arguments='{"ref":"event:000858:red-1"}',
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+            LLMResponse(
+                id="final-1",
+                model="deepseek-v4-pro",
+                content=payload,
+                finish_reason="stop",
+            ),
+        ]
+    )
+    agent = AgentInstance(
+        name="sentiment",
+        llm_adapter=fake,
+        config=sentiment_runtime_config(),
+        tracer=tracer,
+    )
+    register_sentiment_tools(
+        agent,
+        SentimentToolContext(
+            events=_event_snapshot_with_reduction(),
+            holders=_holder_reduction(),
+        ),
+    )
+    result = await agent.run(
+        "Analyze 000858 sentiment",
+        session_id="sent-artifact",
+        business_context={"stock_code": "000858"},
+    )
+    report = Report.model_validate(result.output["report"])
+    assert report.stance == "hold"
+    failed = [
+        payload
+        for event in tracer.events
+        if event["stage"] == "tool_results"
+        for payload in event["payload"].values()
+        if isinstance(payload, dict) and payload.get("status") == "failed"
+    ]
+    assert failed
+    assert failed[0]["error"]["type"] == "UnknownResourceError"
+    assert "数据不足" not in report.summary
+
+
+def test_methodology_is_scoped_by_dimension():
+    from insightagent.fundamentals import search_methodology
+
+    sentiment_hits = search_methodology("减持", scope="sentiment")
+    assert any(item["id"] == "kb_event_reduction" for item in sentiment_hits)
+    assert all(not item["id"].startswith("kb_cashflow") for item in sentiment_hits)
+    assert search_methodology("减持", scope="fundamental") == []
+
+    technical_hits = search_methodology("均线", scope="technical")
+    assert any(item["id"] == "kb_ma_align" for item in technical_hits)
+    assert search_methodology("均线", scope="sentiment") == []

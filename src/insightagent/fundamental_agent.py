@@ -7,6 +7,12 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .artifact_access import (
+    ARTIFACT_TOOL_DESCRIPTION,
+    ArtifactArgs,
+    ArtifactOutput,
+    load_whitelisted_artifact,
+)
 from .business_contracts import FundamentalSnapshot, Report
 from .contracts import ResourceType
 from .fundamentals import search_methodology
@@ -24,6 +30,9 @@ Forbidden: judging management integrity, predicting stock prices, technical
 analysis, calling other agents, or writing the methodology library.
 
 Work only from tools. Do not compute financial metrics yourself.
+get_artifact is optional and only accepts this run's artifact:// SHA-256.
+Never pass event_id, announcement id, or citation id. If get_artifact fails,
+do not retry with another key; submit_final from snapshot tools.
 Call get_fundamental_snapshot first. If computed_flags contains cashflow_lag,
 you must cite kind=rule and id=cashflow_lag. Search methodology when flags or
 missing fields need interpretation.
@@ -61,23 +70,10 @@ class SearchArgs(BaseModel):
     query: str = Field(min_length=1)
 
 
-class ArtifactArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ref: str = Field(min_length=1)
-
-
 class SearchOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     entries: List[Dict[str, str]]
-
-
-class ArtifactOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ref: str
-    content: str
 
 
 @dataclass
@@ -114,13 +110,12 @@ def register_fundamental_tools(
         return context.snapshot.model_dump(mode="json")
 
     def search(query: str) -> Dict[str, Any]:
-        return {"entries": search_methodology(query)}
+        return {"entries": search_methodology(query, scope="fundamental")}
 
     async def get_artifact(ref: str) -> Dict[str, Any]:
-        if ref != context.snapshot.artifact_ref:
-            raise PermissionError("Artifact ref is not in this run")
-        content = await context.artifacts.get(ref)
-        return {"ref": ref, "content": content}
+        return await load_whitelisted_artifact(
+            context.artifacts, ref, context.snapshot.artifact_ref
+        )
 
     agent.register_tool(
         FunctionResource(
@@ -148,7 +143,7 @@ def register_fundamental_tools(
         FunctionResource(
             func=get_artifact,
             name="get_artifact",
-            description="Load the original snapshot artifact by ref.",
+            description=ARTIFACT_TOOL_DESCRIPTION,
             input_model=ArtifactArgs,
             output_model=ArtifactOutput,
         )

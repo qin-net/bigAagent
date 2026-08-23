@@ -42,3 +42,21 @@ async def test_state_is_versioned_and_patch_isolated():
 
     history = await store.history(state.session_id)
     assert [item.version for item in history] == [0, 1, 2]
+
+
+def test_drop_immutable_patch_paths_keeps_memory_writes():
+    from insightagent.state import drop_immutable_patch_paths
+
+    cleaned, dropped = drop_immutable_patch_paths(
+        StatePatch(
+            base_version=1,
+            set={
+                "macro.stance": "abstain",
+                "private_memory.memory_summary": "low relevance",
+            },
+            append={"macro.flags": ["low_relevance"]},
+        )
+    )
+    assert dropped == ["macro.stance", "macro.flags"]
+    assert cleaned.set == {"private_memory.memory_summary": "low relevance"}
+    assert cleaned.append == {}

@@ -16,7 +16,6 @@ from insightagent.macro_agent import (
     register_macro_tools,
 )
 from insightagent.macros import apply_macro_rules
-from insightagent.persistence import FileArtifactStore, SQLiteDatabase
 from insightagent.runtime import AgentInstance
 
 
@@ -91,10 +90,7 @@ def _fake_llm() -> FakeLLMAdapter:
 
 
 @pytest.mark.asyncio
-async def test_macro_agent_reads_snapshot_then_returns_macro_report(tmp_path):
-    database = SQLiteDatabase(str(tmp_path / "test.db"))
-    await database.initialize()
-    artifacts = FileArtifactStore(database, str(tmp_path / "artifacts"))
+async def test_macro_agent_reads_snapshot_then_returns_macro_report():
     agent = AgentInstance(
         name="macro", llm_adapter=_fake_llm(), config=macro_runtime_config()
     )
@@ -105,7 +101,6 @@ async def test_macro_agent_reads_snapshot_then_returns_macro_report(tmp_path):
             industry="银行",
             stock_code="000001",
             company_name="平安银行",
-            artifacts=artifacts,
         ),
     )
 
@@ -116,6 +111,23 @@ async def test_macro_agent_reads_snapshot_then_returns_macro_report(tmp_path):
     assert report.role == "macro"
     assert report.stance == "hold"
     assert report.relevance_to_stock == "high"
+
+
+def test_macro_registers_only_snapshot_tools():
+    agent = AgentInstance(
+        name="macro", llm_adapter=_fake_llm(), config=macro_runtime_config()
+    )
+    register_macro_tools(
+        agent,
+        MacroToolContext(
+            macro=_macro_snapshot(),
+            industry="银行",
+            stock_code="000001",
+            company_name="平安银行",
+        ),
+    )
+    names = {item.spec.name for item in agent.resource_registry.list_all()}
+    assert names == {"get_macro_snapshot", "search_methodology"}
 
 
 def test_macro_report_rejects_unbound_number():

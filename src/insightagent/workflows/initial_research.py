@@ -20,7 +20,7 @@ from ..data_contracts import (
     MacroSnapshot,
     PriceSnapshot,
 )
-from ..decision import build_multi_factor_decision
+from ..decision import build_multi_factor_decision, report_degrades_run
 from ..evidence import (
     EvidenceBindingError,
     bind_macro_report_evidence,
@@ -384,7 +384,6 @@ async def analyze_stock(
             tech_fields=tech_fields,
             run=run,
             database=database,
-            artifacts=artifacts,
             llm_adapter=technical_llm_adapter or llm_adapter,
             model=model,
             thinking_enabled=thinking_enabled,
@@ -401,7 +400,6 @@ async def analyze_stock(
             sent_fields=sent_fields,
             run=run,
             database=database,
-            artifacts=artifacts,
             llm_adapter=sentiment_llm_adapter or llm_adapter,
             model=model,
             thinking_enabled=thinking_enabled,
@@ -419,7 +417,6 @@ async def analyze_stock(
                 macro_fields=macro_fields,
                 run=run,
                 database=database,
-                artifacts=artifacts,
                 llm_adapter=macro_llm_adapter or llm_adapter,
                 model=model,
                 thinking_enabled=thinking_enabled,
@@ -474,17 +471,17 @@ async def analyze_stock(
         technical_report = (
             technical_result[0]
             if not isinstance(technical_result, Exception)
-            else _abstain_technical()
+            else _abstain_agent_failure("technical", technical_exception)
         )
         sentiment_report = (
             sentiment_result[0]
             if not isinstance(sentiment_result, Exception)
-            else _abstain_sentiment()
+            else _abstain_agent_failure("sentiment", sentiment_exception)
         )
         macro_report = (
             macro_result[0]
             if not isinstance(macro_result, Exception)
-            else _abstain_macro()
+            else _abstain_agent_failure("macro", macro_exception)
         )
 
         if technical_exception is not None:
@@ -592,12 +589,12 @@ async def analyze_stock(
         )
         status = "success"
         if any(
-            r.abstain or r.degraded
-            for r in [
-                fundamental_report,
-                technical_report,
-                sentiment_report,
-                macro_report,
+            report_degrades_run(dim, report)
+            for dim, report in [
+                ("fundamental", fundamental_report),
+                ("technical", technical_report),
+                ("sentiment", sentiment_report),
+                ("macro", macro_report),
             ]
         ):
             status = "degraded"
@@ -820,6 +817,29 @@ def _abstain_macro(summary: str = "宏观数据不足或与个股相关性低，
     )
 
 
+def _abstain_agent_failure(role: str, error: BaseException) -> Report:
+    detail = "{}: {}".format(type(error).__name__, error).replace("\n", " ")
+    if len(detail) > 240:
+        detail = detail[:237] + "..."
+    score = 2 if role == "macro" else 3
+    extra: Dict[str, Any] = {}
+    if role == "macro":
+        extra["cycle_tag"] = "insufficient"
+        extra["relevance_to_stock"] = "unknown"
+    return Report(
+        role=role,  # type: ignore[arg-type]
+        score=score,
+        stance="abstain",
+        summary="本维分析失败，原因：{}。".format(detail),
+        citations=[],
+        risks=["本维未能完成评估", type(error).__name__],
+        degraded=True,
+        abstain=True,
+        missing_information=["agent_error"],
+        **extra,
+    )
+
+
 async def _immediate_macro_abstention() -> tuple[Report, str]:
     return _abstain_macro(), ""
 
@@ -829,7 +849,6 @@ async def _run_technical_agent(
     tech_fields: Dict[str, Any],
     run: RunRecord,
     database: SQLiteDatabase,
-    artifacts: FileArtifactStore,
     llm_adapter: LLMAdapter,
     model: str,
     thinking_enabled: bool,
@@ -852,7 +871,7 @@ async def _run_technical_agent(
     register_technical_tools(
         agent,
         TechnicalToolContext(
-            indicator=indicator, price=price, kline=kline, artifacts=artifacts
+            indicator=indicator, price=price, kline=kline
         ),
     )
     try:
@@ -875,7 +894,6 @@ async def _run_sentiment_agent(
     sent_fields: Dict[str, Any],
     run: RunRecord,
     database: SQLiteDatabase,
-    artifacts: FileArtifactStore,
     llm_adapter: LLMAdapter,
     model: str,
     thinking_enabled: bool,
@@ -896,9 +914,7 @@ async def _run_sentiment_agent(
     )
     register_sentiment_tools(
         agent,
-        SentimentToolContext(
-            events=events, holders=holders, artifacts=artifacts
-        ),
+        SentimentToolContext(events=events, holders=holders),
     )
     try:
         final = await agent.run(
@@ -920,7 +936,6 @@ async def _run_macro_agent(
     macro_fields: Dict[str, Any],
     run: RunRecord,
     database: SQLiteDatabase,
-    artifacts: FileArtifactStore,
     llm_adapter: LLMAdapter,
     model: str,
     thinking_enabled: bool,
@@ -943,7 +958,6 @@ async def _run_macro_agent(
             industry=macro_fields["industry"],
             stock_code=macro_fields["stock_code"],
             company_name=macro_fields["company_name"],
-            artifacts=artifacts,
         ),
     )
     try:

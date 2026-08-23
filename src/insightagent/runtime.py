@@ -34,7 +34,12 @@ from .resources import (
 )
 from .retry import ExponentialBackoff
 from .schema import to_strict_json_schema
-from .state import InMemoryStateStore, StateConflictError, StateStore
+from .state import (
+    InMemoryStateStore,
+    StateConflictError,
+    StateStore,
+    drop_immutable_patch_paths,
+)
 
 
 class MaxLoopRoundExceeded(RuntimeError):
@@ -59,8 +64,7 @@ SUBMIT_FINAL = "submit_final"
 class SubmitFinalOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    report: Optional[Report] = None
-    summary: Optional[str] = None
+    report: Report
 
 
 class ModelReflection(BaseModel):
@@ -111,8 +115,12 @@ def _submit_final_tool(*, strict: bool) -> Dict[str, Any]:
     function: Dict[str, Any] = {
         "name": SUBMIT_FINAL,
         "description": (
-            "Submit the finished analysis. The scheduler stamps state "
-            "versions and increments loop rounds; do not send those fields."
+            "Submit the finished analysis. output.report is required and "
+            "must include role, score, stance, and summary. "
+            "The scheduler stamps state versions and increments loop "
+            "rounds; do not send those fields. state_patch paths may only "
+            "start with private_memory, business_context, meta, or "
+            "checkpoint. Report fields such as stance do not go there."
         ),
         "parameters": schema,
     }
@@ -402,7 +410,7 @@ class AgentLocalScheduler:
 
         try:
             final = self._parse_final_payload(
-                final_calls[0].arguments, state
+                final_calls[0].arguments, state, require_report=True
             )
         except InvalidModelOutputError as error:
             for call in response.tool_calls:
@@ -555,7 +563,11 @@ class AgentLocalScheduler:
         return self._parse_final_payload(payload, state)
 
     def _parse_final_payload(
-        self, payload: Dict[str, Any], state: AgentState
+        self,
+        payload: Dict[str, Any],
+        state: AgentState,
+        *,
+        require_report: bool = False,
     ) -> AgentFinalResponse:
         claimed = None
         patch = payload.get("state_patch")
@@ -582,13 +594,18 @@ class AgentLocalScheduler:
                 },
                 remove={name: [] for name in submitted.state_patch.remove},
             )
-        except ValidationError:
+        except ValidationError as error:
+            if require_report:
+                raise InvalidModelOutputError(
+                    "submit_final.output.report is required and must "
+                    "include role, score, and stance"
+                ) from error
             try:
                 visible = ModelFinalResponse.model_validate(payload)
-            except ValidationError as error:
+            except ValidationError as fallback_error:
                 raise InvalidModelOutputError(
                     "Final response failed schema validation"
-                ) from error
+                ) from fallback_error
             output = visible.output
             reflection = visible.reflection
             status = visible.status
@@ -603,16 +620,24 @@ class AgentLocalScheduler:
                 },
             )
 
+        built = StatePatch(
+            base_version=state.version,
+            set=patch_body.set,
+            append=patch_body.append,
+            remove=patch_body.remove,
+        )
+        cleaned, dropped = drop_immutable_patch_paths(built)
+        if dropped:
+            self._trace(
+                "state_patch_paths_dropped",
+                {"paths": dropped},
+            )
+
         return AgentFinalResponse(
             status=status,
             output=output,
             reflection=reflection,
-            state_patch=StatePatch(
-                base_version=state.version,
-                set=patch_body.set,
-                append=patch_body.append,
-                remove=patch_body.remove,
-            ),
+            state_patch=cleaned,
         )
 
     @staticmethod

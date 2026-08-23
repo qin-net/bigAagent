@@ -237,7 +237,23 @@ async def test_scheduler_ignores_model_runtime_counters():
 async def test_submit_final_tool_stamps_version_and_completes():
     payload = {
         "status": "completed",
-        "output": {"summary": "done"},
+        "output": {
+            "report": {
+                "role": "fundamental",
+                "score": 3,
+                "stance": "hold",
+                "summary": "done",
+                "citations": [
+                    {
+                        "ref_id": "roe",
+                        "kind": "field",
+                        "id": "roe",
+                        "source": "lookup_financial",
+                    }
+                ],
+                "risks": ["sample"],
+            }
+        },
         "reflection": {
             "what_worked": ["tools"],
             "what_was_missing": [],
@@ -245,9 +261,14 @@ async def test_submit_final_tool_stamps_version_and_completes():
         },
         "state_patch": {
             "base_version": 1,
-            "set": {"private_memory.memory_summary": "from submit_final"},
-            "append": {},
-            "remove": {},
+            "set": [
+                {
+                    "path": "private_memory.memory_summary",
+                    "value": "from submit_final",
+                }
+            ],
+            "append": [],
+            "remove": [],
         },
     }
     fake = FakeLLMAdapter(
@@ -284,10 +305,80 @@ async def test_submit_final_tool_stamps_version_and_completes():
     )
     result = await agent.run("Analyze 000858", session_id="session-submit")
     state = await agent.state_store.get("session-submit")
-    assert result.output["summary"] == "done"
+    assert result.output["report"]["summary"] == "done"
     assert result.state_patch.base_version == 2
     assert state.status == TaskStatus.SUCCESS
     assert state.private_memory["memory_summary"] == "from submit_final"
+
+
+@pytest.mark.asyncio
+async def test_submit_final_drops_illegal_state_paths_and_keeps_report():
+    payload = {
+        "status": "abstained",
+        "output": {
+            "report": {
+                "role": "macro",
+                "score": 2,
+                "stance": "abstain",
+                "summary": "利率环境与白酒相关性低，本维弃权。",
+                "citations": [],
+                "risks": ["宏观相关性低"],
+                "degraded": True,
+                "abstain": True,
+                "cycle_tag": "rate_data_available",
+                "relevance_to_stock": "low",
+            }
+        },
+        "reflection": {},
+        "state_patch": {
+            "set": [
+                {"path": "macro.stance", "value": "abstain"},
+                {"path": "macro.relevance_to_stock", "value": "low"},
+                {"path": "private_memory.memory_summary", "value": "low relevance"},
+            ],
+            "append": [],
+            "remove": [],
+        },
+    }
+    fake = FakeLLMAdapter(
+        [
+            LLMResponse(
+                id="final",
+                model="deepseek-v4-flash",
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="submit-1",
+                        name="submit_final",
+                        arguments=json.dumps(payload),
+                    )
+                ],
+                finish_reason="tool_calls",
+            )
+        ]
+    )
+    tracer = LoopTracer()
+    agent = AgentInstance(
+        name="macro",
+        llm_adapter=fake,
+        config=RuntimeConfig(max_loop_round=4),
+        tracer=tracer,
+    )
+    result = await agent.run("Analyze 000858", session_id="session-macro-patch")
+    state = await agent.state_store.get("session-macro-patch")
+    assert result.output["report"]["stance"] == "abstain"
+    assert result.output["report"]["relevance_to_stock"] == "low"
+    assert state.status == TaskStatus.SUCCESS
+    assert state.private_memory["memory_summary"] == "low relevance"
+    assert "macro" not in state.private_memory
+    dropped = [
+        event["payload"]["paths"]
+        for event in tracer.events
+        if event["stage"] == "state_patch_paths_dropped"
+    ]
+    assert dropped
+    assert "macro.stance" in dropped[0]
+    assert "macro.relevance_to_stock" in dropped[0]
 
 
 @pytest.mark.parametrize(
@@ -389,3 +480,55 @@ async def test_invalid_final_json_retries_instead_of_failing():
     result = await agent.run("Analyze 000858", session_id="session-retry")
     assert result.output["summary"] == "recovered"
     assert "output_rejected" in tracer.stages()
+
+
+@pytest.mark.asyncio
+async def test_unknown_tool_name_is_returned_and_loop_continues():
+    valid = {
+        "status": "completed",
+        "output": {"summary": "recovered after unknown tool"},
+        "reflection": {},
+        "state_patch": {"set": {}, "append": {}, "remove": {}},
+    }
+    fake = FakeLLMAdapter(
+        [
+            LLMResponse(
+                id="bad-tool",
+                model="deepseek-v4-pro",
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call-1",
+                        name="search_methoduality",
+                        arguments='{"query":"cashflow"}',
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+            LLMResponse(
+                id="good",
+                model="deepseek-v4-pro",
+                content=json.dumps(valid),
+                finish_reason="stop",
+            ),
+        ]
+    )
+    tracer = LoopTracer()
+    agent = AgentInstance(
+        name="fundamental",
+        llm_adapter=fake,
+        config=RuntimeConfig(max_loop_round=4),
+        tracer=tracer,
+    )
+    _register_lookup(agent)
+    result = await agent.run("Analyze 000858", session_id="session-unknown-tool")
+    assert result.output["summary"] == "recovered after unknown tool"
+    tool_results = [
+        event["payload"]
+        for event in tracer.events
+        if event["stage"] == "tool_results"
+    ]
+    assert tool_results
+    failed = tool_results[0]["call-1"]
+    assert failed["status"] == "failed"
+    assert failed["error"]["type"] == "UnknownResourceError"

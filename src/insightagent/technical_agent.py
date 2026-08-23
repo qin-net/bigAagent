@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,7 +14,6 @@ from .data_contracts import (
     PriceSnapshot,
 )
 from .fundamentals import search_methodology
-from .persistence import FileArtifactStore
 from .resources import FunctionResource
 from .runtime import AgentInstance, RuntimeConfig
 from .technicals import apply_technical_rules
@@ -31,6 +30,8 @@ Call get_indicator_snapshot first. If computed_flags contains
 insufficient_bars or ma20 is null, set abstain=true and stance=abstain.
 Key levels must reference only K-line observed highs/lows or MA values.
 Numbers must be copied exactly from tool outputs.
+Do not invent tools. Empty methodology results are normal; submit from
+the snapshot tools.
 
 Final answer via submit_final:
 - output.report must match the Report schema below
@@ -64,37 +65,11 @@ class SearchOutput(BaseModel):
     entries: List[Dict[str, str]]
 
 
-class ArtifactArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ref: str = Field(min_length=1)
-
-
-class ArtifactOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ref: str
-    content: str
-
-
-class SearchArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    query: str = Field(min_length=1)
-
-
-class SearchOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    entries: List[Dict[str, str]]
-
-
 @dataclass
 class TechnicalToolContext:
     indicator: IndicatorSnapshot
     price: PriceSnapshot
     kline: KlineSnapshot
-    artifacts: FileArtifactStore
 
 
 def technical_runtime_config(
@@ -137,11 +112,7 @@ def register_technical_tools(
         return context.kline.model_dump(mode="json")
 
     def search(query: str) -> Dict[str, Any]:
-        return {"entries": search_methodology(query)}
-
-    async def get_artifact(ref: str) -> Dict[str, Any]:
-        content = await context.artifacts.get(ref)
-        return {"ref": ref, "content": content}
+        return {"entries": search_methodology(query, scope="technical")}
 
     agent.register_tool(
         FunctionResource(
@@ -176,20 +147,11 @@ def register_technical_tools(
             name="search_methodology",
             description=(
                 "Search approved technical methodology snippets. "
-                "Use when flags need interpretation."
+                "Empty results are normal; finish from snapshot tools."
             ),
             input_model=SearchArgs,
             output_model=SearchOutput,
             resource_type=ResourceType.KNOWLEDGE_BASE,
-        )
-    )
-    agent.register_tool(
-        FunctionResource(
-            func=get_artifact,
-            name="get_artifact",
-            description="Load the original artifact by ref.",
-            input_model=ArtifactArgs,
-            output_model=ArtifactOutput,
         )
     )
 

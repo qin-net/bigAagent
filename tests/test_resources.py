@@ -98,3 +98,54 @@ async def test_call_dependency_cycle_is_rejected():
                 ),
             ]
         )
+
+
+@pytest.mark.asyncio
+async def test_unknown_resource_returns_failed_result():
+    registry = ResourceRegistry()
+    orchestrator = CallOrchestrator(registry)
+    results = await orchestrator.dispatch_calls(
+        [
+            ResourceCall(
+                call_id="a",
+                resource_name="search_methoduality",
+                arguments={"query": "x"},
+            )
+        ]
+    )
+    assert results["a"].status == "failed"
+    assert results["a"].error["type"] == "UnknownResourceError"
+    assert "search_methoduality" in results["a"].error["message"]
+
+
+@pytest.mark.asyncio
+async def test_invalid_artifact_ref_returns_failed_result():
+    from insightagent.artifact_access import ArtifactArgs, ArtifactOutput
+
+    async def get_artifact(ref: str):
+        return {"ref": ref, "content": "secret"}
+
+    registry = ResourceRegistry()
+    registry.register(
+        FunctionResource(
+            func=get_artifact,
+            name="get_artifact",
+            description="Load artifact",
+            input_model=ArtifactArgs,
+            output_model=ArtifactOutput,
+        )
+    )
+    orchestrator = CallOrchestrator(registry)
+    results = await orchestrator.dispatch_calls(
+        [
+            ResourceCall(
+                call_id="a",
+                resource_name="get_artifact",
+                arguments={"ref": "000858-8b2582a854b6"},
+            )
+        ]
+    )
+    assert results["a"].status == "failed"
+    assert results["a"].error["type"] == "ValidationError"
+    assert results["a"].data is None
+

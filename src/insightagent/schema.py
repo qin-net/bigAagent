@@ -25,6 +25,7 @@ STRIP_KEYS = {
     "prefixItems",
     "unevaluatedProperties",
     "default",
+    "pattern",
 }
 
 
