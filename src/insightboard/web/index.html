@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InsightBoard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <header><div><p class="eyebrow">INSIGHTBOARD / B0</p><h1>A 股延迟行情看板</h1></div><p id="status">正在读取数据状态...</p></header>
+    <section class="controls"><input id="search" placeholder="搜索股票代码或名称"><button id="refresh">查询</button></section>
+    <p class="notice">延迟行情，仅供研究辅助，不构成投资建议。</p>
+    <section class="table-wrap"><table><thead><tr><th>代码</th><th>名称</th><th>市场</th><th>最新价</th><th>涨跌幅</th><th>成交额</th></tr></thead><tbody id="quotes"></tbody></table></section>
+    <footer><button id="previous">上一页</button><span id="page">第 1 页</span><button id="next">下一页</button></footer>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

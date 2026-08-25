@@ -24,6 +24,12 @@ akshare = [
 docs = [
   "pymupdf",
 ]
+board = [
+  "akshare",
+  "fastapi",
+  "uvicorn",
+  "apscheduler",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -33,6 +39,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 insightagent = ["fixtures/*.json"]
+insightboard = ["web/*.html", "web/*.js", "web/*.css"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
