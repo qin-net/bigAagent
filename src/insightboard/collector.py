@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Protocol
 
-from .contracts import CollectionResult, QuoteInput
+from .contracts import CollectionResult, DailyBar, NoticeHeadline, QuoteInput
 from .store import BoardStore
 
 
@@ -81,6 +81,35 @@ class AkshareQuoteCollector:
             turnover=_number(values[12]),
         )
 
+    def collect_deep(self, stock_code: str) -> tuple[list[DailyBar], list[NoticeHeadline]]:
+        import akshare as ak
+        bars: list[DailyBar] = []
+        hist_error = None
+        for function_name, kwargs in (
+            ("stock_zh_a_hist_tx", {"symbol": _exchange_symbol(stock_code)}),
+            ("stock_zh_a_hist", {"symbol": stock_code, "period": "daily", "adjust": "qfq"}),
+        ):
+            try:
+                table = getattr(ak, function_name)(**kwargs)
+                for row in table.to_dict(orient="records")[-250:]:
+                    bars.append(DailyBar(stock_code, str(row.get("日期") or row.get("date")), _number(row.get("开盘") or row.get("open")), _number(row.get("最高") or row.get("high")), _number(row.get("最低") or row.get("low")), _number(row.get("收盘") or row.get("close")), _number(row.get("成交量") or row.get("volume")), _number(row.get("成交额") or row.get("amount"))))
+                if bars:
+                    break
+            except Exception as error:
+                hist_error = error
+        if not bars:
+            raise RuntimeError("All daily bar sources failed: {}".format(hist_error))
+        notices: list[NoticeHeadline] = []
+        try:
+            notice_table = ak.stock_individual_notice_report(security=stock_code)
+            for row in notice_table.to_dict(orient="records")[:30]:
+                title = str(row.get("公告标题") or row.get("标题") or row.get("title") or "").strip()
+                if title:
+                    notices.append(NoticeHeadline(stock_code, title, str(row.get("公告日期") or row.get("日期") or row.get("published_at") or "") or None, str(row.get("网址") or row.get("url") or "") or None, "akshare.stock_individual_notice_report"))
+        except Exception:
+            pass
+        return bars, notices
+
 
 def _number(value: Any) -> float | None:
     if value is None:
@@ -102,6 +131,14 @@ def _market_for(code: str) -> str:
     if code.startswith(("4", "8", "9")):
         return "bj"
     return "sz"
+
+
+def _exchange_symbol(code: str) -> str:
+    if code.startswith("6"):
+        return "sh" + code
+    if code.startswith(("4", "8", "9")):
+        return "bj" + code
+    return "sz" + code
 
 
 async def collect_once(store: BoardStore, collector: QuoteCollector) -> str:

@@ -80,8 +80,24 @@ def _run_worker(store: BoardStore) -> int:
         except Exception as error:
             print("quote collection failed: {}: {}".format(type(error).__name__, error))
 
+    def deep_job() -> None:
+        item = store.claim_deep()
+        if not item:
+            return
+        code = item["stock_code"]
+        try:
+            collector = AkshareQuoteCollector()
+            bars, notices = collector.collect_deep(code)
+            if not bars:
+                raise RuntimeError("No daily bars returned")
+            store.save_deep(bars, notices, source="akshare")
+            store.finish_deep(code)
+        except Exception as error:
+            store.finish_deep(code, error="{}: {}".format(type(error).__name__, error))
+
     scheduler = BlockingScheduler(timezone=timezone)
     scheduler.add_job(job, "cron", minute="0,30", max_instances=1, coalesce=True)
+    scheduler.add_job(deep_job, "interval", minutes=1, max_instances=1, coalesce=True)
     job()
     try:
         scheduler.start()

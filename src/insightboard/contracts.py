@@ -25,3 +25,24 @@ class QuoteInput:
 class CollectionResult:
     source: str
     quotes: list[QuoteInput]
+
+
+@dataclass(frozen=True)
+class DailyBar:
+    stock_code: str
+    trade_date: str
+    open: Optional[float]
+    high: Optional[float]
+    low: Optional[float]
+    close: Optional[float]
+    volume: Optional[float]
+    turnover: Optional[float]
+
+
+@dataclass(frozen=True)
+class NoticeHeadline:
+    stock_code: str
+    title: str
+    published_at: Optional[str]
+    url: Optional[str]
+    source: str

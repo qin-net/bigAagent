@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from insightboard.api import create_app
 from insightboard.collector import AkshareQuoteCollector, collect_once
-from insightboard.contracts import CollectionResult, QuoteInput
+from insightboard.contracts import CollectionResult, DailyBar, NoticeHeadline, QuoteInput
 from insightboard.store import BoardStore
 from insightboard import __main__ as board_main
 
@@ -135,3 +135,40 @@ def test_sina_mapping_uses_column_order_when_labels_are_mojibake():
     assert item is not None
     assert item.stock_code == "600000"
     assert item.price == 10.0
+
+
+def test_deep_queue_bars_notices_and_watchlist(tmp_path):
+    store = BoardStore(str(tmp_path / "board.db"))
+    store.initialize()
+    store.replace_quotes([quote("000001", name="平安银行")], source="fixture")
+
+    queue = store.enqueue_deep("000001", reason="detail", priority=5)
+    assert queue["status"] == "pending"
+    claimed = store.claim_deep()
+    assert claimed["stock_code"] == "000001"
+    store.save_deep(
+        [DailyBar("000001", "2026-08-24", 10, 11, 9, 10.5, 100, 1000)],
+        [NoticeHeadline("000001", "年度报告", "2026-08-24", "https://example.invalid", "fixture")],
+        source="fixture",
+    )
+    store.finish_deep("000001")
+    assert store.bars("000001")[0]["close"] == 10.5
+    assert store.notices("000001")[0]["title"] == "年度报告"
+    store.add_watch("000001")
+    assert store.watchlist()[0]["name"] == "平安银行"
+    store.remove_watch("000001")
+    assert store.watchlist() == []
+
+
+def test_b1_api_enqueues_and_reads_local_data(tmp_path):
+    db_path = str(tmp_path / "board.db")
+    store = BoardStore(db_path)
+    store.initialize()
+    store.replace_quotes([quote("000001")], source="fixture")
+    client = TestClient(create_app(db_path))
+
+    assert client.post("/api/v1/stocks/000001/refresh-request").json()["queue"]["status"] == "pending"
+    assert client.put("/api/v1/watchlist/000001").status_code == 200
+    assert client.get("/api/v1/watchlist").json()["items"][0]["stock_code"] == "000001"
+    assert client.get("/api/v1/bars/000001").json()["items"] == []
+    assert client.get("/api/v1/notices/000001").json()["items"] == []

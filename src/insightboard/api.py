@@ -43,6 +43,32 @@ def create_app(db_path: str = "data/board.db") -> FastAPI:
                 return {"batch_id": page["batch_id"], "as_of": page["as_of"], "item": item}
         raise HTTPException(status_code=404, detail="Stock not found in current batch")
 
+    @app.get("/api/v1/bars/{stock_code}")
+    def bars(stock_code: str, limit: int = Query(120, ge=1, le=250)) -> dict:
+        return {"stock_code": stock_code, "items": store.bars(stock_code, limit)}
+
+    @app.get("/api/v1/notices/{stock_code}")
+    def notices(stock_code: str, limit: int = Query(30, ge=1, le=30)) -> dict:
+        return {"stock_code": stock_code, "items": store.notices(stock_code, limit)}
+
+    @app.post("/api/v1/stocks/{stock_code}/refresh-request")
+    def refresh_request(stock_code: str) -> dict:
+        return {"stock_code": stock_code, "queue": store.enqueue_deep(stock_code, reason="detail", priority=5)}
+
+    @app.get("/api/v1/watchlist")
+    def watchlist() -> dict:
+        return {"items": store.watchlist()}
+
+    @app.put("/api/v1/watchlist/{stock_code}")
+    def add_watch(stock_code: str) -> dict:
+        store.add_watch(stock_code)
+        return {"stock_code": stock_code, "watchlisted": True}
+
+    @app.delete("/api/v1/watchlist/{stock_code}")
+    def remove_watch(stock_code: str) -> dict:
+        store.remove_watch(stock_code)
+        return {"stock_code": stock_code, "watchlisted": False}
+
     return app
 
 

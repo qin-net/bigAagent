@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator, Optional, Sequence
 
-from .contracts import QuoteInput
+from .contracts import DailyBar, NoticeHeadline, QuoteInput
 
 STALE_AFTER = timedelta(minutes=45)
 
@@ -87,6 +87,40 @@ class BoardStore:
                     row_count INTEGER NOT NULL DEFAULT 0,
                     error TEXT,
                     source TEXT
+                );
+                CREATE TABLE IF NOT EXISTS bar_daily (
+                    stock_code TEXT NOT NULL,
+                    trade_date TEXT NOT NULL,
+                    open REAL, high REAL, low REAL, close REAL,
+                    volume REAL, turnover REAL,
+                    source TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (stock_code, trade_date)
+                );
+                CREATE TABLE IF NOT EXISTS notice_headline (
+                    stock_code TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    published_at TEXT,
+                    url TEXT,
+                    source TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (stock_code, title, published_at)
+                );
+                CREATE TABLE IF NOT EXISTS watchlist (
+                    user_id TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, stock_code)
+                );
+                CREATE TABLE IF NOT EXISTS deep_fetch_queue (
+                    stock_code TEXT PRIMARY KEY,
+                    priority INTEGER NOT NULL DEFAULT 10,
+                    reason TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    available_at TEXT NOT NULL,
+                    last_error TEXT,
+                    updated_at TEXT NOT NULL
                 );
                 """
             )
@@ -209,3 +243,60 @@ class BoardStore:
             return connection.execute(
                 "SELECT batch_id, as_of, row_count, source FROM quote_batch WHERE batch_id=(SELECT value FROM board_meta WHERE key='current_quote_batch_id') AND status='succeeded'"
             ).fetchone()
+
+    def enqueue_deep(self, stock_code: str, *, reason: str = "detail", priority: int = 10) -> dict:
+        now = utc_now()
+        with self._connection() as connection:
+            connection.execute(
+                "INSERT INTO deep_fetch_queue(stock_code, priority, reason, available_at, updated_at) VALUES(?, ?, ?, ?, ?) "
+                "ON CONFLICT(stock_code) DO UPDATE SET priority=MIN(priority, excluded.priority), reason=excluded.reason, status=CASE WHEN status='done' THEN 'pending' ELSE status END, available_at=excluded.available_at, updated_at=excluded.updated_at",
+                (stock_code, priority, reason, now, now),
+            )
+            row = connection.execute("SELECT stock_code, priority, reason, status, attempts, last_error FROM deep_fetch_queue WHERE stock_code=?", (stock_code,)).fetchone()
+        return dict(row)
+
+    def claim_deep(self) -> Optional[dict]:
+        now = utc_now()
+        with self._connection() as connection:
+            row = connection.execute("SELECT * FROM deep_fetch_queue WHERE status IN ('pending','retry') AND available_at<=? ORDER BY priority ASC, updated_at ASC LIMIT 1", (now,)).fetchone()
+            if not row:
+                return None
+            connection.execute("UPDATE deep_fetch_queue SET status='running', attempts=attempts+1, updated_at=? WHERE stock_code=?", (now, row["stock_code"]))
+            return dict(row)
+
+    def finish_deep(self, stock_code: str, *, error: Optional[str] = None) -> None:
+        now = utc_now()
+        with self._connection() as connection:
+            if error:
+                connection.execute("UPDATE deep_fetch_queue SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'retry' END, available_at=?, last_error=?, updated_at=? WHERE stock_code=?", (now, error[:1000], now, stock_code))
+            else:
+                connection.execute("UPDATE deep_fetch_queue SET status='done', last_error=NULL, updated_at=? WHERE stock_code=?", (now, stock_code))
+
+    def save_deep(self, bars: Sequence[DailyBar], notices: Sequence[NoticeHeadline], *, source: str) -> None:
+        now = utc_now()
+        with self._connection() as connection:
+            connection.executemany("INSERT OR REPLACE INTO bar_daily(stock_code, trade_date, open, high, low, close, volume, turnover, source, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [(b.stock_code, b.trade_date, b.open, b.high, b.low, b.close, b.volume, b.turnover, source, now) for b in bars[-250:]])
+            connection.executemany("INSERT OR REPLACE INTO notice_headline(stock_code, title, published_at, url, source, updated_at) VALUES(?, ?, ?, ?, ?, ?)", [(n.stock_code, n.title, n.published_at, n.url, n.source, now) for n in notices[:30]])
+
+    def bars(self, stock_code: str, limit: int = 120) -> list[dict]:
+        with self._connection() as connection:
+            rows = connection.execute("SELECT trade_date, open, high, low, close, volume, turnover, source, updated_at FROM bar_daily WHERE stock_code=? ORDER BY trade_date DESC LIMIT ?", (stock_code, min(max(limit, 1), 250))).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+    def notices(self, stock_code: str, limit: int = 30) -> list[dict]:
+        with self._connection() as connection:
+            rows = connection.execute("SELECT title, published_at, url, source, updated_at FROM notice_headline WHERE stock_code=? ORDER BY published_at DESC LIMIT ?", (stock_code, min(max(limit, 1), 30))).fetchall()
+        return [dict(row) for row in rows]
+
+    def watchlist(self) -> list[dict]:
+        with self._connection() as connection:
+            rows = connection.execute("SELECT w.stock_code, q.name, q.price, q.change_pct FROM watchlist w LEFT JOIN quote_snapshot q ON q.batch_id=(SELECT value FROM board_meta WHERE key='current_quote_batch_id') AND q.stock_code=w.stock_code WHERE w.user_id='local' ORDER BY w.created_at DESC").fetchall()
+        return [dict(row) for row in rows]
+
+    def add_watch(self, stock_code: str) -> None:
+        with self._connection() as connection:
+            connection.execute("INSERT OR IGNORE INTO watchlist(user_id, stock_code, created_at) VALUES('local', ?, ?)", (stock_code, utc_now()))
+
+    def remove_watch(self, stock_code: str) -> None:
+        with self._connection() as connection:
+            connection.execute("DELETE FROM watchlist WHERE user_id='local' AND stock_code=?", (stock_code,))
