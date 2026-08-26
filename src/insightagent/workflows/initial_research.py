@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
@@ -74,13 +74,18 @@ from ..sentiment_agent import (
     register_sentiment_tools,
     sentiment_runtime_config,
 )
-from ..user_contracts import NONE
+from ..user_contracts import NONE, UserIntent, Moment
 from ..user_intent import (
     build_expert_user_query,
     build_intent,
     build_utterance,
+    compute_rerun_dims,
     extract_slots,
+    format_intent_echo,
+    is_decision_only_rerun,
+    merge_parsed_with_slots,
     parse_tags,
+    should_schedule_rerun,
 )
 from ..user_store import UserStore
 from ..technical_agent import (
@@ -93,6 +98,21 @@ from ..technicals import apply_computed_technical_semantics, apply_technical_rul
 
 STOCK_CODE_RE = re.compile(r"^\d{6}$")
 UnboundPolicy = Literal["fail", "abstain"]
+
+
+class FeedbackError(ValueError):
+    pass
+
+
+@dataclass
+class FeedbackResult:
+    skipped: bool = False
+    noop: bool = False
+    parent_run_id: Optional[str] = None
+    intent: Optional[UserIntent] = None
+    show_intent_echo: bool = False
+    outcome: Optional[AnalysisOutcome] = None
+    error: Optional[str] = None
 
 
 class InvalidStockCodeError(ValueError):
@@ -109,9 +129,15 @@ class AnalysisOutcome:
     macro_report: Optional[Report] = None
     decision: Optional[Decision] = None
     error: Optional[str] = None
+    intent: Optional[UserIntent] = None
+    show_intent_echo: bool = False
+    parent_run_id: Optional[str] = None
+    rerun_dimensions: List[str] = field(default_factory=list)
+    copied_dimensions: List[str] = field(default_factory=list)
+    parent_decision: Optional[Decision] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "run": self.run.model_dump(mode="json"),
             "snapshot": self.snapshot.model_dump(mode="json"),
             "report": (
@@ -138,7 +164,26 @@ class AnalysisOutcome:
                 else None
             ),
             "error": self.error,
+            "intent": (
+                self.intent.model_dump(mode="json") if self.intent else None
+            ),
         }
+        if self.parent_run_id:
+            payload["parent_run_id"] = self.parent_run_id
+            payload["rerun_dimensions"] = list(self.rerun_dimensions)
+            payload["copied_dimensions"] = list(self.copied_dimensions)
+            payload["parent_decision"] = (
+                {
+                    "rating": self.parent_decision.rating,
+                    "confidence": self.parent_decision.confidence,
+                    "value_score": self.parent_decision.value_score,
+                    "timing_score": self.parent_decision.timing_score,
+                    "advice_one_liner": self.parent_decision.advice_one_liner,
+                }
+                if self.parent_decision
+                else None
+            )
+        return payload
 
 
 def normalize_stock_code(raw: str) -> str:
@@ -232,7 +277,7 @@ async def analyze_stock(
         {"stock_code": code, "fixture": fixture},
         run_id=run.run_id,
     )
-    intent = await _prepare_intent(
+    intent, show_intent_echo = await _prepare_intent(
         user_prompt=user_prompt,
         user_id=user_id,
         run=run,
@@ -364,6 +409,8 @@ async def analyze_stock(
                 macro_report,
                 decision,
                 status="degraded",
+                intent=intent,
+                show_intent_echo=show_intent_echo,
             )
 
         fundamental_future = _run_fundamental_agent(
@@ -608,10 +655,12 @@ async def analyze_stock(
             snapshot,
             fundamental_report,
             technical_report,
-                sentiment_report,
-                macro_report,
+            sentiment_report,
+            macro_report,
             decision,
             status=status,
+            intent=intent,
+            show_intent_echo=show_intent_echo,
         )
     except Exception as error:
         run.status = "failed"
@@ -644,23 +693,522 @@ async def analyze_stock(
             macro_report=None,
             decision=None,
             error="{}: {}".format(type(error).__name__, error),
+            intent=intent,
+            show_intent_echo=show_intent_echo,
         )
 
 
-async def _prepare_intent(
+async def feedback_on_run(
+    parent_run_id: str,
     *,
-    user_prompt: str,
+    database: SQLiteDatabase,
+    llm_adapter: LLMAdapter,
+    artifact_root: str,
+    user_prompt: str = NONE,
+    model: str = "deepseek-v4-flash",
+    thinking_enabled: bool = True,
+    unbound_policy: UnboundPolicy = "fail",
+    user_id: str = "local",
+    extract_llm_adapter: Optional[LLMAdapter] = None,
+    technical_llm_adapter: Optional[LLMAdapter] = None,
+    sentiment_llm_adapter: Optional[LLMAdapter] = None,
+    macro_llm_adapter: Optional[LLMAdapter] = None,
+) -> FeedbackResult:
+    prompt = (user_prompt or "").strip() or NONE
+    if prompt == NONE:
+        return FeedbackResult(skipped=True, parent_run_id=parent_run_id)
+
+    artifacts = FileArtifactStore(database, artifact_root)
+    store = ResearchStore(database)
+    audit = SQLiteAuditLog(database)
+    user_store = UserStore(database)
+    extract_llm = extract_llm_adapter or llm_adapter
+
+    bundle = await store.get_run(parent_run_id)
+    if bundle is None:
+        raise FeedbackError("parent run not found: {}".format(parent_run_id))
+    if bundle["status"] not in {"success", "degraded"}:
+        raise FeedbackError(
+            "parent run is not successful: {}".format(bundle["status"])
+        )
+    parent_run = RunRecord.model_validate(bundle["run"])
+    parent_decision = (
+        Decision.model_validate(bundle["decisions"][0])
+        if bundle["decisions"]
+        else None
+    )
+    parent_reports = _reports_from_bundle(bundle)
+
+    parsed = parse_tags(prompt)
+    slots, audit_type = await extract_slots(extract_llm, parsed.body, model)
+    parsed = merge_parsed_with_slots(parsed, slots)
+    preview = build_intent(
+        utterance_id=str(uuid4()), parsed=parsed, slots=slots
+    )
+    schedule = should_schedule_rerun(preview)
+    rerun_dims = compute_rerun_dims(preview) if schedule else []
+    decision_only = schedule and is_decision_only_rerun(preview)
+
+    target_run = parent_run
+    if schedule:
+        target_run = RunRecord(
+            run_id=str(uuid4()),
+            stock_code=parent_run.stock_code,
+            thesis_id=parent_run.thesis_id,
+            status="running",
+            snapshot_refs=dict(parent_run.snapshot_refs),
+            session_ids={},
+            parent_run_id=parent_run.run_id,
+        )
+        await store.save_run(target_run)
+        await audit.append(
+            "run_started",
+            {
+                "stock_code": target_run.stock_code,
+                "parent_run_id": parent_run.run_id,
+                "feedback": True,
+            },
+            run_id=target_run.run_id,
+        )
+
+    intent, show_echo = await _commit_intent(
+        parsed=parsed,
+        slots=slots,
+        audit_type=audit_type,
+        user_id=user_id,
+        run=target_run,
+        code=parent_run.stock_code,
+        user_store=user_store,
+        audit=audit,
+        moment="post_decision",
+    )
+
+    if not schedule:
+        if parsed.effect in {"rerun", "remember_rerun"}:
+            await audit.append(
+                "rerun_noop",
+                {"effect": intent.effect, "tags": intent.tags},
+                run_id=parent_run.run_id,
+            )
+            return FeedbackResult(
+                noop=True,
+                parent_run_id=parent_run.run_id,
+                intent=intent,
+                show_intent_echo=show_echo,
+            )
+        return FeedbackResult(
+            parent_run_id=parent_run.run_id,
+            intent=intent,
+            show_intent_echo=show_echo,
+        )
+
+    reports = dict(parent_reports)
+    copied = [
+        dim
+        for dim in ("fundamental", "technical", "sentiment", "macro")
+        if dim not in rerun_dims
+    ]
+    snapshot = None
+    tech_fields = None
+    sent_fields = None
+    macro_fields = None
+    try:
+        snapshot, tech_fields, sent_fields, macro_fields = await _load_frozen_snapshots(
+            artifacts, parent_run
+        )
+        prefs = {}
+        for dim in ("fundamental", "technical", "sentiment", "macro", "decision"):
+            prefs[dim] = await user_store.active_preferences(
+                user_id=user_id,
+                scope=dim,
+                stock_code=parent_run.stock_code,
+            )
+        if "fundamental" in rerun_dims:
+            if snapshot is None:
+                reports["fundamental"] = _abstain_for_missing(
+                    FundamentalSnapshot(stock_code=parent_run.stock_code)
+                )
+                await audit.append(
+                    "agent_failed",
+                    {"agent": "fundamental", "message": "missing snapshot"},
+                    run_id=target_run.run_id,
+                )
+            else:
+                report, _ = await _run_fundamental_agent(
+                    snapshot=snapshot,
+                    run=target_run,
+                    database=database,
+                    artifacts=artifacts,
+                    llm_adapter=llm_adapter,
+                    model=model,
+                    thinking_enabled=thinking_enabled,
+                    user_query=_feedback_query(
+                        target_run, snapshot, intent, prefs["fundamental"], "fundamental"
+                    ),
+                )
+                try:
+                    bind_report_evidence(report, snapshot)
+                except EvidenceBindingError as error:
+                    if unbound_policy == "abstain":
+                        report = _abstain_for_unbound(snapshot, error)
+                    else:
+                        raise
+                reports["fundamental"] = report
+                await audit.append(
+                    "agent_completed",
+                    {
+                        "status": (
+                            "completed" if not report.abstain else "abstained"
+                        ),
+                        "stance": report.stance,
+                        "score": report.score,
+                    },
+                    run_id=target_run.run_id,
+                    session_id=target_run.session_ids.get("fundamental"),
+                )
+        if "technical" in rerun_dims:
+            reports["technical"] = await _rerun_or_abstain_technical(
+                tech_fields,
+                target_run,
+                database,
+                technical_llm_adapter or llm_adapter,
+                model,
+                thinking_enabled,
+                _feedback_query(
+                    target_run, snapshot, intent, prefs["technical"], "technical"
+                ),
+                audit,
+            )
+        if "sentiment" in rerun_dims:
+            reports["sentiment"] = await _rerun_or_abstain_sentiment(
+                sent_fields,
+                target_run,
+                database,
+                sentiment_llm_adapter or llm_adapter,
+                model,
+                thinking_enabled,
+                _feedback_query(
+                    target_run, snapshot, intent, prefs["sentiment"], "sentiment"
+                ),
+                audit,
+            )
+        if "macro" in rerun_dims:
+            reports["macro"] = await _rerun_or_abstain_macro(
+                macro_fields,
+                target_run,
+                database,
+                macro_llm_adapter or llm_adapter,
+                model,
+                thinking_enabled,
+                _feedback_query(
+                    target_run, snapshot, intent, prefs["macro"], "macro"
+                ),
+                audit,
+                unbound_policy,
+            )
+
+        for dim in copied:
+            if dim in reports:
+                await audit.append(
+                    "report_copied",
+                    {"role": dim, "from_run_id": parent_run.run_id},
+                    run_id=target_run.run_id,
+                )
+
+        fund = reports.get("fundamental") or _abstain_for_missing(
+            snapshot or FundamentalSnapshot(stock_code=parent_run.stock_code)
+        )
+        tech = reports.get("technical") or _abstain_technical()
+        sent = reports.get("sentiment") or _abstain_sentiment()
+        macro = reports.get("macro") or _abstain_macro()
+        if snapshot is None:
+            snapshot = FundamentalSnapshot(stock_code=parent_run.stock_code)
+
+        decision = build_multi_factor_decision(
+            fund,
+            tech,
+            sent,
+            macro,
+            snapshot,
+            user_constraint=_decision_constraint(intent, prefs["decision"]),
+        )
+        rerun_label = "、".join(rerun_dims) if rerun_dims else "decision"
+        decision = decision.model_copy(
+            update={
+                "rationale": "基于 run {} 的反馈重跑：{}。{}".format(
+                    parent_run.run_id, rerun_label, decision.rationale
+                )
+            }
+        )
+        status = "success"
+        if any(
+            report_degrades_run(dim, report)
+            for dim, report in [
+                ("fundamental", fund),
+                ("technical", tech),
+                ("sentiment", sent),
+                ("macro", macro),
+            ]
+        ):
+            status = "degraded"
+        outcome = await _complete(
+            store,
+            audit,
+            target_run,
+            snapshot,
+            fund,
+            tech,
+            sent,
+            macro,
+            decision,
+            status=status,
+            intent=intent,
+            show_intent_echo=show_echo,
+        )
+        outcome.parent_run_id = parent_run.run_id
+        outcome.rerun_dimensions = list(rerun_dims)
+        outcome.copied_dimensions = list(copied)
+        outcome.parent_decision = parent_decision
+        return FeedbackResult(
+            parent_run_id=parent_run.run_id,
+            intent=intent,
+            show_intent_echo=show_echo,
+            outcome=outcome,
+        )
+    except Exception as error:
+        target_run.status = "failed"
+        target_run.updated_at = utc_now()
+        await store.save_run(target_run)
+        await audit.append(
+            "run_failed",
+            {"type": type(error).__name__, "message": str(error)},
+            run_id=target_run.run_id,
+        )
+        return FeedbackResult(
+            parent_run_id=parent_run.run_id,
+            intent=intent,
+            show_intent_echo=show_echo,
+            error="{}: {}".format(type(error).__name__, error),
+            outcome=AnalysisOutcome(
+                run=target_run,
+                snapshot=snapshot
+                if snapshot is not None
+                else FundamentalSnapshot(stock_code=parent_run.stock_code),
+                report=parent_reports.get("fundamental"),
+                technical_report=parent_reports.get("technical"),
+                sentiment_report=parent_reports.get("sentiment"),
+                macro_report=parent_reports.get("macro"),
+                decision=None,
+                error="{}: {}".format(type(error).__name__, error),
+                intent=intent,
+                show_intent_echo=show_echo,
+                parent_run_id=parent_run.run_id,
+            ),
+        )
+
+
+def _reports_from_bundle(bundle: Dict[str, Any]) -> Dict[str, Report]:
+    reports: Dict[str, Report] = {}
+    for payload in bundle.get("reports") or []:
+        report = Report.model_validate(payload)
+        reports[report.role] = report
+    return reports
+
+
+def _feedback_query(run, snapshot, intent, prefs, dim: str) -> str:
+    as_of = snapshot.as_of.isoformat() if snapshot is not None else utc_now().isoformat()
+    return build_expert_user_query(
+        run_id=run.run_id,
+        stock_code=run.stock_code,
+        as_of=as_of,
+        dim=dim,
+        intent=intent,
+        preference_statements=[item.statement for item in prefs],
+    )
+
+
+async def _load_frozen_snapshots(
+    artifacts: FileArtifactStore, parent: RunRecord
+):
+    refs = parent.snapshot_refs or {}
+
+    async def _load(key: str):
+        ref = refs.get(key)
+        if not ref:
+            return None
+        return json.loads(await artifacts.get(ref))
+
+    fund_payload = await _load("fundamental")
+    snapshot = None
+    if fund_payload:
+        snapshot = apply_fundamental_rules(
+            FundamentalSnapshot.model_validate(fund_payload)
+        )
+    return (
+        snapshot,
+        await _load("technical"),
+        await _load("sentiment"),
+        await _load("macro"),
+    )
+
+
+async def _rerun_or_abstain_technical(
+    tech_fields, run, database, llm, model, thinking, query, audit
+) -> Report:
+    if not tech_fields:
+        report = _abstain_technical()
+        await audit.append(
+            "agent_failed",
+            {"agent": "technical", "message": "missing snapshot"},
+            run_id=run.run_id,
+        )
+        return report
+    try:
+        report, _ = await _run_technical_agent(
+            tech_fields=tech_fields,
+            run=run,
+            database=database,
+            llm_adapter=llm,
+            model=model,
+            thinking_enabled=thinking,
+            user_query=query,
+        )
+        await audit.append(
+            "agent_completed",
+            {
+                "status": "completed" if not report.abstain else "abstained",
+                "stance": report.stance,
+                "score": report.score,
+            },
+            run_id=run.run_id,
+            session_id=run.session_ids.get("technical"),
+        )
+        return report
+    except Exception as error:
+        await audit.append(
+            "agent_failed",
+            {
+                "agent": "technical",
+                "error_type": type(error).__name__,
+                "message": str(error),
+            },
+            run_id=run.run_id,
+        )
+        return _abstain_agent_failure("technical", error)
+
+
+async def _rerun_or_abstain_sentiment(
+    sent_fields, run, database, llm, model, thinking, query, audit
+) -> Report:
+    if not sent_fields:
+        report = _abstain_sentiment()
+        await audit.append(
+            "agent_failed",
+            {"agent": "sentiment", "message": "missing snapshot"},
+            run_id=run.run_id,
+        )
+        return report
+    try:
+        report, _ = await _run_sentiment_agent(
+            sent_fields=sent_fields,
+            run=run,
+            database=database,
+            llm_adapter=llm,
+            model=model,
+            thinking_enabled=thinking,
+            user_query=query,
+        )
+        await audit.append(
+            "agent_completed",
+            {
+                "status": "completed" if not report.abstain else "abstained",
+                "stance": report.stance,
+                "score": report.score,
+            },
+            run_id=run.run_id,
+            session_id=run.session_ids.get("sentiment"),
+        )
+        return report
+    except Exception as error:
+        await audit.append(
+            "agent_failed",
+            {
+                "agent": "sentiment",
+                "error_type": type(error).__name__,
+                "message": str(error),
+            },
+            run_id=run.run_id,
+        )
+        return _abstain_agent_failure("sentiment", error)
+
+
+async def _rerun_or_abstain_macro(
+    macro_fields, run, database, llm, model, thinking, query, audit, unbound_policy
+) -> Report:
+    if not macro_fields:
+        report = _abstain_macro()
+        await audit.append(
+            "agent_failed",
+            {"agent": "macro", "message": "missing snapshot"},
+            run_id=run.run_id,
+        )
+        return report
+    try:
+        report, _ = await _run_macro_agent(
+            macro_fields=macro_fields,
+            run=run,
+            database=database,
+            llm_adapter=llm,
+            model=model,
+            thinking_enabled=thinking,
+            user_query=query,
+        )
+        try:
+            bind_macro_report_evidence(
+                report, MacroSnapshot(**macro_fields["macro"])
+            )
+        except EvidenceBindingError:
+            if unbound_policy == "abstain":
+                report = _abstain_macro("证据绑定失败，改为弃权。")
+            else:
+                raise
+        await audit.append(
+            "agent_completed",
+            {
+                "status": "completed" if not report.abstain else "abstained",
+                "stance": report.stance,
+                "score": report.score,
+            },
+            run_id=run.run_id,
+            session_id=run.session_ids.get("macro"),
+        )
+        return report
+    except Exception as error:
+        await audit.append(
+            "agent_failed",
+            {
+                "agent": "macro",
+                "error_type": type(error).__name__,
+                "message": str(error),
+            },
+            run_id=run.run_id,
+        )
+        return _abstain_agent_failure("macro", error)
+
+
+async def _commit_intent(
+    *,
+    parsed,
+    slots,
+    audit_type: str,
     user_id: str,
     run: RunRecord,
     code: str,
-    llm_adapter: LLMAdapter,
-    model: str,
     user_store: UserStore,
     audit: SQLiteAuditLog,
+    moment: Moment = "pre_run",
 ):
-    parsed = parse_tags(user_prompt)
     utterance_id = str(uuid4())
-    slots, audit_type = await extract_slots(llm_adapter, parsed.body, model)
     intent = build_intent(
         utterance_id=utterance_id, parsed=parsed, slots=slots
     )
@@ -673,6 +1221,7 @@ async def _prepare_intent(
         run_id=run.run_id,
         created_at=utc_now().isoformat(),
         user_id=user_id,
+        moment=moment,
     )
     await user_store.save_utterance(utterance)
     await user_store.save_intent(intent)
@@ -686,7 +1235,35 @@ async def _prepare_intent(
         run_id=run.run_id,
     )
     await user_store.persist_remember(intent=intent, utterance=utterance)
-    return intent
+    return intent, parsed.body != NONE
+
+
+async def _prepare_intent(
+    *,
+    user_prompt: str,
+    user_id: str,
+    run: RunRecord,
+    code: str,
+    llm_adapter: LLMAdapter,
+    model: str,
+    user_store: UserStore,
+    audit: SQLiteAuditLog,
+    moment: Moment = "pre_run",
+):
+    parsed = parse_tags(user_prompt)
+    slots, audit_type = await extract_slots(llm_adapter, parsed.body, model)
+    parsed = merge_parsed_with_slots(parsed, slots)
+    return await _commit_intent(
+        parsed=parsed,
+        slots=slots,
+        audit_type=audit_type,
+        user_id=user_id,
+        run=run,
+        code=code,
+        user_store=user_store,
+        audit=audit,
+        moment=moment,
+    )
 
 
 def _decision_constraint(intent, prefs) -> str:
@@ -1006,6 +1583,8 @@ async def _complete(
     decision: Decision,
     *,
     status: str,
+    intent: Optional[UserIntent] = None,
+    show_intent_echo: bool = False,
 ) -> AnalysisOutcome:
     await store.save_report(run.run_id, "fundamental", fundamental_report)
     if technical_report is not None:
@@ -1039,6 +1618,8 @@ async def _complete(
         sentiment_report=sentiment_report,
         macro_report=macro_report,
         decision=decision,
+        intent=intent,
+        show_intent_echo=show_intent_echo,
     )
 
 
@@ -1055,6 +1636,10 @@ def format_cli_text(outcome: AnalysisOutcome) -> str:
         "公司 / 代码: {} / {}".format(company, outcome.run.stock_code),
         "run_status: {}".format(outcome.run.status),
     ]
+    if outcome.parent_run_id:
+        lines.append("parent_run_id: {}".format(outcome.parent_run_id))
+    if outcome.show_intent_echo and outcome.intent is not None:
+        lines.append(format_intent_echo(outcome.intent))
     if report:
         lines.extend(
             [
@@ -1118,9 +1703,47 @@ def format_cli_text(outcome: AnalysisOutcome) -> str:
         lines.append("风险:")
         lines.extend("  - {}".format(item) for item in decision.risks)
         lines.append("一句话建议: {}".format(decision.advice_one_liner))
+        if outcome.parent_decision is not None:
+            lines.extend(
+                [
+                    "反馈前 rating / confidence: {} / {}".format(
+                        outcome.parent_decision.rating,
+                        outcome.parent_decision.confidence,
+                    ),
+                    "反馈后 rating / confidence: {} / {}".format(
+                        decision.rating,
+                        decision.confidence,
+                    ),
+                    "本次重跑: {}".format(
+                        "、".join(outcome.rerun_dimensions) or "decision"
+                    ),
+                ]
+            )
     if outcome.error:
         lines.append("error: {}".format(outcome.error))
+    if outcome.run.status in {"success", "degraded"} and not outcome.error:
+        lines.append(
+            '可对本次结果反馈：python -m insightagent feedback {} --prompt "..."'.format(
+                outcome.run.run_id
+            )
+        )
     lines.append("免责：研究辅助，非投资建议")
+    return "\n".join(lines)
+
+
+def format_feedback_result(result: FeedbackResult) -> str:
+    if result.skipped:
+        return ""
+    if result.outcome is not None:
+        return format_cli_text(result.outcome)
+    lines = []
+    if result.show_intent_echo and result.intent is not None:
+        lines.append(format_intent_echo(result.intent))
+    lines.append(
+        "未重跑，父 run {} 结论未改".format(result.parent_run_id or "-")
+    )
+    if result.noop:
+        lines.append("rerun_noop")
     return "\n".join(lines)
 
 

@@ -139,6 +139,16 @@ def _scripted_fundamental_report(snapshot: dict, *, abstain: bool = False, unbou
                 "note": "profit grew while operating cash flow did not",
             }
         )
+    if "value_trap_risk" in flags:
+        citations.append(
+            {
+                "ref_id": "trap",
+                "kind": "rule",
+                "id": "value_trap_risk",
+                "source": "fundamental_snapshot",
+                "note": "cheap valuation does not override cashflow lag",
+            }
+        )
     summary = (
         "ROE {roe}，PE {pe}，经营现金流 {cf}，净利润同比 {profit_yoy}。"
     ).format(

@@ -34,6 +34,8 @@ TAG_ALIASES = {
     "#记住": "remember",
     "#rerun": "rerun",
     "#重跑": "rerun",
+    "#结束": "end",
+    "#放弃": "end",
 }
 
 Moment = Literal["pre_run", "post_decision", "post_track"]
@@ -72,6 +74,8 @@ class LlmIntentSlots(BaseModel):
     decision: str = Field(min_length=1)
     tracking: str = Field(min_length=1)
     not_evidence: str = Field(min_length=1)
+    effect: str = Field(default="this_run", min_length=1)
+    dims: str = Field(default="none", min_length=1)
 
 
 class UserIntent(BaseModel):

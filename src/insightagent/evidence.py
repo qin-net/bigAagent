@@ -104,6 +104,7 @@ def bind_report_evidence(report: Report, snapshot: FundamentalSnapshot) -> None:
     if not report.abstain and not report.citations:
         raise EvidenceBindingError([])
     require_cashflow_lag_citation(report, snapshot)
+    require_value_trap_citation(report, snapshot)
 
 
 def macro_report_text(report: Report) -> str:
@@ -146,6 +147,21 @@ def require_cashflow_lag_citation(
         return
     cited = any(
         citation.kind == "rule" and citation.id == "cashflow_lag"
+        for citation in report.citations
+    )
+    if not cited:
+        raise EvidenceBindingError([])
+
+
+def require_value_trap_citation(
+    report: Report, snapshot: FundamentalSnapshot
+) -> None:
+    if report.abstain:
+        return
+    if "value_trap_risk" not in snapshot.computed_flags:
+        return
+    cited = any(
+        citation.kind == "rule" and citation.id == "value_trap_risk"
         for citation in report.citations
     )
     if not cited:

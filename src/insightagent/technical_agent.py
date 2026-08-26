@@ -30,6 +30,11 @@ Call get_indicator_snapshot first. If computed_flags contains
 insufficient_bars or ma20 is null, set abstain=true and stance=abstain.
 stance may be buy, hold, or sell when the snapshot supports it; do not
 default to hold if trend and key levels are clear.
+Copy trend and setup from the snapshot tool; do not invent them.
+Only write 空头排列 when computed_flags contains ma_bear_align.
+Only write 超卖/超买 when flags contain rsi_oversold / rsi_overbought;
+do not change those thresholds from rsi14 yourself.
+Do not recompute RSI from closes. Indicator rsi_smoothing is wilder.
 key_levels MUST contain copied numbers (MA values and/or observed
 highs/lows from the K-line). Copy suggested_key_levels if present.
 Do not write adjective-only levels such as "下方支撑".
@@ -111,6 +116,8 @@ def register_technical_tools(
         payload = context.indicator.model_dump(mode="json")
         payload["computed_flags"] = rules["flags"]
         payload["suggested_key_levels"] = rules["key_levels"]
+        payload["trend"] = rules["trend"]
+        payload["setup"] = rules["setup"]
         return payload
 
     def get_price_snapshot(dummy: str = "") -> Dict[str, Any]:

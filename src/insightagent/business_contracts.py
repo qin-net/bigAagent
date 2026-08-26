@@ -41,6 +41,8 @@ class FundamentalSnapshot(BaseModel):
     pb_percentile_5y: Optional[float] = None
     roe: Optional[float] = None
     roe_stable: Optional[bool] = None
+    roe_series: List[float] = Field(default_factory=list)
+    roe_report_period: Optional[str] = None
     revenue_yoy: Optional[float] = None
     profit_yoy: Optional[float] = None
     gross_margin: Optional[float] = None
@@ -48,6 +50,8 @@ class FundamentalSnapshot(BaseModel):
     current_ratio: Optional[float] = None
     operating_cf: Optional[float] = None
     net_profit: Optional[float] = None
+    cashflow_yoy: Optional[float] = None
+    ocf_to_np: Optional[float] = None
     goodwill: Optional[float] = None
     non_recurring_profit_ratio: Optional[float] = None
     missing_fields: List[str] = Field(default_factory=list)
@@ -183,6 +187,7 @@ class RunRecord(BaseModel):
     status: Literal["running", "success", "failed", "degraded"]
     snapshot_refs: dict = Field(default_factory=dict)
     session_ids: dict = Field(default_factory=dict)
+    parent_run_id: Optional[str] = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     schema_version: str = "1"

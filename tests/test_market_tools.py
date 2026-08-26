@@ -75,6 +75,7 @@ async def test_each_market_tool_returns_typed_snapshot():
     assert indicators["ma5"] is not None
     assert indicators["ma20"] is not None
     assert indicators["rsi14"] is not None
+    assert indicators["rsi_smoothing"] == "wilder"
     assert indicators["bars_used"] == 80
 
     events = await tools["get_event_snapshot"].invoke(

@@ -68,3 +68,29 @@ def test_analyze_fixture_missing_stock_does_not_need_api(tmp_path):
     assert "非投资建议" in result.stdout
     assert "timing_score" in result.stdout
     assert "未评估" in result.stdout
+    assert "可对本次结果反馈" in result.stdout
+
+
+def test_feedback_none_prompt_does_not_need_api(tmp_path):
+    database = tmp_path / "cli.db"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "insightagent",
+            "feedback",
+            "missing-run",
+            "--prompt",
+            "none",
+            "--path",
+            str(database),
+            "--artifact-root",
+            str(tmp_path / "artifacts"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "DEEPSEEK_API_KEY": ""},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""

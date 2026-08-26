@@ -34,8 +34,17 @@ get_artifact is optional and only accepts this run's artifact:// SHA-256.
 Never pass event_id, announcement id, or citation id. If get_artifact fails,
 do not retry with another key; submit_final from snapshot tools.
 Call get_fundamental_snapshot first. If computed_flags contains cashflow_lag,
-you must cite kind=rule and id=cashflow_lag. Search methodology at most once,
-and only when a computed flag needs interpretation.
+you must cite kind=rule and id=cashflow_lag. If flags contain value_trap_risk,
+you must cite kind=rule and id=value_trap_risk; stance must not be buy
+(hold at most). Search methodology at most once, and only when a computed
+flag needs interpretation.
+If flags contain roe_insufficient_history: write that single-period ROE is
+not enough to judge long-term quality; never write 不合格 or 未过15门槛.
+If roe_quality is absent and roe_insufficient_history is also absent, read
+rule_hits detail; do not treat a missing flag as 不合格.
+Do not annualize ROE yourself; only copy annualized_roe from rule detail.
+If cashflow_seasonal is present, do not describe cashflow_lag as 盈利质量崩塌.
+If only cashflow_lag is present, keep 现金流转正 as a falsifier, not a collapse.
 Include 1-3 falsifiers a tracker can check against later filings
 (cash flow, ROE, valuation percentile). Do not fill technical or macro fields.
 

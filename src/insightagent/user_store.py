@@ -8,7 +8,7 @@ from uuid import uuid4
 from .contracts import utc_now
 from .persistence import SQLiteDatabase
 from .user_contracts import DIMS, NONE, UserIntent, UserPreference, UserUtterance
-from .user_intent import slot_of
+from .user_intent import MAX_PREF_CHARS, passes_memory_gate, slot_of
 
 REMEMBER_EFFECTS = {"remember", "remember_rerun"}
 MAX_PREF = 8
@@ -128,20 +128,33 @@ class UserStore:
         try:
             for dim in DIMS:
                 slot = slot_of(intent, dim)
-                if slot == NONE:
+                if slot == NONE or not passes_memory_gate(slot):
                     continue
                 trigger = slot[:16]
                 title = slot[:16]
-                statement = slot[:80]
-                connection.execute(
+                statement = slot[:MAX_PREF_CHARS]
+                active_rows = connection.execute(
                     """
-                    UPDATE user_preferences
-                    SET status = 'retired', updated_at = ?
-                    WHERE user_id = ? AND scope = ? AND trigger = ?
-                      AND status = 'active'
+                    SELECT p.preference_id, v.payload_json
+                    FROM user_preferences AS p
+                    JOIN user_preference_versions AS v
+                      ON v.preference_id = p.preference_id
+                     AND v.version = p.current_version
+                    WHERE p.user_id = ? AND p.scope = ? AND p.status = 'active'
                     """,
-                    (now, utterance.user_id, dim, trigger),
-                )
+                    (utterance.user_id, dim),
+                ).fetchall()
+                for active in active_rows:
+                    payload = json.loads(active["payload_json"])
+                    if payload.get("statement") == statement:
+                        connection.execute(
+                            """
+                            UPDATE user_preferences
+                            SET status = 'retired', updated_at = ?
+                            WHERE preference_id = ?
+                            """,
+                            (now, active["preference_id"]),
+                        )
                 row = UserPreference(
                     preference_id=str(uuid4()),
                     user_id=utterance.user_id,

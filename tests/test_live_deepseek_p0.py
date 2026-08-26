@@ -48,3 +48,8 @@ async def test_live_deepseek_fixture_analysis(tmp_path):
             citation.kind == "rule" and citation.id == "cashflow_lag"
             for citation in outcome.report.citations
         )
+    if "value_trap_risk" in outcome.snapshot.computed_flags and not outcome.report.abstain:
+        assert any(
+            citation.kind == "rule" and citation.id == "value_trap_risk"
+            for citation in outcome.report.citations
+        )

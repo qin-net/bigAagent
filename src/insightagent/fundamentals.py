@@ -24,14 +24,14 @@ METHODOLOGY_ENTRIES = [
         "scope": ["fundamental"],
         "status": "approved",
         "trigger": "roe leverage 盈利能力",
-        "text": "长期 ROE 高且不依赖过高负债，更接近优秀企业标准。",
+        "text": "长期 ROE 看多年年度均值与最低值，单期或中报年化不足以判断合格或不合格。",
     },
     {
         "id": "kb_cashflow_lag",
         "scope": ["fundamental"],
         "status": "approved",
         "trigger": "现金流 盈利质量 净利润",
-        "text": "净利润增长但经营现金流为负或不支持利润时，应检查盈利质量。",
+        "text": "净利润增长但经营现金流为负时，先区分季节性与含金量，再谈盈利质量，不要直接写成崩塌。",
     },
     {
         "id": "kb_leverage",
@@ -46,6 +46,13 @@ METHODOLOGY_ENTRIES = [
         "status": "approved",
         "trigger": "估值 pe 分位 安全边际",
         "text": "估值应对照自身历史分位，而不是只看单一 PE。",
+    },
+    {
+        "id": "kb_value_trap",
+        "scope": ["fundamental"],
+        "status": "approved",
+        "trigger": "value_trap 价值陷阱 便宜 现金流",
+        "text": "估值便宜不能压过现金流质量问题；value_trap_risk 时不得给出买入。",
     },
     {
         "id": "kb_macro_rates",
@@ -85,24 +92,52 @@ METHODOLOGY_ENTRIES = [
 ]
 
 
+def annualize_roe(roe: Optional[float], period: Optional[str]) -> Optional[float]:
+    if roe is None or not period:
+        return None
+    factors = {"q1": 4.0, "h1": 2.0, "q3": 4.0 / 3.0, "fy": 1.0}
+    factor = factors.get(period)
+    if factor is None:
+        return None
+    return roe * factor
+
+
 def apply_fundamental_rules(
     snapshot: FundamentalSnapshot,
 ) -> FundamentalSnapshot:
     hits: List[RuleHit] = []
     flags: List[str] = []
+    debt_ok = snapshot.debt_ratio is not None and snapshot.debt_ratio < 60
+    series = [value for value in snapshot.roe_series if value is not None]
+    annualized = annualize_roe(snapshot.roe, snapshot.roe_report_period)
 
-    roe_hit = (
-        snapshot.roe is not None
-        and snapshot.roe >= 15
-        and snapshot.debt_ratio is not None
-        and snapshot.debt_ratio < 60
-    )
-    hits.append(
-        RuleHit(
-            rule_id="roe_quality",
-            hit=bool(roe_hit),
-            detail="ROE>=15 and debt_ratio<60",
+    if len(series) >= 3:
+        mean_roe = sum(series) / float(len(series))
+        min_roe = min(series)
+        roe_hit = mean_roe >= 15 and min_roe >= 12 and debt_ok
+        detail = (
+            "multi-year annual ROE mean={} min={} debt_ratio={}".format(
+                mean_roe, min_roe, snapshot.debt_ratio
+            )
         )
+    elif snapshot.roe_stable is True:
+        roe_hit = snapshot.roe is not None and snapshot.roe >= 12 and debt_ok
+        detail = "roe_stable and ROE>=12 and debt_ratio<60"
+    else:
+        roe_hit = False
+        flags.append("roe_insufficient_history")
+        parts = [
+            "single-period is NOT enough to judge long-term ROE quality"
+        ]
+        if annualized is not None:
+            parts.append(
+                "annualized_roe={} period={}".format(
+                    annualized, snapshot.roe_report_period
+                )
+            )
+        detail = "; ".join(parts)
+    hits.append(
+        RuleHit(rule_id="roe_quality", hit=bool(roe_hit), detail=detail)
     )
     if roe_hit:
         flags.append("roe_quality")
@@ -113,15 +148,18 @@ def apply_fundamental_rules(
         and snapshot.operating_cf is not None
         and snapshot.operating_cf <= 0
     )
-    hits.append(
-        RuleHit(
-            rule_id="cashflow_lag",
-            hit=bool(cash_hit),
-            detail="profit_yoy>0 and operating_cf<=0",
-        )
-    )
+    lag_detail = "profit_yoy>0 and operating_cf<=0"
     if cash_hit:
         flags.append("cashflow_lag")
+        if snapshot.cashflow_yoy is not None and snapshot.cashflow_yoy > 0:
+            flags.append("cashflow_seasonal")
+        if snapshot.ocf_to_np is not None and snapshot.ocf_to_np < 0.5:
+            flags.append("cashflow_quality_issue")
+        if snapshot.cashflow_yoy is None and snapshot.ocf_to_np is None:
+            lag_detail += "; undetermined"
+    hits.append(
+        RuleHit(rule_id="cashflow_lag", hit=bool(cash_hit), detail=lag_detail)
+    )
 
     lev_hit = snapshot.debt_ratio is not None and snapshot.debt_ratio >= 70
     hits.append(
@@ -162,6 +200,21 @@ def apply_fundamental_rules(
     )
     if cheap_hit:
         flags.append("valuation_cheap")
+
+    trap_hit = (
+        cheap_hit
+        and cash_hit
+        and "cashflow_seasonal" not in flags
+    )
+    hits.append(
+        RuleHit(
+            rule_id="value_trap_risk",
+            hit=bool(trap_hit),
+            detail="valuation_cheap and cashflow_lag without seasonal offset",
+        )
+    )
+    if trap_hit:
+        flags.append("value_trap_risk")
 
     missing = [
         name

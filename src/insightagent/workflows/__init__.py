@@ -1,5 +1,17 @@
 from __future__ import annotations
 
-from .initial_research import AnalysisOutcome, analyze_stock
+from .initial_research import (
+    AnalysisOutcome,
+    FeedbackError,
+    FeedbackResult,
+    analyze_stock,
+    feedback_on_run,
+)
 
-__all__ = ["AnalysisOutcome", "analyze_stock"]
+__all__ = [
+    "AnalysisOutcome",
+    "FeedbackError",
+    "FeedbackResult",
+    "analyze_stock",
+    "feedback_on_run",
+]

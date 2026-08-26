@@ -176,20 +176,73 @@ def ema(values: Sequence[float], window: int) -> Optional[List[float]]:
 
 
 def rsi(values: Sequence[float], window: int = 14) -> Optional[float]:
-    if len(values) <= window:
+    """Wilder RSI; uses the full series, not a last-window SMA."""
+    if window <= 0 or len(values) <= window:
         return None
-    gains = 0.0
-    losses = 0.0
-    for index in range(-window, 0):
+    gains: List[float] = []
+    losses: List[float] = []
+    for index in range(1, len(values)):
         delta = values[index] - values[index - 1]
-        if delta >= 0:
-            gains += delta
-        else:
-            losses -= delta
-    if losses == 0:
+        gains.append(max(delta, 0.0))
+        losses.append(max(-delta, 0.0))
+    if len(gains) < window:
+        return None
+    avg_gain = sum(gains[:window]) / float(window)
+    avg_loss = sum(losses[:window]) / float(window)
+    for gain, loss in zip(gains[window:], losses[window:]):
+        avg_gain = (avg_gain * (window - 1) + gain) / float(window)
+        avg_loss = (avg_loss * (window - 1) + loss) / float(window)
+    if avg_loss == 0:
         return 100.0
-    relative = (gains / window) / (losses / window)
+    relative = avg_gain / avg_loss
     return 100.0 - (100.0 / (1.0 + relative))
+
+
+def report_period_from_date(value: Any) -> Optional[str]:
+    iso = normalize_date(value)
+    if not iso or len(iso) < 10:
+        return None
+    return {
+        "03-31": "q1",
+        "06-30": "h1",
+        "09-30": "q3",
+        "12-31": "fy",
+    }.get(iso[5:10])
+
+
+def annual_roe_series(
+    rows: Sequence[Dict[str, Any]], limit: int = 5
+) -> List[float]:
+    series: List[float] = []
+    for row in newest_records(list(rows), len(rows) if rows else 0):
+        if report_period_from_date(row.get("date")) != "fy":
+            continue
+        value = to_float(row.get("roe"))
+        if value is None:
+            continue
+        series.append(value)
+        if len(series) >= limit:
+            break
+    return series
+
+
+def cashflow_yoy_pct(rows: Sequence[Dict[str, Any]]) -> Optional[float]:
+    newest = newest_records(list(rows), 2)
+    if len(newest) < 2:
+        return None
+    latest = to_float(newest[0].get("operating_cf"))
+    previous = to_float(newest[1].get("operating_cf"))
+    if latest is None or previous is None or previous == 0:
+        return None
+    return (latest - previous) / abs(previous) * 100.0
+
+
+def ocf_to_net_profit(
+    operating_cf: Optional[float], net_profit: Optional[float]
+) -> Optional[float]:
+    if operating_cf is None or net_profit is None or net_profit <= 0:
+        return None
+    return operating_cf / net_profit
 
 
 def compute_indicators(
@@ -233,6 +286,7 @@ def compute_indicators(
         "macd_signal": signal,
         "macd_hist": hist,
         "rsi14": rsi(closes, 14),
+        "rsi_smoothing": "wilder",
         "volume_ratio": volume_ratio,
     }
     return IndicatorSnapshot(
@@ -616,10 +670,13 @@ class AkshareMarketClient:
                 ),
             )
         )
-        latest = latest_record(map_akshare_rows(function_name, _records(table)))
+        mapped = map_akshare_rows(function_name, _records(table))
+        latest = latest_record(mapped)
         return {
             "stock_code": code,
+            "report_date": normalize_date(latest.get("date")),
             "roe": latest.get("roe"),
+            "roe_series": annual_roe_series(mapped),
             "revenue_yoy": latest.get("revenue_yoy"),
             "profit_yoy": latest.get("profit_yoy"),
             "gross_margin": latest.get("gross_margin"),
@@ -646,13 +703,15 @@ class AkshareMarketClient:
                 ),
             )
         )
-        latest = latest_record(map_akshare_rows(function_name, _records(table)))
+        mapped = map_akshare_rows(function_name, _records(table))
+        latest = latest_record(mapped)
         net_profit = latest.get("net_profit")
         if net_profit is None:
             net_profit = financials.get("net_profit")
         return {
             "stock_code": code,
             "operating_cf": latest.get("operating_cf"),
+            "cashflow_yoy": cashflow_yoy_pct(mapped),
             "net_profit": net_profit,
             "profit_yoy": financials.get("profit_yoy"),
             "source": "akshare.{}".format(function_name),
@@ -844,7 +903,13 @@ class MarketService:
         raw = await self.client.financials(code)
         payload = {
             "stock_code": code,
+            "report_date": normalize_date(raw.get("report_date")),
             "roe": to_float(raw.get("roe")),
+            "roe_series": [
+                value
+                for value in (to_float(item) for item in (raw.get("roe_series") or []))
+                if value is not None
+            ],
             "revenue_yoy": to_float(raw.get("revenue_yoy")),
             "profit_yoy": to_float(raw.get("profit_yoy")),
             "gross_margin": to_float(raw.get("gross_margin")),
@@ -870,6 +935,7 @@ class MarketService:
             "operating_cf": scale_accounting_amount(
                 to_float(raw.get("operating_cf"))
             ),
+            "cashflow_yoy": to_float(raw.get("cashflow_yoy")),
             "net_profit": scale_accounting_amount(to_float(raw.get("net_profit"))),
             "profit_yoy": to_float(raw.get("profit_yoy")),
             "source": str(raw.get("source") or "market"),
@@ -1044,6 +1110,8 @@ class MarketService:
         valuation = await self.fetch_valuation(code)
         financials = await self.fetch_financials(code)
         cashflow = await self.fetch_cashflow(code)
+        net_profit = cashflow.net_profit or financials.net_profit
+        operating_cf = cashflow.operating_cf
         return {
             "stock_code": code,
             "company_name": profile.company_name,
@@ -1053,13 +1121,17 @@ class MarketService:
             "pe_percentile_5y": valuation.pe_percentile_5y,
             "pb_percentile_5y": valuation.pb_percentile_5y,
             "roe": financials.roe,
+            "roe_series": list(financials.roe_series or []),
+            "roe_report_period": report_period_from_date(financials.report_date),
             "revenue_yoy": financials.revenue_yoy,
             "profit_yoy": financials.profit_yoy or cashflow.profit_yoy,
             "gross_margin": financials.gross_margin,
             "debt_ratio": financials.debt_ratio,
             "current_ratio": financials.current_ratio,
-            "operating_cf": cashflow.operating_cf,
-            "net_profit": cashflow.net_profit or financials.net_profit,
+            "operating_cf": operating_cf,
+            "net_profit": net_profit,
+            "cashflow_yoy": cashflow.cashflow_yoy,
+            "ocf_to_np": ocf_to_net_profit(operating_cf, net_profit),
             "goodwill": financials.goodwill,
             "non_recurring_profit_ratio": financials.non_recurring_profit_ratio,
         }

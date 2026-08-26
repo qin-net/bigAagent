@@ -29,11 +29,10 @@ def apply_technical_rules(
     ma20 = indicator.ma20
     ma60 = indicator.ma60
 
-    if all(v is not None for v in (ma5, ma10, ma20)) and ma5 > ma10 > ma20:
-        if ma60 is None or ma20 > ma60:
+    if all(v is not None for v in (ma5, ma10, ma20, ma60)):
+        if ma5 > ma10 > ma20 > ma60:
             flags.append("ma_bull_align")
-    elif all(v is not None for v in (ma5, ma10, ma20)) and ma5 < ma10 < ma20:
-        if ma60 is None or ma20 < ma60:
+        elif ma5 < ma10 < ma20 < ma60:
             flags.append("ma_bear_align")
 
     if indicator.macd is not None and indicator.macd_signal is not None:
@@ -56,7 +55,7 @@ def apply_technical_rules(
         price_vs_ma20 = (price.price - ma20) / ma20
 
     key_levels = _build_key_levels(kline, indicator)
-    trend = _describe_trend(flags)
+    trend = _describe_trend(flags, indicator, price)
     setup = _describe_setup(flags)
 
     return {
@@ -81,13 +80,23 @@ def _build_key_levels(kline: KlineSnapshot, indicator: IndicatorSnapshot) -> str
     return "；".join(parts) if parts else ""
 
 
-def _describe_trend(flags: List[str]) -> Optional[str]:
+def _describe_trend(
+    flags: List[str],
+    indicator: IndicatorSnapshot,
+    price: PriceSnapshot,
+) -> Optional[str]:
     if "insufficient_bars" in flags:
         return None
     if "ma_bull_align" in flags:
-        return "均线多头排列"
+        return "均线多头排列（MA5>MA10>MA20>MA60）"
     if "ma_bear_align" in flags:
-        return "均线空头排列"
+        return "均线空头排列（MA5<MA10<MA20<MA60）"
+    if (
+        price.price is not None
+        and indicator.ma20 is not None
+        and price.price < indicator.ma20
+    ):
+        return "价格位于均线下方、均线系统走弱"
     return "均线纠缠，趋势不明"
 
 

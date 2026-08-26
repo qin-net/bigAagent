@@ -98,10 +98,13 @@ class IndicatorSnapshot(BaseModel):
     macd_signal: Optional[float] = None
     macd_hist: Optional[float] = None
     rsi14: Optional[float] = None
+    rsi_smoothing: str = "wilder"
     volume_ratio: Optional[float] = None
     bars_used: int = 0
     computed_flags: List[str] = Field(default_factory=list)
     suggested_key_levels: Optional[str] = None
+    trend: Optional[str] = None
+    setup: Optional[str] = None
     source: str = "computed"
     missing_fields: List[str] = Field(default_factory=list)
 
@@ -126,7 +129,9 @@ class FinancialSnapshot(BaseModel):
     schema_version: str = "1"
     stock_code: str
     as_of: datetime = Field(default_factory=utc_now)
+    report_date: Optional[str] = None
     roe: Optional[float] = None
+    roe_series: List[float] = Field(default_factory=list)
     revenue_yoy: Optional[float] = None
     profit_yoy: Optional[float] = None
     gross_margin: Optional[float] = None
@@ -146,6 +151,7 @@ class CashflowSnapshot(BaseModel):
     stock_code: str
     as_of: datetime = Field(default_factory=utc_now)
     operating_cf: Optional[float] = None
+    cashflow_yoy: Optional[float] = None
     net_profit: Optional[float] = None
     profit_yoy: Optional[float] = None
     source: str = "unknown"
