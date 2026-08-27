@@ -1,17 +1,32 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel
+
+from .research import agent_paths, load_projected_run, write_prompt
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .store import BoardStore
 
 
+class ResearchRequest(BaseModel):
+    stock_code: str
+    prompt: str = "none"
+    kind: str = "analyze"
+
+
+class FeedbackRequest(BaseModel):
+    prompt: str
+
+
 def create_app(db_path: str = "data/board.db") -> FastAPI:
     store = BoardStore(db_path)
     store.initialize()
+    store.initialize_research()
     app = FastAPI(title="InsightBoard", version="0.1.0")
     static_dir = Path(__file__).with_name("web")
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -54,6 +69,77 @@ def create_app(db_path: str = "data/board.db") -> FastAPI:
     @app.post("/api/v1/stocks/{stock_code}/refresh-request")
     def refresh_request(stock_code: str) -> dict:
         return {"stock_code": stock_code, "queue": store.enqueue_deep(stock_code, reason="detail", priority=5)}
+
+    @app.post("/api/v1/research/jobs")
+    def create_research(request: ResearchRequest) -> dict:
+        try:
+            if request.kind == "feedback":
+                raise HTTPException(status_code=400, detail="use feedback endpoint")
+            agent_paths()
+            import os
+            if not os.environ.get("DEEPSEEK_API_KEY"):
+                raise HTTPException(status_code=503, detail="research is not configured")
+            job = store.create_research_job(request.stock_code.strip(), prompt=request.prompt)
+            if not job.get("existing"):
+                write_prompt(job["job_id"], request.prompt)
+        except HTTPException:
+            raise
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error))
+        if job.get("existing"):
+            raise HTTPException(status_code=409, detail={"job_id": job["job_id"]})
+        return {key: job[key] for key in ("job_id", "stock_code", "kind", "status", "created_at")}
+
+    @app.post("/api/v1/research/jobs/{job_id}/feedback")
+    def create_feedback(job_id: str, request: FeedbackRequest) -> dict:
+        job = store.research_job(job_id)
+        if not job or job["status"] != "success" or not job.get("run_id"):
+            raise HTTPException(status_code=409, detail="job has no successful run")
+        try:
+            created = store.create_research_job(job["stock_code"], kind="feedback", prompt=request.prompt, parent_run_id=job["run_id"])
+            if not created.get("existing"):
+                write_prompt(created["job_id"], request.prompt)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error))
+        if created.get("existing"):
+            raise HTTPException(status_code=409, detail={"job_id": created["job_id"]})
+        return {key: created[key] for key in ("job_id", "stock_code", "kind", "status", "created_at")}
+
+    @app.get("/api/v1/research/jobs/{job_id}")
+    def research_job(job_id: str) -> dict:
+        job = store.research_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="research job not found")
+        return job
+
+    @app.get("/api/v1/research/stocks/{stock_code}/current")
+    async def current_research(stock_code: str) -> dict:
+        job = store.current_research(stock_code)
+        if not job:
+            raise HTTPException(status_code=404, detail="no successful research")
+        result = await load_projected_run(job["run_id"])
+        if not result:
+            raise HTTPException(status_code=404, detail="research run not found")
+        result["job_id"] = job["job_id"]
+        result["parent_run_id"] = job.get("parent_run_id") or result.get("parent_run_id")
+        result["rerun_dimensions"] = json.loads(job.get("rerun_dimensions") or "[]")
+        return result
+
+    @app.get("/api/v1/research/runs/{run_id}")
+    async def research_run(run_id: str) -> dict:
+        result = await load_projected_run(run_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="research run not found")
+        job = store.research_job_by_run(run_id)
+        if job:
+            result["job_id"] = job["job_id"]
+            result["parent_run_id"] = job.get("parent_run_id") or result.get("parent_run_id")
+            result["rerun_dimensions"] = json.loads(job.get("rerun_dimensions") or "[]")
+        return result
+
+    @app.get("/api/v1/research/stocks/{stock_code}/history")
+    def research_history(stock_code: str) -> dict:
+        return {"items": store.research_history(stock_code)}
 
     @app.get("/api/v1/watchlist")
     def watchlist() -> dict:

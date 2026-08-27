@@ -28,7 +28,6 @@ board = [
   "akshare",
   "fastapi",
   "uvicorn",
-  "apscheduler",
 ]
 
 [tool.setuptools]

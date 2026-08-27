@@ -6,9 +6,9 @@ import json
 from datetime import datetime
 from typing import Sequence
 
-from .api import create_app
 from .collector import AkshareQuoteCollector, collect_once
 from .store import BoardStore
+from .research import execute_job_sync, remove_prompt, spool_path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("status", help="Show current ingest status")
     commands.add_parser("collect-once", help="Collect one batch of delayed quotes")
     commands.add_parser("worker", help="Run 30-minute quote collection during A-share trading hours")
+    commands.add_parser("research-worker", help="Run queued InsightAgent research jobs")
     serve = commands.add_parser("serve", help="Run the local API and dashboard")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
@@ -55,15 +56,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "worker":
         return _run_worker(store)
+    if args.command == "research-worker":
+        return _run_research_worker(store)
     if args.command == "serve":
+        from .api import create_app
         import uvicorn
         uvicorn.run(create_app(args.db), host=args.host, port=args.port)
         return 0
     return 1
 
 
+def _run_research_worker(store: BoardStore) -> int:
+    import time
+    store.initialize_research()
+    store.recover_research()
+    while True:
+        item = store.claim_research()
+        if item:
+            try:
+                prompt_file = spool_path(item["job_id"])
+                item["prompt"] = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else "none"
+                result = execute_job_sync(item, store)
+                store.finish_research(item["job_id"], run_id=result.get("run_id"), noop=result.get("noop", False), rerun_dimensions=result.get("rerun_dimensions", []))
+            except Exception as error:
+                store.finish_research(item["job_id"], error="{}: {}".format(type(error).__name__, error))
+            finally:
+                remove_prompt(item["job_id"])
+        time.sleep(2)
+
+
 def _run_worker(store: BoardStore) -> int:
-    from apscheduler.schedulers.blocking import BlockingScheduler
+    # Keep the worker usable in the minimal runtime: APScheduler is optional.
+    import time
     from zoneinfo import ZoneInfo
 
     timezone = ZoneInfo("Asia/Shanghai")
@@ -95,15 +119,22 @@ def _run_worker(store: BoardStore) -> int:
         except Exception as error:
             store.finish_deep(code, error="{}: {}".format(type(error).__name__, error))
 
-    scheduler = BlockingScheduler(timezone=timezone)
-    scheduler.add_job(job, "cron", minute="0,30", max_instances=1, coalesce=True)
-    scheduler.add_job(deep_job, "interval", minutes=1, max_instances=1, coalesce=True)
+    # Run the same two loops without requiring an optional scheduler package.
     job()
+    next_quote = time.monotonic() + 1800
+    next_deep = time.monotonic()
     try:
-        scheduler.start()
+        while True:
+            now = time.monotonic()
+            if now >= next_quote:
+                job()
+                next_quote = now + 1800
+            if now >= next_deep:
+                deep_job()
+                next_deep = now + 60
+            time.sleep(1)
     except (KeyboardInterrupt, SystemExit):
         return 0
-    return 0
 
 
 if __name__ == "__main__":
