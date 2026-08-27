@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -15,7 +15,7 @@ from .artifact_access import (
 )
 from .business_contracts import FundamentalSnapshot, Report
 from .contracts import ResourceType
-from .fundamentals import search_methodology
+from .methodology import record_search
 from .persistence import FileArtifactStore
 from .resources import FunctionResource
 from .runtime import AgentInstance, RuntimeConfig
@@ -91,6 +91,7 @@ class SearchOutput(BaseModel):
 class FundamentalToolContext:
     snapshot: FundamentalSnapshot
     artifacts: FileArtifactStore
+    retrieved_kb_ids: set = field(default_factory=set)
 
 
 def fundamental_runtime_config(
@@ -121,7 +122,12 @@ def register_fundamental_tools(
         return context.snapshot.model_dump(mode="json")
 
     def search(query: str) -> Dict[str, Any]:
-        return {"entries": search_methodology(query, scope="fundamental")}
+        return record_search(
+            context.retrieved_kb_ids,
+            query,
+            scope="fundamental",
+            flags=context.snapshot.computed_flags,
+        )
 
     async def get_artifact(ref: str) -> Dict[str, Any]:
         return await load_whitelisted_artifact(

@@ -7,6 +7,10 @@ from typing import Any, Dict, List, Optional, Protocol
 from .business_contracts import FundamentalSnapshot, RuleHit
 from .contracts import utc_now
 from .market import AkshareMarketClient, FixtureMarketClient, MarketService
+from .methodology import (  # noqa: F401
+    METHODOLOGY_ENTRIES,
+    search_methodology,
+)
 
 REQUIRED_FIELDS = (
     "pe",
@@ -17,79 +21,6 @@ REQUIRED_FIELDS = (
     "net_profit",
     "profit_yoy",
 )
-
-METHODOLOGY_ENTRIES = [
-    {
-        "id": "kb_roe_quality",
-        "scope": ["fundamental"],
-        "status": "approved",
-        "trigger": "roe leverage 盈利能力",
-        "text": "长期 ROE 看多年年度均值与最低值，单期或中报年化不足以判断合格或不合格。",
-    },
-    {
-        "id": "kb_cashflow_lag",
-        "scope": ["fundamental"],
-        "status": "approved",
-        "trigger": "现金流 盈利质量 净利润",
-        "text": "净利润增长但经营现金流为负时，先区分季节性与含金量，再谈盈利质量，不要直接写成崩塌。",
-    },
-    {
-        "id": "kb_leverage",
-        "scope": ["fundamental"],
-        "status": "approved",
-        "trigger": "负债 杠杆 财务风险",
-        "text": "资产负债率过高会放大下行风险，需降低安全边际评价。",
-    },
-    {
-        "id": "kb_valuation",
-        "scope": ["fundamental"],
-        "status": "approved",
-        "trigger": "估值 pe 分位 安全边际",
-        "text": "估值应对照自身历史分位，而不是只看单一 PE。",
-    },
-    {
-        "id": "kb_value_trap",
-        "scope": ["fundamental"],
-        "status": "approved",
-        "trigger": "value_trap 价值陷阱 便宜 现金流",
-        "text": "估值便宜不能压过现金流质量问题；value_trap_risk 时不得给出买入。",
-    },
-    {
-        "id": "kb_macro_rates",
-        "scope": ["macro"],
-        "status": "approved",
-        "trigger": "lpr 利率 宏观",
-        "text": "宏观只提供环境标签，不构成个股买卖理由。",
-    },
-    {
-        "id": "kb_event_reduction",
-        "scope": ["sentiment", "event"],
-        "status": "approved",
-        "trigger": "减持 reduction 控股股东 情绪 事件",
-        "text": "控股股东减持会抬升风险感知，写入 event_flags；不能单独作为买卖点。",
-    },
-    {
-        "id": "kb_event_buyback",
-        "scope": ["sentiment", "event"],
-        "status": "approved",
-        "trigger": "回购 buyback 增持 问询 inquiry",
-        "text": "回购或增持可对冲减持压力，仍以公告事件为准；新闻不能单独支撑非弃权。",
-    },
-    {
-        "id": "kb_ma_align",
-        "scope": ["technical"],
-        "status": "approved",
-        "trigger": "均线 多头 ma_bull_align 排列",
-        "text": "均线多头排列描述趋势结构，不构成买卖点；关键位只能引用均线或K线高低。",
-    },
-    {
-        "id": "kb_rsi_overbought",
-        "scope": ["technical"],
-        "status": "approved",
-        "trigger": "rsi 超买 overbought macd",
-        "text": "RSI 超买或 MACD 走弱只说明短线过热，趋势判断仍以均线结构为准。",
-    },
-]
 
 
 def annualize_roe(roe: Optional[float], period: Optional[str]) -> Optional[float]:
@@ -324,30 +255,6 @@ def _map_akshare(stock_code: str, info: Any, indicators: Any) -> Dict[str, Any]:
         "net_profit": _num("netprofit", "净利润"),
         "goodwill": _num("goodwill", "商誉"),
     }
-
-
-def search_methodology(
-    query: str, *, scope: Optional[str] = None
-) -> List[Dict[str, str]]:
-    tokens = [token.lower() for token in query.replace("/", " ").split() if token]
-    results = []
-    for entry in METHODOLOGY_ENTRIES:
-        if entry["status"] != "approved":
-            continue
-        if scope is not None and scope not in entry["scope"]:
-            continue
-        haystack = " ".join(
-            [entry["id"], entry["trigger"], entry["text"]]
-        ).lower()
-        if not tokens or any(token in haystack for token in tokens):
-            results.append(
-                {
-                    "id": entry["id"],
-                    "text": entry["text"],
-                    "trigger": entry["trigger"],
-                }
-            )
-    return results[:5]
 
 
 class AkshareTechnicalAdapter:

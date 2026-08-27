@@ -1,9 +1,11 @@
 # 知识库做法：Wiki 原料 + 短条目检索（不做全书 RAG）
 
-> 状态：**待审，未实现**（检索运行时仍是代码里那十几条 `METHODOLOGY_ENTRIES`）  
+> 状态：**K0–K2 已实现**（检索闸门、SQLite 卡片、追踪蒸馏 Task；跟踪心跳未做）  
 > 日期：2026-08-24  
 > 位置：本仓库 `doc/`  
 > 关联：`InsightAgent-设计文档.md` §9、`知识库-PDF转Markdown.md`、`知识库条目清单-经管对照查找.md`、四份 `知识库资料-*.md`  
+> 书目已齐之后的干活顺序：`知识库资料齐了怎么处理.md`  
+> 通审用的结构稿：`知识库与追踪-架构.md`  
 > 冻结口径（已有）：规则清单为主、条文为辅；禁止装饰性引用；正式条目要审核和版本；盈亏不得自动改方法论。
 
 ---
@@ -14,7 +16,7 @@
 
 | 层 | 给谁看 | 形态 | 进不进 `analyze` 的 Prompt |
 |---|---|---|---|
-| L0 原料库 | 人（经管校对、溯源） | Wiki / git 里的 Markdown（由 PDF 转来） | **不进** |
+| L0 原料库 | 人溯源；经管只交原件 | 本机 Markdown（PDF 本地转） | **不进** |
 | L1 方法论条目 | Agent + 审核页 | 短卡片：trigger、action、例外、出处、版本 | **只进命中的几条** |
 | L2 个人决策手册 | 普通用户 | 原则→清单→反例，只链 `approved` 条目 | 不进专家 System |
 
@@ -44,7 +46,7 @@
 - SQLite 已建 `methodology_entries` / `methodology_versions`，**写入和检索还没接到 analyze**。  
 - 运行时：`search_methodology(query, scope=角色)`，关键字打在 trigger+text 上，最多 5 条，只 `approved`。
 
-缺的就是：**蒸馏规程、条目合同冻结、从 md 进库、审核流、引用必须能对上 snapshot 字段**。追踪 Agent 当「管理者」是 P3，本期不必等它；人用 CLI/页面写 candidate、人批准即可。
+缺的就是：**蒸馏规程、条目合同冻结、从 md 进库、审核流、引用必须能对上 snapshot 字段**。经管不写卡片。**蒸卡 = 追踪 Agent 的蒸馏 Task**（与以后跟踪调度同一角色）；只写 candidate，咱们 CLI 批准。分析 Agent 运行时不读文献。小时心跳后做，不必另起蒸馏 Agent。
 
 用户偏好（`UserPreference`）**不是**知识库。偏好立刻生效、绑用户；方法论要闸门、绑角色、所有用户同一套纪律。禁止用 `#remember` 写进 methodology 表。
 
@@ -81,15 +83,15 @@ Wiki 第一期不必上飞书/Notion。Git 里一组 md + 以后看板或方法�
 流程：
 
 ```text
-校对后的一章/一份公告 md
-  → 人（可选用快模型辅助）按「可触发的纪律」抽卡片
-  → 每张卡片必须能回答：何时用、看哪些字段、例外是什么、出处哪一条
-  → 写入 candidate
-  → 对照夹具股票（如 000858 现金流滞后）看会不会误召
-  → 人工 approved 才进 search_methodology
+一章/一份公告 md（本地 pdf2md，不发 PDF）
+  → 追踪 Agent 蒸馏 Task（离线；不是四个分析 Agent）抽可执行纪律
+  → 每张卡片：何时用、看哪些已有 flag、例外、出处
+  → 写入 candidate（evidence_required 必须落在冻结字段表上）
+  → 对照夹具（如 000858 现金流滞后）看会不会误召
+  → 咱们 approved 才进 search_methodology
 ```
 
-用模型辅助时：一次只喂 **一章或数页 md 字符串**，输出候选 JSON，人改 trigger 和 action。不喂整本、不喂 PDF、不把候选直接标 approved。
+一次只喂 **一章或数页 md 字符串** + 允许的 flag 名。不喂整本、不喂 PDF、不把候选直接标 approved。经管不参与蒸卡。入口即追踪 Agent，见 `知识库资料齐了怎么处理.md`。
 
 ### 3.1 什么算一张合格卡片
 
@@ -159,7 +161,7 @@ Wiki 第一期不必上飞书/Notion。Git 里一组 md + 以后看板或方法�
   → retired（不再命中，页面仍能打开）
 ```
 
-追踪 Agent 以后只能写 candidate、去重提案，**不能** self-approve（设计已冻结）。没有追踪 Agent 时，CLI：
+追踪 Agent 只能写 candidate、去重提案，**不能** self-approve（设计已冻结）。蒸馏轮次同样走这条闸门。CLI：
 
 ```text
 python -m insightagent kb import doc/kb-entries/kb_cashflow_lag.md
@@ -193,11 +195,11 @@ Case 晋升（P3）：同类过程错误才开 lesson 类 candidate，不得因�
 |---|---|
 | K0 | 冻结本文件；改 `search_methodology`：空 query 不返回、scope 隔离、最多 3 条；sanitize 丢掉未检索 kb_id |
 | K1 | 条目改走 SQLite 版本表；从 `doc/kb-entries` 导入；把现有内存 10 条迁成正式卡片并补 `evidence_required` |
-| K2 | 经管 md 校对后按 §3.2 蒸第一批；夹具测试「该引/不该引」 |
+| K2 | 追踪 Agent 蒸馏 Task 出第一批 candidate；夹具「该引/不该引」；咱们批准 |
 | K3 | 审核 CLI/简单页；手册 L2 只链 approved |
-| K4 | 可选：短条目本地向量；追踪 Agent 写 candidate |
+| K4 | 可选：短卡片本地向量；跟踪心跳 + AgentSkill（同一追踪 Agent） |
 
-K0 不依赖资料是否齐，先止住乱引用。K2 才消耗经管全文。
+K0 不依赖资料是否齐，先止住乱引用。K2 才消耗经管全文。蒸馏与跟踪共用追踪 Agent，不另起角色。
 
 ---
 

@@ -499,6 +499,7 @@ Agent 侧：Skill 检索已批准条目 → citations 指向 `kb_id` / `rule_id`
 
 追踪 Agent 是该知识库的管理者，负责：
 
+- **蒸馏**：读取经管交付、已转成 Markdown 的一章/一份公告，写成候选条目（与跟踪调度同一 Agent、不同 Task；一次不得喂全书）
 - 从跟踪日志和复盘 Case 中发现重复出现的过程问题
 - 整理候选方法、检查清单、反例和适用边界
 - 检索已有条目，去重并检查潜在冲突
@@ -506,7 +507,7 @@ Agent 侧：Skill 检索已批准条目 → citations 指向 `kb_id` / `rule_id`
 - 在跟踪与调度时检索已批准条目，为分析 Agent 提供相关方法
 - 为真人生成清晰的 Markdown/页面视图，而不是只保存机器 Prompt
 
-追踪 Agent 可以直接写入 `candidate` 区，但不能自行把候选变成 `approved`，也不能自动修改买卖权重或其他 Agent 的 Prompt。正式生效仍需规则校验和人工审核。
+追踪 Agent 可以直接写入 `candidate` 区，但不能自行把候选变成 `approved`，也不能自动修改买卖权重或其他 Agent 的 Prompt。正式生效仍需规则校验和人工审核。蒸馏 Task 与跟踪 Task 共用这条闸门。
 
 ### 9.1 条目结构
 
