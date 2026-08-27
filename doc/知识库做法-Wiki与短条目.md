@@ -134,14 +134,13 @@ Wiki 第一期不必上飞书/Notion。Git 里一组 md + 以后看板或方法�
 
 ## 4. Agent 怎么找（检索方法）
 
-`search_methodology(query, scope)` 保持工具名不变。内部改成：
+`search_methodology(query, scope, flags)` 保持工具名不变。内部改成：
 
 1. 只查 `status=approved` 且 `scope` 含本角色。  
-2. **默认 query 为空或过短：返回 `[]`**，禁止「空查询把该维前 5 条全塞进去」（这是装饰性引用的温床）。  
-3. 命中方式（按顺序，都是结构化，不是 RAG）：  
-   - **字段门**：调用方传入当前 snapshot 的 `computed_flags` / `event_flags` / `rule_hits`（工具 schema 可加可选参数 `flags: string[]`）。条目 `evidence_required` 与 flags 有交集才进入候选。  
-   - **触发词**：query 分词与 `trigger` 求交。  
-   - 仍太多：按预先写的 `priority` 取最多 **3 条**（从 5 降到 3，省 token）。  
+2. **事实门（applicability）**：`all_flags` / `any_flags` / `none_flags` 硬过滤。未带 flags 且 query 过短 → `[]`。  
+3. **词汇只排序**：在可用集合上，query / aliases / intent_tags 加分；不能召回未过门的卡片。  
+4. `mandatory` 与命中 flag 权重大于词面；最多 **3 条**。  
+5. 返回 `retrieval_id` + 每条 `id/version/score/reasons`。citations 只允许这些 id。  
 4. 返回 `id, version, text, trigger`。citations 只允许这些 id；sanitize 时 **id 不在本次检索结果里的 kb 引用丢掉**。  
 5. 检索结果写入该次 session 的工具返回，报告引用必须能对上这次返回。历史回放用 version。
 

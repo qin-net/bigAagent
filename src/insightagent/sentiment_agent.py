@@ -10,7 +10,7 @@ from .business_contracts import Report
 from .contracts import ResourceType
 from .data_contracts import EventSnapshot, HolderChangeSnapshot
 from .events import apply_event_rules
-from .methodology import record_search
+from .methodology import MethodologyToolOutput, record_search
 from .resources import FunctionResource
 from .runtime import AgentInstance, RuntimeConfig
 
@@ -33,7 +33,7 @@ News alone cannot support a non-abstain conclusion; it is clues only.
 Crowd_risk must be low|medium|high and map to event_flags.
 Include 1-3 falsifiers a tracker can check against later filings.
 Do not invent tools. Empty methodology results are normal; submit from
-the snapshot.
+the snapshot. Query only ranks cards that already match snapshot flags.
 
 Final answer via submit_final:
 - output.report must match the Report schema below
@@ -58,13 +58,17 @@ class EmptyArgs(BaseModel):
 class SearchArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    query: str = Field(min_length=1)
+    query: str = Field(
+        min_length=1,
+        description=(
+            "Ranks applicable cards only. Cannot retrieve cards that fail "
+            "the snapshot flag applicability filter."
+        ),
+    )
 
 
-class SearchOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    entries: List[Dict[str, str]]
+class SearchOutput(MethodologyToolOutput):
+    pass
 
 
 @dataclass
@@ -143,7 +147,8 @@ def register_sentiment_tools(
             name="search_methodology",
             description=(
                 "Search approved sentiment methodology snippets. "
-                "Empty results are normal; finish from get_event_snapshot."
+                "Snapshot flags decide which cards are eligible; "
+                "query only ranks among those cards."
             ),
             input_model=SearchArgs,
             output_model=SearchOutput,

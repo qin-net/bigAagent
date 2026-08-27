@@ -15,7 +15,7 @@ from .artifact_access import (
 )
 from .business_contracts import FundamentalSnapshot, Report
 from .contracts import ResourceType
-from .methodology import record_search
+from .methodology import MethodologyToolOutput, record_search
 from .persistence import FileArtifactStore
 from .resources import FunctionResource
 from .runtime import AgentInstance, RuntimeConfig
@@ -36,8 +36,8 @@ do not retry with another key; submit_final from snapshot tools.
 Call get_fundamental_snapshot first. If computed_flags contains cashflow_lag,
 you must cite kind=rule and id=cashflow_lag. If flags contain value_trap_risk,
 you must cite kind=rule and id=value_trap_risk; stance must not be buy
-(hold at most). Search methodology at most once, and only when a computed
-flag needs interpretation.
+(hold at most). Search methodology at most once after the snapshot.
+Cards are selected from computed_flags first; query only ranks those cards.
 If flags contain roe_insufficient_history: write that single-period ROE is
 not enough to judge long-term quality; never write 不合格 or 未过15门槛.
 If roe_quality is absent and roe_insufficient_history is also absent, read
@@ -78,13 +78,17 @@ class EmptyArgs(BaseModel):
 class SearchArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    query: str = Field(min_length=1)
+    query: str = Field(
+        min_length=1,
+        description=(
+            "Ranks applicable cards only. Cannot retrieve cards that fail "
+            "the snapshot flag applicability filter."
+        ),
+    )
 
 
-class SearchOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    entries: List[Dict[str, str]]
+class SearchOutput(MethodologyToolOutput):
+    pass
 
 
 @dataclass
@@ -149,7 +153,8 @@ def register_fundamental_tools(
             name="search_methodology",
             description=(
                 "Search approved fundamental methodology snippets. "
-                "Use when flags such as cashflow_lag need interpretation."
+                "Snapshot flags decide which cards are eligible; "
+                "query only ranks among those cards."
             ),
             input_model=SearchArgs,
             output_model=SearchOutput,

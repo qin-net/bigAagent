@@ -5,10 +5,13 @@ from pathlib import Path
 import pytest
 
 from insightagent.business_contracts import EvidenceRef, Report
+from insightagent.kb_contract import card_from_payload
 from insightagent.methodology import (
     MethodologyCatalog,
+    SEED_ENTRIES,
     drop_unretrieved_kb,
     parse_entry_markdown,
+    record_search,
     resolve_markdown_path,
     search_methodology,
 )
@@ -21,14 +24,75 @@ def test_empty_query_returns_nothing():
     assert search_methodology("a", scope="fundamental") == []
 
 
-def test_scope_and_flags_gate_rsi():
-    hits = search_methodology("rsi 超买", scope="technical", flags=["rsi_overbought"])
-    assert any(item["id"] == "kb_rsi_overbought" for item in hits)
-    blocked = search_methodology(
+def test_flags_gate_query_only_ranks():
+    noisy = search_methodology(
+        "zzzz unrelated", scope="technical", flags=["rsi_overbought"]
+    )
+    named = search_methodology(
+        "rsi 超买", scope="technical", flags=["rsi_overbought"]
+    )
+    assert [item["id"] for item in noisy] == [item["id"] for item in named]
+    assert named[0]["id"] == "kb_rsi_overbought"
+    assert named[0]["reasons"]
+    assert any(item.startswith("flag:rsi_overbought") for item in named[0]["reasons"])
+    assert any(item.startswith("version:") for item in named[0]["reasons"])
+    ma_hits = search_methodology(
         "rsi 超买", scope="technical", flags=["ma_bull_align"]
     )
-    assert blocked == []
-    assert search_methodology("rsi", scope="fundamental", flags=None) == []
+    assert [item["id"] for item in ma_hits] == ["kb_ma_align"]
+    sneaked = search_methodology(
+        "现金流 利润含金量",
+        scope="fundamental",
+        flags=["ma_bull_align"],
+    )
+    assert sneaked == []
+    empty_flags = search_methodology("rsi 超买", scope="technical", flags=[])
+    assert empty_flags == []
+
+
+def test_query_reranks_applicable_cards():
+    cheap = search_methodology(
+        "扣非", scope="fundamental", flags=["valuation_cheap"]
+    )
+    ids = [item["id"] for item in cheap]
+    assert "kb_valuation" in ids
+    alias = search_methodology(
+        "利润含金量",
+        scope="fundamental",
+        flags=["cashflow_lag", "valuation_cheap"],
+    )
+    assert alias[0]["id"] == "kb_cashflow_lag"
+    assert any("alias:利润含金量" in item or item == "alias:利润含金量" for item in alias[0]["reasons"])
+
+
+def test_seed_card_fixtures():
+    card = card_from_payload(
+        next(item for item in SEED_ENTRIES if item["id"] == "kb_cashflow_lag")
+    )
+    for case in card.tests.should_match:
+        hits = search_methodology(
+            case.query, scope=card.scope[0], flags=case.flags
+        )
+        assert card.id in [item["id"] for item in hits]
+    for case in card.tests.should_not_match:
+        hits = search_methodology(
+            case.query, scope=card.scope[0], flags=case.flags
+        )
+        assert card.id not in [item["id"] for item in hits]
+
+
+def test_record_search_returns_retrieval_id():
+    retrieved = set()
+    payload = record_search(
+        retrieved,
+        "利润含金量",
+        scope="fundamental",
+        flags=["cashflow_lag"],
+    )
+    assert payload["retrieval_id"].startswith("kb-search-")
+    assert payload["entries"][0]["id"] == "kb_cashflow_lag"
+    assert payload["entries"][0]["version"] == "1"
+    assert "kb_cashflow_lag" in retrieved
 
 
 def test_sentiment_scope_without_flags_still_matches_trigger():
@@ -91,14 +155,23 @@ async def test_catalog_seed_import_approve(tmp_path: Path):
     )
     stored = catalog.import_markdown(markdown)
     assert stored["status"] == "candidate"
-    assert catalog.search(
+    pre = catalog.search(
         "扣非", scope="fundamental", flags=["valuation_cheap"]
-    ) == []
+    )
+    assert all(item["id"] != "kb_non_recurring" for item in pre)
     catalog.approve("kb_non_recurring")
     hits = catalog.search(
         "扣非", scope="fundamental", flags=["valuation_cheap"]
     )
-    assert hits[0]["id"] == "kb_non_recurring"
+    ids = [item["id"] for item in hits]
+    assert "kb_non_recurring" in ids
+    assert "kb_valuation" in ids
+    other_query = catalog.search(
+        "zzzz", scope="fundamental", flags=["valuation_cheap"]
+    )
+    other_ids = [item["id"] for item in other_query]
+    assert "kb_valuation" in other_ids
+    assert "kb_non_recurring" in other_ids
 
 
 def test_parse_and_whitelist(tmp_path: Path):

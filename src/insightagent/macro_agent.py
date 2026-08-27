@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .business_contracts import Report
 from .contracts import ResourceType
 from .data_contracts import MacroSnapshot
-from .methodology import record_search
+from .methodology import MethodologyToolOutput, record_search
 from .macros import apply_macro_rules
 from .resources import FunctionResource
 from .runtime import AgentInstance, RuntimeConfig
@@ -36,7 +36,7 @@ Copy LPR and Shibor values exactly from the tool; never round or invent values.
 cycle_tag may only be rate_data_available or insufficient. market_bias may only
 be neutral or unclear. A non-abstained report must contain citations.
 Do not invent tools. Empty methodology results are normal; submit from
-get_macro_snapshot.
+get_macro_snapshot. Query only ranks cards that already match snapshot flags.
 
 Final answer via submit_final:
 - output.report must match the Report schema below
@@ -57,13 +57,17 @@ class EmptyArgs(BaseModel):
 class SearchArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    query: str = Field(min_length=1)
+    query: str = Field(
+        min_length=1,
+        description=(
+            "Ranks applicable cards only. Cannot retrieve cards that fail "
+            "the snapshot flag applicability filter."
+        ),
+    )
 
 
-class SearchOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    entries: List[Dict[str, str]]
+class SearchOutput(MethodologyToolOutput):
+    pass
 
 
 class MacroToolSnapshot(BaseModel):
@@ -140,7 +144,8 @@ def register_macro_tools(agent: AgentInstance, context: MacroToolContext) -> Non
             name="search_methodology",
             description=(
                 "Search approved macro methodology snippets. "
-                "Empty results are normal; finish from get_macro_snapshot."
+                "Snapshot flags decide which cards are eligible; "
+                "query only ranks among those cards."
             ),
             input_model=SearchArgs,
             output_model=SearchOutput,

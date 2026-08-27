@@ -81,7 +81,7 @@ class SearchExistingArgs(BaseModel):
 class ExistingSearchOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    entries: List[Dict[str, str]]
+    entries: List[Dict[str, Any]]
 
 
 class CandidateArgs(BaseModel):

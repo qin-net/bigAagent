@@ -7,15 +7,23 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
+from uuid import uuid4
 
 from pydantic import ValidationError
 
 from .business_contracts import Report
+from .kb_contract import (
+    MethodologyCard,
+    MethodologyToolOutput,
+    RetrievedEntry,
+    card_from_payload,
+    migrate_payload,
+    tokenize_query,
+)
 from .persistence import SQLiteDatabase
 
 TEXT_MAX = 200
 MAX_HITS = 3
-MIN_TOKEN_LEN = 2
 MAX_MARKDOWN_CHARS = 8000
 
 ALLOWED_FLAGS: Dict[str, frozenset] = {
@@ -58,166 +66,178 @@ ALLOWED_FLAGS: Dict[str, frozenset] = {
     "macro": frozenset({"lpr_missing", "lpr_available"}),
 }
 
+
+def _card(
+    *,
+    entry_id: str,
+    title: str,
+    scope: List[str],
+    any_flags: List[str],
+    canonical_terms: List[str],
+    action: str,
+    text: str,
+    priority: int,
+    aliases: Optional[List[str]] = None,
+    intent_tags: Optional[List[str]] = None,
+    mandatory: bool = False,
+    all_flags: Optional[List[str]] = None,
+    none_flags: Optional[List[str]] = None,
+    required_fields: Optional[List[str]] = None,
+    exceptions: Optional[List[str]] = None,
+    tests: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    payload = {
+        "id": entry_id,
+        "title": title,
+        "type": "rule",
+        "scope": scope,
+        "status": "approved",
+        "version": 1,
+        "applicability": {
+            "any_flags": any_flags,
+            "all_flags": all_flags or [],
+            "none_flags": none_flags or [],
+            "required_fields": required_fields or [],
+        },
+        "retrieval": {
+            "canonical_terms": canonical_terms,
+            "aliases": aliases or [],
+            "intent_tags": intent_tags or [],
+            "priority": priority,
+            "mandatory": mandatory,
+        },
+        "guidance": {
+            "action": action,
+            "text": text,
+            "exceptions": exceptions or [],
+        },
+        "source_refs": [],
+        "tests": tests or {"should_match": [], "should_not_match": []},
+    }
+    return MethodologyCard.model_validate(payload).model_dump(mode="json")
+
+
 SEED_ENTRIES: List[Dict[str, Any]] = [
-    {
-        "id": "kb_roe_quality",
-        "title": "长期 ROE 不能看单期",
-        "type": "rule",
-        "scope": ["fundamental"],
-        "status": "approved",
-        "trigger": "roe leverage 盈利能力",
-        "action": "看多年年度 ROE 与杠杆，不把单期年化写成合格或不合格",
-        "evidence_required": ["roe_quality", "roe_insufficient_history"],
-        "exceptions": [],
-        "source_refs": [],
-        "text": "长期 ROE 看多年年度均值与最低值，单期或中报年化不足以判断合格或不合格。",
-        "priority": 100,
-        "version": 1,
-    },
-    {
-        "id": "kb_cashflow_lag",
-        "title": "利润要用经营现金流验证",
-        "type": "rule",
-        "scope": ["fundamental"],
-        "status": "approved",
-        "trigger": "现金流 盈利质量 净利润",
-        "action": "先区分季节性与含金量，不要直接写成崩塌",
-        "evidence_required": [
-            "cashflow_lag",
-            "cashflow_seasonal",
-            "cashflow_quality_issue",
-        ],
-        "exceptions": [],
-        "source_refs": [],
-        "text": "净利润增长但经营现金流为负时，先区分季节性与含金量，再谈盈利质量，不要直接写成崩塌。",
-        "priority": 90,
-        "version": 1,
-    },
-    {
-        "id": "kb_leverage",
-        "title": "高杠杆放大下行风险",
-        "type": "rule",
-        "scope": ["fundamental"],
-        "status": "approved",
-        "trigger": "负债 杠杆 财务风险",
-        "action": "降低安全边际评价",
-        "evidence_required": ["high_leverage"],
-        "exceptions": [],
-        "source_refs": [],
-        "text": "资产负债率过高会放大下行风险，需降低安全边际评价。",
-        "priority": 80,
-        "version": 1,
-    },
-    {
-        "id": "kb_valuation",
-        "title": "估值对照自身分位",
-        "type": "rule",
-        "scope": ["fundamental"],
-        "status": "approved",
-        "trigger": "估值 pe 分位 安全边际",
-        "action": "不要只看绝对 PE",
-        "evidence_required": ["valuation_rich", "valuation_cheap"],
-        "exceptions": [],
-        "source_refs": [],
-        "text": "估值应对照自身历史分位，而不是只看单一 PE。",
-        "priority": 80,
-        "version": 1,
-    },
-    {
-        "id": "kb_value_trap",
-        "title": "便宜不能压过现金流质量",
-        "type": "rule",
-        "scope": ["fundamental"],
-        "status": "approved",
-        "trigger": "value_trap 价值陷阱 便宜 现金流",
-        "action": "value_trap_risk 时不得买入",
-        "evidence_required": ["value_trap_risk"],
-        "exceptions": [],
-        "source_refs": [],
-        "text": "估值便宜不能压过现金流质量问题；value_trap_risk 时不得给出买入。",
-        "priority": 95,
-        "version": 1,
-    },
-    {
-        "id": "kb_macro_rates",
-        "title": "宏观不是买卖理由",
-        "type": "rule",
-        "scope": ["macro"],
-        "status": "approved",
-        "trigger": "lpr 利率 宏观",
-        "action": "只提供环境标签",
-        "evidence_required": ["lpr_missing", "lpr_available"],
-        "exceptions": [],
-        "source_refs": [],
-        "text": "宏观只提供环境标签，不构成个股买卖理由。",
-        "priority": 70,
-        "version": 1,
-    },
-    {
-        "id": "kb_event_reduction",
-        "title": "减持抬升风险感知",
-        "type": "rule",
-        "scope": ["sentiment", "event"],
-        "status": "approved",
-        "trigger": "减持 reduction 控股股东 情绪 事件",
-        "action": "写入 event_flags，不能单独作为买卖点",
-        "evidence_required": ["has_reduction", "holder_reduction"],
-        "exceptions": [],
-        "source_refs": [],
-        "text": "控股股东减持会抬升风险感知，写入 event_flags；不能单独作为买卖点。",
-        "priority": 80,
-        "version": 1,
-    },
-    {
-        "id": "kb_event_buyback",
-        "title": "回购以公告为准",
-        "type": "rule",
-        "scope": ["sentiment", "event"],
-        "status": "approved",
-        "trigger": "回购 buyback 增持 问询 inquiry",
-        "action": "新闻不能单独支撑非弃权",
-        "evidence_required": ["has_buyback", "has_inquiry"],
-        "exceptions": [],
-        "source_refs": [],
-        "text": "回购或增持可对冲减持压力，仍以公告事件为准；新闻不能单独支撑非弃权。",
-        "priority": 80,
-        "version": 1,
-    },
-    {
-        "id": "kb_ma_align",
-        "title": "均线排列不是买卖点",
-        "type": "rule",
-        "scope": ["technical"],
-        "status": "approved",
-        "trigger": "均线 多头 ma_bull_align 排列",
-        "action": "只描述趋势结构",
-        "evidence_required": ["ma_bull_align", "ma_bear_align"],
-        "exceptions": [],
-        "source_refs": [],
-        "text": "均线多头排列描述趋势结构，不构成买卖点；关键位只能引用均线或K线高低。",
-        "priority": 80,
-        "version": 1,
-    },
-    {
-        "id": "kb_rsi_overbought",
-        "title": "RSI 过线才谈超买超卖",
-        "type": "rule",
-        "scope": ["technical"],
-        "status": "approved",
-        "trigger": "rsi 超买 overbought macd 超卖",
-        "action": "趋势仍以均线结构为准",
-        "evidence_required": ["rsi_overbought", "rsi_oversold"],
-        "exceptions": [],
-        "source_refs": [],
-        "text": "RSI 超买或超卖只说明短线过热或超冷，趋势判断仍以均线结构为准。",
-        "priority": 85,
-        "version": 1,
-    },
+    _card(
+        entry_id="kb_roe_quality",
+        title="长期 ROE 不能看单期",
+        scope=["fundamental"],
+        any_flags=["roe_quality", "roe_insufficient_history"],
+        canonical_terms=["roe", "leverage", "盈利能力"],
+        action="看多年年度 ROE 与杠杆，不把单期年化写成合格或不合格",
+        text="长期 ROE 看多年年度均值与最低值，单期或中报年化不足以判断合格或不合格。",
+        priority=100,
+        intent_tags=["quality_check"],
+    ),
+    _card(
+        entry_id="kb_cashflow_lag",
+        title="利润需要经营现金流验证",
+        scope=["fundamental"],
+        any_flags=["cashflow_lag", "cashflow_quality_issue"],
+        canonical_terms=["现金流", "净利润", "盈利质量"],
+        aliases=["经营性现金流", "利润含金量", "现金利润"],
+        intent_tags=["quality_check", "falsifier"],
+        mandatory=True,
+        priority=90,
+        required_fields=["operating_cf", "net_profit"],
+        action="区分季节性和盈利含金量",
+        text="净利润增长但经营现金流为负时，应先判断季节性和现金流质量。",
+        exceptions=["明确存在可验证的行业季节性"],
+        tests={
+            "should_match": [
+                {"flags": ["cashflow_lag"], "query": "利润含金量"},
+            ],
+            "should_not_match": [
+                {"flags": ["ma_bull_align"], "query": "现金流"},
+            ],
+        },
+    ),
+    _card(
+        entry_id="kb_leverage",
+        title="高杠杆放大下行风险",
+        scope=["fundamental"],
+        any_flags=["high_leverage"],
+        canonical_terms=["负债", "杠杆", "财务风险"],
+        action="降低安全边际评价",
+        text="资产负债率过高会放大下行风险，需降低安全边际评价。",
+        priority=80,
+    ),
+    _card(
+        entry_id="kb_valuation",
+        title="估值对照自身分位",
+        scope=["fundamental"],
+        any_flags=["valuation_rich", "valuation_cheap"],
+        canonical_terms=["估值", "pe", "分位", "安全边际"],
+        action="不要只看绝对 PE",
+        text="估值应对照自身历史分位，而不是只看单一 PE。",
+        priority=80,
+    ),
+    _card(
+        entry_id="kb_value_trap",
+        title="便宜不能压过现金流质量",
+        scope=["fundamental"],
+        any_flags=["value_trap_risk"],
+        canonical_terms=["value_trap", "价值陷阱", "便宜", "现金流"],
+        action="value_trap_risk 时不得买入",
+        text="估值便宜不能压过现金流质量问题；value_trap_risk 时不得给出买入。",
+        priority=95,
+        mandatory=True,
+        intent_tags=["falsifier"],
+    ),
+    _card(
+        entry_id="kb_macro_rates",
+        title="宏观不是买卖理由",
+        scope=["macro"],
+        any_flags=["lpr_missing", "lpr_available"],
+        canonical_terms=["lpr", "利率", "宏观"],
+        action="只提供环境标签",
+        text="宏观只提供环境标签，不构成个股买卖理由。",
+        priority=70,
+    ),
+    _card(
+        entry_id="kb_event_reduction",
+        title="减持抬升风险感知",
+        scope=["sentiment", "event"],
+        any_flags=["has_reduction", "holder_reduction"],
+        canonical_terms=["减持", "reduction", "控股股东", "情绪", "事件"],
+        action="写入 event_flags，不能单独作为买卖点",
+        text="控股股东减持会抬升风险感知，写入 event_flags；不能单独作为买卖点。",
+        priority=80,
+    ),
+    _card(
+        entry_id="kb_event_buyback",
+        title="回购以公告为准",
+        scope=["sentiment", "event"],
+        any_flags=["has_buyback", "has_inquiry"],
+        canonical_terms=["回购", "buyback", "增持", "问询", "inquiry"],
+        action="新闻不能单独支撑非弃权",
+        text="回购或增持可对冲减持压力，仍以公告事件为准；新闻不能单独支撑非弃权。",
+        priority=80,
+    ),
+    _card(
+        entry_id="kb_ma_align",
+        title="均线排列不是买卖点",
+        scope=["technical"],
+        any_flags=["ma_bull_align", "ma_bear_align"],
+        canonical_terms=["均线", "多头", "ma_bull_align", "排列"],
+        action="只描述趋势结构",
+        text="均线多头排列描述趋势结构，不构成买卖点；关键位只能引用均线或K线高低。",
+        priority=80,
+    ),
+    _card(
+        entry_id="kb_rsi_overbought",
+        title="RSI 过线才谈超买超卖",
+        scope=["technical"],
+        any_flags=["rsi_overbought", "rsi_oversold"],
+        canonical_terms=["rsi", "超买", "overbought", "macd", "超卖"],
+        action="趋势仍以均线结构为准",
+        text="RSI 超买或超卖只说明短线过热或超冷，趋势判断仍以均线结构为准。",
+        priority=85,
+    ),
 ]
 
 METHODOLOGY_ENTRIES = SEED_ENTRIES
 
-_TOKEN_SPLIT = re.compile(r"[\s/,;|，。、]+")
 _catalog: ContextVar[Optional["MethodologyCatalog"]] = ContextVar(
     "methodology_catalog", default=None
 )
@@ -231,12 +251,92 @@ def reset_catalog(token) -> None:
     _catalog.reset(token)
 
 
-def tokenize_query(query: str) -> List[str]:
-    return [
-        token.lower()
-        for token in _TOKEN_SPLIT.split((query or "").strip())
-        if len(token) >= MIN_TOKEN_LEN
-    ]
+def _flag_set(flags: Optional[Sequence[str]]) -> Set[str]:
+    return {str(item) for item in (flags or []) if item}
+
+
+def _applicable(
+    card: MethodologyCard,
+    flags: Set[str],
+    present_fields: Optional[Set[str]],
+) -> bool:
+    required_any = set(card.applicability.any_flags)
+    required_all = set(card.applicability.all_flags)
+    forbidden = set(card.applicability.none_flags)
+    if required_all and not required_all.issubset(flags):
+        return False
+    if required_any and not (required_any & flags):
+        return False
+    if forbidden & flags:
+        return False
+    needed = set(card.applicability.required_fields)
+    if present_fields is not None and needed and not needed.issubset(present_fields):
+        return False
+    return True
+
+
+def _lexical_hits(terms: Sequence[str], query: str) -> List[str]:
+    haystack = (query or "").strip().lower()
+    if not haystack:
+        return []
+    tokens = tokenize_query(query)
+    matched: List[str] = []
+    for term in terms:
+        needle = str(term).strip().lower()
+        if not needle:
+            continue
+        if needle in haystack or any(
+            token in needle or needle in token for token in tokens
+        ):
+            matched.append(str(term))
+    return matched
+
+
+def _score_card(
+    card: MethodologyCard,
+    flags: Set[str],
+    query: str,
+    intent_tags: Optional[Sequence[str]],
+) -> tuple:
+    reasons: List[str] = []
+    score = 0
+    if card.retrieval.mandatory:
+        score += 1000
+        reasons.append("mandatory")
+    matched_flags = sorted(
+        flags
+        & (set(card.applicability.any_flags) | set(card.applicability.all_flags))
+    )
+    score += len(matched_flags) * 100
+    reasons.extend("flag:{}".format(item) for item in matched_flags)
+    canonical = _lexical_hits(card.retrieval.canonical_terms, query)
+    score += len(canonical) * 20
+    reasons.extend("canonical:{}".format(item) for item in canonical)
+    aliases = _lexical_hits(card.retrieval.aliases, query)
+    score += len(aliases) * 10
+    reasons.extend("alias:{}".format(item) for item in aliases)
+    wanted = {str(item) for item in (intent_tags or []) if item}
+    intents = sorted(wanted & set(card.retrieval.intent_tags))
+    score += len(intents) * 10
+    reasons.extend("intent:{}".format(item) for item in intents)
+    score += int(card.retrieval.priority)
+    reasons.append("priority:{}".format(card.retrieval.priority))
+    reasons.append("version:{}".format(card.version))
+    return score, reasons
+
+
+def _hit_payload(card: MethodologyCard, score: int, reasons: List[str]) -> Dict[str, Any]:
+    trigger = " ".join(card.retrieval.canonical_terms)
+    return RetrievedEntry(
+        id=card.id,
+        version=str(card.version),
+        title=card.title,
+        trigger=trigger,
+        text=card.guidance.text[:TEXT_MAX],
+        action=card.guidance.action,
+        score=score,
+        reasons=reasons,
+    ).model_dump(mode="json")
 
 
 def search_entries(
@@ -245,56 +345,73 @@ def search_entries(
     *,
     scope: Optional[str] = None,
     flags: Optional[Sequence[str]] = None,
+    intent_tags: Optional[Sequence[str]] = None,
+    present_fields: Optional[Sequence[str]] = None,
     statuses: Iterable[str] = ("approved",),
     limit: int = MAX_HITS,
-) -> List[Dict[str, str]]:
+) -> List[Dict[str, Any]]:
     tokens = tokenize_query(query)
-    if not tokens:
+    flag_set = None if flags is None else _flag_set(flags)
+    if flag_set is None and not tokens:
         return []
     allowed_status = set(statuses)
-    flag_set = set(flags) if flags is not None else None
+    fields = None if present_fields is None else {str(item) for item in present_fields}
     scored: List[tuple] = []
-    for entry in entries:
-        if entry.get("status") not in allowed_status:
+    for raw in entries:
+        if raw.get("status") not in allowed_status:
             continue
-        scopes = entry.get("scope") or []
-        if scope is not None and scope not in scopes:
+        try:
+            card = card_from_payload(raw)
+        except ValidationError:
             continue
-        required = [str(item) for item in entry.get("evidence_required") or []]
-        if flag_set is not None:
-            if not required or not (set(required) & flag_set):
+        if scope is not None and scope not in card.scope:
+            continue
+        if flag_set is None:
+            haystack = " ".join(
+                [card.id]
+                + card.retrieval.canonical_terms
+                + card.retrieval.aliases
+            ).lower()
+            if not any(token in haystack for token in tokens):
                 continue
-        haystack = " ".join(
-            [str(entry.get("id") or ""), str(entry.get("trigger") or "")]
-        ).lower()
-        if not any(token in haystack for token in tokens):
-            continue
-        priority = int(entry.get("priority") or 0)
-        scored.append((priority, entry))
-    scored.sort(key=lambda item: item[0], reverse=True)
-    hits = []
-    for _, entry in scored[:limit]:
-        hits.append(
-            {
-                "id": str(entry["id"]),
-                "version": str(entry.get("version") or 1),
-                "trigger": str(entry.get("trigger") or ""),
-                "text": str(entry.get("text") or "")[:TEXT_MAX],
-            }
-        )
-    return hits
+            score, reasons = _score_card(card, set(), query, intent_tags)
+        else:
+            if not _applicable(card, flag_set, fields):
+                continue
+            score, reasons = _score_card(card, flag_set, query, intent_tags)
+        scored.append((score, card.id, card, reasons))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [
+        _hit_payload(card, score, reasons)
+        for score, _, card, reasons in scored[:limit]
+    ]
 
 
 def search_methodology(
-    query: str,
+    query: str = "",
     *,
     scope: Optional[str] = None,
     flags: Optional[Sequence[str]] = None,
-) -> List[Dict[str, str]]:
+    intent_tags: Optional[Sequence[str]] = None,
+    present_fields: Optional[Sequence[str]] = None,
+) -> List[Dict[str, Any]]:
     catalog = _catalog.get()
     if catalog is not None:
-        return catalog.search(query, scope=scope, flags=flags)
-    return search_entries(SEED_ENTRIES, query, scope=scope, flags=flags)
+        return catalog.search(
+            query,
+            scope=scope,
+            flags=flags,
+            intent_tags=intent_tags,
+            present_fields=present_fields,
+        )
+    return search_entries(
+        SEED_ENTRIES,
+        query,
+        scope=scope,
+        flags=flags,
+        intent_tags=intent_tags,
+        present_fields=present_fields,
+    )
 
 
 def drop_unretrieved_kb(report: Report, retrieved_ids: Set[str]) -> Report:
@@ -323,24 +440,41 @@ def record_search(
     *,
     scope: str,
     flags: Optional[Sequence[str]] = None,
+    intent_tags: Optional[Sequence[str]] = None,
+    present_fields: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
-    entries = search_methodology(query, scope=scope, flags=flags)
+    entries = search_methodology(
+        query,
+        scope=scope,
+        flags=flags,
+        intent_tags=intent_tags,
+        present_fields=present_fields,
+    )
     for item in entries:
         retrieved_ids.add(item["id"])
-    return {"entries": entries}
+    return MethodologyToolOutput(
+        retrieval_id="kb-search-{}".format(uuid4().hex[:8]),
+        entries=[RetrievedEntry.model_validate(item) for item in entries],
+    ).model_dump(mode="json")
 
 
 def allowed_flags_for(scope: str) -> List[str]:
     return sorted(ALLOWED_FLAGS.get(scope, frozenset()))
 
 
+def _collect_flags(card: MethodologyCard) -> List[str]:
+    return (
+        list(card.applicability.any_flags)
+        + list(card.applicability.all_flags)
+        + list(card.applicability.none_flags)
+    )
+
+
 def validate_candidate_payload(
     payload: Dict[str, Any], *, scope: Optional[str] = None
 ) -> Dict[str, Any]:
-    entry_id = str(payload.get("id") or "").strip()
-    if not entry_id or " " in entry_id:
-        raise ValueError("candidate id is required and must be one token")
-    scopes = payload.get("scope") or []
+    migrated = migrate_payload(payload)
+    scopes = migrated.get("scope") or []
     if isinstance(scopes, str):
         scopes = [item.strip() for item in scopes.split(",") if item.strip()]
     if not scopes:
@@ -350,46 +484,33 @@ def validate_candidate_payload(
             raise ValueError("candidate scope is required")
     if scope and scope not in scopes:
         raise ValueError("candidate scope must include {}".format(scope))
-    text = str(payload.get("text") or "").strip()
-    if not text:
-        raise ValueError("candidate text is required")
-    if len(text) > TEXT_MAX:
-        text = text[:TEXT_MAX]
-    required = [str(item) for item in payload.get("evidence_required") or []]
-    if not required:
-        raise ValueError("evidence_required is required")
+    migrated["scope"] = list(scopes)
+    migrated.setdefault("title", migrated.get("id") or "")
+    text = str((migrated.get("guidance") or {}).get("text") or "").strip()
+    if text and len(text) > TEXT_MAX:
+        migrated.setdefault("guidance", {})
+        migrated["guidance"]["text"] = text[:TEXT_MAX]
+    try:
+        card = MethodologyCard.model_validate(migrated)
+    except ValidationError as error:
+        raise ValueError(str(error)) from error
     allowed: Set[str] = set()
-    for item in scopes:
+    for item in card.scope:
         allowed |= set(ALLOWED_FLAGS.get(item, frozenset()))
-    unknown = [item for item in required if item not in allowed]
+    unknown = [item for item in _collect_flags(card) if item not in allowed]
     if unknown:
         raise ValueError(
             "evidence_required not in frozen flags: {}".format(
                 ", ".join(unknown)
             )
         )
-    trigger = str(payload.get("trigger") or "").strip()
-    if not trigger:
-        raise ValueError("trigger is required")
     now = datetime.now(timezone.utc).isoformat()
-    return {
-        "id": entry_id,
-        "title": str(payload.get("title") or entry_id),
-        "type": str(payload.get("type") or "rule"),
-        "scope": list(scopes),
-        "status": "candidate",
-        "trigger": trigger,
-        "action": str(payload.get("action") or ""),
-        "evidence_required": required,
-        "exceptions": list(payload.get("exceptions") or []),
-        "source_refs": list(payload.get("source_refs") or []),
-        "text": text,
-        "priority": int(payload.get("priority") or 50),
-        "version": 1,
-        "created_at": now,
-        "updated_at": now,
-        "change_note": str(payload.get("change_note") or "distill"),
-    }
+    dumped = card.model_dump(mode="json")
+    dumped["status"] = "candidate"
+    dumped["created_at"] = now
+    dumped["updated_at"] = now
+    dumped["change_note"] = str(payload.get("change_note") or "distill")
+    return dumped
 
 
 def parse_entry_markdown(text: str) -> Dict[str, Any]:
@@ -466,13 +587,17 @@ class MethodologyCatalog:
         *,
         scope: Optional[str] = None,
         flags: Optional[Sequence[str]] = None,
+        intent_tags: Optional[Sequence[str]] = None,
+        present_fields: Optional[Sequence[str]] = None,
         statuses: Iterable[str] = ("approved",),
-    ) -> List[Dict[str, str]]:
+    ) -> List[Dict[str, Any]]:
         return search_entries(
             self.list_payloads(statuses=statuses),
             query,
             scope=scope,
             flags=flags,
+            intent_tags=intent_tags,
+            present_fields=present_fields,
             statuses=statuses,
         )
 
