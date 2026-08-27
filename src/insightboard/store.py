@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+import json
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -127,6 +128,126 @@ class BoardStore:
             connection.execute(
                 "INSERT OR IGNORE INTO schema_meta(key, value) VALUES('version', '1')"
             )
+
+    def initialize_research(self) -> None:
+        with self._connection() as connection:
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS research_job (
+                    job_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    parent_run_id TEXT,
+                    run_id TEXT,
+                    status TEXT NOT NULL,
+                    error TEXT,
+                    prompt TEXT,
+                    noop INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS research_job_stock_status
+                    ON research_job(stock_code, status, created_at DESC);
+                """
+            )
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(research_job)").fetchall()}
+            if "rerun_dimensions" not in columns:
+                connection.execute("ALTER TABLE research_job ADD COLUMN rerun_dimensions TEXT NOT NULL DEFAULT ''")
+
+    def create_research_job(
+        self, stock_code: str, *, kind: str = "analyze", prompt: str = "none",
+        parent_run_id: Optional[str] = None, user_id: str = "local",
+    ) -> dict:
+        if len(stock_code) != 6 or not stock_code.isdigit():
+            raise ValueError("invalid stock code")
+        if kind not in {"analyze", "feedback"}:
+            raise ValueError("invalid research job kind")
+        now = utc_now()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            active = connection.execute(
+                "SELECT * FROM research_job WHERE stock_code=? AND status IN ('queued','running') ORDER BY created_at LIMIT 1",
+                (stock_code,),
+            ).fetchone()
+            if active:
+                return {**dict(active), "existing": True}
+            job_id = uuid.uuid4().hex
+            connection.execute(
+                "INSERT INTO research_job(job_id,user_id,stock_code,kind,parent_run_id,status,prompt,created_at,updated_at) VALUES(?,?,?,?,?,'queued',?,?,?)",
+                (job_id, user_id, stock_code, kind, parent_run_id, None, now, now),
+            )
+            row = connection.execute("SELECT * FROM research_job WHERE job_id=?", (job_id,)).fetchone()
+        return {**dict(row), "existing": False}
+
+    def recover_research(self, *, older_than_minutes: int = 30) -> int:
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)).isoformat()
+        with self._connection() as connection:
+            result = connection.execute(
+                "UPDATE research_job SET status='queued', updated_at=? WHERE status='running' AND updated_at<?",
+                (utc_now(), cutoff),
+            )
+        return result.rowcount
+
+    def claim_research(self) -> Optional[dict]:
+        now = utc_now()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM research_job WHERE status='queued' ORDER BY created_at LIMIT 1"
+            ).fetchone()
+            if not row:
+                return None
+            connection.execute(
+                "UPDATE research_job SET status='running', updated_at=? WHERE job_id=? AND status='queued'",
+                (now, row["job_id"]),
+            )
+        return dict(row)
+
+    def finish_research(
+        self, job_id: str, *, run_id: Optional[str] = None,
+        error: Optional[str] = None, noop: bool = False,
+        rerun_dimensions: Optional[Sequence[str]] = None,
+    ) -> None:
+        now = utc_now()
+        status = "failed" if error else ("unchanged" if noop else "success")
+        with self._connection() as connection:
+            connection.execute(
+                "UPDATE research_job SET status=?,run_id=?,error=?,noop=?,rerun_dimensions=?,updated_at=? WHERE job_id=?",
+                (status, run_id, (error or "")[:300] or None, int(noop), json.dumps(list(rerun_dimensions or []), ensure_ascii=False), now, job_id),
+            )
+
+    def research_job(self, job_id: str) -> Optional[dict]:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT job_id,user_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE job_id=?",
+                (job_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def research_history(self, stock_code: str, limit: int = 20) -> list[dict]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT job_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE stock_code=? ORDER BY created_at DESC LIMIT ?",
+                (stock_code, min(max(limit, 1), 20)),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def research_job_by_run(self, run_id: str) -> Optional[dict]:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT job_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE run_id=? ORDER BY updated_at DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def current_research(self, stock_code: str) -> Optional[dict]:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT job_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE stock_code=? AND status IN ('success','unchanged') AND run_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1",
+                (stock_code,),
+            ).fetchone()
+        return dict(row) if row else None
 
     def replace_quotes(self, quotes: Sequence[QuoteInput], *, source: str) -> str:
         if not quotes:

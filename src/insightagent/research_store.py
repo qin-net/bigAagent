@@ -152,6 +152,29 @@ class ResearchStore:
         finally:
             connection.close()
 
+    async def get_intent_for_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        await self.database.initialize()
+        return await asyncio.to_thread(self._get_intent_for_run_sync, run_id)
+
+    def _get_intent_for_run_sync(self, run_id: str) -> Optional[Dict[str, Any]]:
+        connection = self.database.connect()
+        try:
+            row = connection.execute(
+                """
+                SELECT i.effect, i.fundamental, i.technical, i.sentiment,
+                       i.macro, i.decision, i.tracking, i.not_evidence,
+                       u.created_at
+                FROM user_intents i
+                JOIN user_utterances u ON u.intent_id = i.intent_id
+                WHERE u.run_id = ?
+                ORDER BY u.created_at DESC LIMIT 1
+                """,
+                (run_id,),
+            ).fetchone()
+            return dict(row) if row else None
+        finally:
+            connection.close()
+
     async def get_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         await self.database.initialize()
         return await asyncio.to_thread(self._get_run_sync, run_id)
