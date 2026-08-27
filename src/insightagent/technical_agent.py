@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,7 +13,7 @@ from .data_contracts import (
     KlineSnapshot,
     PriceSnapshot,
 )
-from .fundamentals import search_methodology
+from .methodology import record_search
 from .resources import FunctionResource
 from .runtime import AgentInstance, RuntimeConfig
 from .technicals import apply_technical_rules
@@ -82,6 +82,7 @@ class TechnicalToolContext:
     indicator: IndicatorSnapshot
     price: PriceSnapshot
     kline: KlineSnapshot
+    retrieved_kb_ids: set = field(default_factory=set)
 
 
 def technical_runtime_config(
@@ -127,7 +128,12 @@ def register_technical_tools(
         return context.kline.model_dump(mode="json")
 
     def search(query: str) -> Dict[str, Any]:
-        return {"entries": search_methodology(query, scope="technical")}
+        return record_search(
+            context.retrieved_kb_ids,
+            query,
+            scope="technical",
+            flags=rules["flags"],
+        )
 
     agent.register_tool(
         FunctionResource(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .business_contracts import Report
 from .contracts import ResourceType
 from .data_contracts import MacroSnapshot
-from .fundamentals import search_methodology
+from .methodology import record_search
 from .macros import apply_macro_rules
 from .resources import FunctionResource
 from .runtime import AgentInstance, RuntimeConfig
@@ -82,6 +82,7 @@ class MacroToolContext:
     industry: str
     stock_code: str
     company_name: str
+    retrieved_kb_ids: set = field(default_factory=set)
 
 
 def macro_runtime_config(
@@ -117,7 +118,12 @@ def register_macro_tools(agent: AgentInstance, context: MacroToolContext) -> Non
         return payload
 
     def search(query: str) -> Dict[str, Any]:
-        return {"entries": search_methodology(query, scope="macro")}
+        return record_search(
+            context.retrieved_kb_ids,
+            query,
+            scope="macro",
+            flags=rules["flags"],
+        )
 
     agent.register_tool(
         FunctionResource(

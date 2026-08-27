@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,7 +10,7 @@ from .business_contracts import Report
 from .contracts import ResourceType
 from .data_contracts import EventSnapshot, HolderChangeSnapshot
 from .events import apply_event_rules
-from .fundamentals import search_methodology
+from .methodology import record_search
 from .resources import FunctionResource
 from .runtime import AgentInstance, RuntimeConfig
 
@@ -71,6 +71,7 @@ class SearchOutput(BaseModel):
 class SentimentToolContext:
     events: EventSnapshot
     holders: HolderChangeSnapshot
+    retrieved_kb_ids: set = field(default_factory=set)
 
 
 def sentiment_runtime_config(
@@ -108,7 +109,12 @@ def register_sentiment_tools(
         return context.holders.model_dump(mode="json")
 
     def search(query: str) -> Dict[str, Any]:
-        return {"entries": search_methodology(query, scope="sentiment")}
+        return record_search(
+            context.retrieved_kb_ids,
+            query,
+            scope="sentiment",
+            flags=rules["flags"],
+        )
 
     agent.register_tool(
         FunctionResource(

@@ -30,7 +30,7 @@ def _macro_snapshot(*, lpr_1y: Optional[float] = 3.0) -> MacroSnapshot:
 
 def test_macro_rules_only_flag_missing_lpr():
     available = _macro_snapshot()
-    assert apply_macro_rules(available)["flags"] == []
+    assert apply_macro_rules(available)["flags"] == ["lpr_available"]
     assert apply_macro_rules(available)["cycle_tag"] == "rate_data_available"
     missing = apply_macro_rules(_macro_snapshot(lpr_1y=None))
     assert missing["flags"] == ["lpr_missing"]

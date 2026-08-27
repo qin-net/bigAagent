@@ -57,6 +57,12 @@ from ..macro_agent import (
 from ..events import apply_computed_sentiment_semantics, apply_event_rules
 from ..macros import apply_computed_macro_semantics
 from ..market import synthetic_market_fixture
+from ..methodology import (
+    MethodologyCatalog,
+    bind_catalog,
+    drop_unretrieved_kb,
+    reset_catalog,
+)
 from ..persistence import (
     FileArtifactStore,
     SQLiteAuditLog,
@@ -1266,6 +1272,12 @@ async def _prepare_intent(
     )
 
 
+def _activate_catalog(database: SQLiteDatabase):
+    catalog = MethodologyCatalog(database)
+    catalog.ensure_seeded()
+    return bind_catalog(catalog)
+
+
 def _decision_constraint(intent, prefs) -> str:
     parts = []
     if intent.decision != NONE:
@@ -1299,9 +1311,9 @@ async def _run_fundamental_agent(
         state_store=SQLiteStateStore(database),
         context_archive=SQLiteContextArchive(database),
     )
-    register_fundamental_tools(
-        agent, FundamentalToolContext(snapshot=snapshot, artifacts=artifacts)
-    )
+    ctx = FundamentalToolContext(snapshot=snapshot, artifacts=artifacts)
+    register_fundamental_tools(agent, ctx)
+    token = _activate_catalog(database)
     try:
         final = await agent.run(
             user_query,
@@ -1314,7 +1326,15 @@ async def _run_fundamental_agent(
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
-    return sanitize_report(parse_report(final.output)), session_id
+    finally:
+        reset_catalog(token)
+    return (
+        drop_unretrieved_kb(
+            sanitize_report(parse_report(final.output)),
+            ctx.retrieved_kb_ids,
+        ),
+        session_id,
+    )
 
 
 def _severely_missing(snapshot: FundamentalSnapshot) -> bool:
@@ -1440,6 +1460,9 @@ async def _run_technical_agent(
     price = PriceSnapshot(**tech_fields["price"])
     kline = KlineSnapshot(**tech_fields["kline"])
     tech_rules = apply_technical_rules(indicator, price, kline)
+    ctx = TechnicalToolContext(
+        indicator=indicator, price=price, kline=kline
+    )
     agent = AgentInstance(
         name="technical",
         llm_adapter=llm_adapter,
@@ -1449,12 +1472,8 @@ async def _run_technical_agent(
         state_store=SQLiteStateStore(database),
         context_archive=SQLiteContextArchive(database),
     )
-    register_technical_tools(
-        agent,
-        TechnicalToolContext(
-            indicator=indicator, price=price, kline=kline
-        ),
-    )
+    register_technical_tools(agent, ctx)
+    token = _activate_catalog(database)
     try:
         final = await agent.run(
             user_query,
@@ -1467,8 +1486,13 @@ async def _run_technical_agent(
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
+    finally:
+        reset_catalog(token)
     report = apply_computed_technical_semantics(
-        sanitize_report(parse_technical_report(final.output)),
+        drop_unretrieved_kb(
+            sanitize_report(parse_technical_report(final.output)),
+            ctx.retrieved_kb_ids,
+        ),
         tech_rules,
     )
     return report, session_id
@@ -1488,6 +1512,7 @@ async def _run_sentiment_agent(
     run.session_ids["sentiment"] = session_id
     events = EventSnapshot(**sent_fields["events"])
     holders = HolderChangeSnapshot(**sent_fields["holders"])
+    ctx = SentimentToolContext(events=events, holders=holders)
     agent = AgentInstance(
         name="sentiment",
         llm_adapter=llm_adapter,
@@ -1497,10 +1522,8 @@ async def _run_sentiment_agent(
         state_store=SQLiteStateStore(database),
         context_archive=SQLiteContextArchive(database),
     )
-    register_sentiment_tools(
-        agent,
-        SentimentToolContext(events=events, holders=holders),
-    )
+    register_sentiment_tools(agent, ctx)
+    token = _activate_catalog(database)
     try:
         final = await agent.run(
             user_query,
@@ -1513,9 +1536,14 @@ async def _run_sentiment_agent(
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
+    finally:
+        reset_catalog(token)
     flags = apply_event_rules(events, holders)["flags"]
     report = apply_computed_sentiment_semantics(
-        sanitize_report(parse_sentiment_report(final.output)),
+        drop_unretrieved_kb(
+            sanitize_report(parse_sentiment_report(final.output)),
+            ctx.retrieved_kb_ids,
+        ),
         flags,
     )
     return report, session_id
@@ -1534,6 +1562,12 @@ async def _run_macro_agent(
     session_id = str(uuid4())
     run.session_ids["macro"] = session_id
     macro = MacroSnapshot(**macro_fields["macro"])
+    ctx = MacroToolContext(
+        macro=macro,
+        industry=macro_fields["industry"],
+        stock_code=macro_fields["stock_code"],
+        company_name=macro_fields["company_name"],
+    )
     agent = AgentInstance(
         name="macro",
         llm_adapter=llm_adapter,
@@ -1541,15 +1575,8 @@ async def _run_macro_agent(
         state_store=SQLiteStateStore(database),
         context_archive=SQLiteContextArchive(database),
     )
-    register_macro_tools(
-        agent,
-        MacroToolContext(
-            macro=macro,
-            industry=macro_fields["industry"],
-            stock_code=macro_fields["stock_code"],
-            company_name=macro_fields["company_name"],
-        ),
-    )
+    register_macro_tools(agent, ctx)
+    token = _activate_catalog(database)
     try:
         final = await agent.run(
             user_query,
@@ -1562,11 +1589,16 @@ async def _run_macro_agent(
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
-    report = sanitize_report(
-        apply_computed_macro_semantics(
-            parse_macro_report(final.output),
-            macro=macro,
-        )
+    finally:
+        reset_catalog(token)
+    report = drop_unretrieved_kb(
+        sanitize_report(
+            apply_computed_macro_semantics(
+                parse_macro_report(final.output),
+                macro=macro,
+            )
+        ),
+        ctx.retrieved_kb_ids,
     )
     return report, session_id
 

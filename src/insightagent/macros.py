@@ -10,6 +10,8 @@ def apply_macro_rules(macro: MacroSnapshot) -> Dict[str, Any]:
     flags = []
     if macro.lpr_1y is None:
         flags.append("lpr_missing")
+    else:
+        flags.append("lpr_available")
     return {
         "flags": flags,
         "cycle_tag": "rate_data_available"

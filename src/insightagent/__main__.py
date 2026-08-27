@@ -104,6 +104,24 @@ def build_parser() -> argparse.ArgumentParser:
     pdf2md.add_argument("--out", default=str(DEFAULT_MARKDOWN_DIR))
     pdf2md.add_argument("--force", action="store_true")
     pdf2md.add_argument("--json", action="store_true", dest="as_json")
+    kb = commands.add_parser("kb", help="Methodology catalog")
+    kb.add_argument("--path", default=DEFAULT_DB_PATH)
+    kb_commands = kb.add_subparsers(dest="kb_command", required=True)
+    kb_commands.add_parser("seed", help="Insert built-in approved cards if empty")
+    imported = kb_commands.add_parser("import", help="Import a candidate from markdown")
+    imported.add_argument("markdown")
+    approve = kb_commands.add_parser("approve")
+    approve.add_argument("entry_id")
+    show = kb_commands.add_parser("show")
+    show.add_argument("entry_id")
+    listed = kb_commands.add_parser("list")
+    listed.add_argument("--status", default="")
+    distill = kb_commands.add_parser("distill")
+    distill.add_argument("markdown")
+    distill.add_argument("--scope", required=True)
+    distill.add_argument("--model", default="deepseek-v4-flash")
+    distill.add_argument("--json", action="store_true", dest="as_json")
+    distill.add_argument("--no-thinking", action="store_true")
     return parser
 
 
@@ -126,10 +144,15 @@ async def _run(args: argparse.Namespace) -> int:
         return await _run_feedback(args)
     if args.command == "pdf2md":
         return _run_pdf2md(args)
+    if args.command == "kb":
+        return await _run_kb(args)
 
     database = SQLiteDatabase(args.path)
     if args.db_command == "init":
         await database.initialize()
+        from .methodology import MethodologyCatalog
+
+        MethodologyCatalog(database).ensure_seeded()
         status = await database.status()
         print(
             json.dumps(
@@ -153,6 +176,88 @@ async def _run(args: argparse.Namespace) -> int:
         )
         return 0
     raise RuntimeError("Unknown database command")
+
+
+async def _run_kb(args: argparse.Namespace) -> int:
+    from .methodology import MethodologyCatalog
+    from .tracking_agent import distill_chapter
+
+    database = SQLiteDatabase(args.path)
+    await database.initialize()
+    catalog = MethodologyCatalog(database)
+    catalog.ensure_seeded()
+    command = args.kb_command
+    if command == "seed":
+        print(
+            json.dumps(
+                {"seeded": True, "count": len(catalog.list_payloads())},
+                ensure_ascii=False,
+            )
+        )
+        return 0
+    if command == "import":
+        stored = catalog.import_markdown(Path(args.markdown))
+        print(json.dumps(stored, ensure_ascii=False, indent=2))
+        return 0
+    if command == "approve":
+        stored = catalog.approve(args.entry_id)
+        print(json.dumps(stored, ensure_ascii=False, indent=2))
+        return 0
+    if command == "show":
+        item = catalog.get(args.entry_id)
+        if item is None:
+            print("unknown entry: {}".format(args.entry_id))
+            return 1
+        print(json.dumps(item, ensure_ascii=False, indent=2))
+        return 0
+    if command == "list":
+        statuses = None
+        if args.status:
+            statuses = [
+                item.strip()
+                for item in args.status.split(",")
+                if item.strip()
+            ]
+        items = catalog.list_payloads(statuses=statuses)
+        print(
+            json.dumps(
+                [
+                    {
+                        "id": item["id"],
+                        "status": item["status"],
+                        "version": item["version"],
+                        "title": item["title"],
+                        "scope": item["scope"],
+                    }
+                    for item in items
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+    if command == "distill":
+        result = await distill_chapter(
+            args.markdown,
+            scope=args.scope,
+            database=database,
+            llm_adapter=build_llm(args.model),
+            model=args.model,
+            thinking_enabled=not args.no_thinking,
+        )
+        print(
+            json.dumps(
+                {
+                    "submitted_ids": result.submitted_ids,
+                    "notes": result.notes,
+                    "session_id": result.session_id,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+    return 1
 
 
 def _run_pdf2md(args: argparse.Namespace) -> int:

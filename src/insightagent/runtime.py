@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Type
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 
 from .business_contracts import Report
 from .context import (
@@ -108,8 +108,24 @@ class SubmitFinalArgs(BaseModel):
     state_patch: SubmitStatePatch = Field(default_factory=SubmitStatePatch)
 
 
-def _submit_final_tool(*, strict: bool) -> Dict[str, Any]:
-    schema = SubmitFinalArgs.model_json_schema()
+def _submit_args_for(output_model: Type[BaseModel]) -> Type[BaseModel]:
+    class Forbidden(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+    return create_model(
+        "SubmitFinalArgsCustom",
+        __base__=Forbidden,
+        status=(Literal["completed", "abstained", "degraded"], "completed"),
+        output=(output_model, ...),
+        reflection=(ModelReflection, Field(default_factory=ModelReflection)),
+        state_patch=(SubmitStatePatch, Field(default_factory=SubmitStatePatch)),
+    )
+
+
+def _submit_final_tool(
+    *, strict: bool, args_model: Type[BaseModel] = SubmitFinalArgs
+) -> Dict[str, Any]:
+    schema = args_model.model_json_schema()
     if strict:
         schema = to_strict_json_schema(schema)
     function: Dict[str, Any] = {
@@ -164,6 +180,7 @@ class RuntimeConfig:
     max_parallel_calls: int = 4
     strict_tools: bool = True
     user_id: Optional[str] = None
+    final_output_model: Type[BaseModel] = SubmitFinalOutput
 
 
 class AgentLocalScheduler:
@@ -188,6 +205,11 @@ class AgentLocalScheduler:
         self.llm = llm_adapter
         self.config = config
         self.tracer: Optional[LoopTracer] = None
+        self._submit_args = (
+            SubmitFinalArgs
+            if config.final_output_model is SubmitFinalOutput
+            else _submit_args_for(config.final_output_model)
+        )
 
     async def run_agent_loop(
         self,
@@ -325,7 +347,11 @@ class AgentLocalScheduler:
             strict=self.config.strict_tools
         )
         if self.config.strict_tools:
-            definitions.append(_submit_final_tool(strict=True))
+            definitions.append(
+                _submit_final_tool(
+                    strict=True, args_model=self._submit_args
+                )
+            )
             definitions.sort(
                 key=lambda item: item.get("function", {}).get("name", "")
             )
@@ -586,7 +612,7 @@ class AgentLocalScheduler:
 
         output: Dict[str, Any]
         try:
-            submitted = SubmitFinalArgs.model_validate(payload)
+            submitted = self._submit_args.model_validate(payload)
             output = submitted.output.model_dump(
                 mode="json", exclude_none=True
             )
