@@ -253,6 +253,7 @@ async def analyze_stock(
     thinking_enabled: bool = True,
     unbound_policy: UnboundPolicy = "fail",
     adapter: Optional[MarketDataAdapter] = None,
+    technical_adapter: Optional[Any] = None,
     technical_llm_adapter: Optional[LLMAdapter] = None,
     sentiment_llm_adapter: Optional[LLMAdapter] = None,
     macro_llm_adapter: Optional[LLMAdapter] = None,
@@ -328,7 +329,7 @@ async def analyze_stock(
         macro_fixture_payload = (
             synthetic_market_fixture(code) if fixture else None
         )
-        technical_adapter = build_market_adapter_for(
+        technical_adapter = technical_adapter or build_market_adapter_for(
             fixture=fixture,
             dimension="technical",
             fixture_payload=tech_fixture_payload,
@@ -344,9 +345,18 @@ async def analyze_stock(
             fixture_payload=macro_fixture_payload,
         )
 
-        tech_fields = await fetch_retry.execute(
-            technical_adapter.fetch_technical, code
-        )
+        try:
+            tech_fields = await fetch_retry.execute(
+                technical_adapter.fetch_technical, code
+            )
+        except Exception:
+            if technical_adapter is not None and not fixture:
+                tech_fields = await fetch_retry.execute(
+                    build_market_adapter_for(fixture=False, dimension="technical").fetch_technical,
+                    code,
+                )
+            else:
+                raise
         sent_fields = await fetch_retry.execute(
             sentiment_adapter.fetch_sentiment, code
         )
