@@ -90,17 +90,6 @@ def evaluate_tracker_capability(
         weight=2,
     )
 
-    for item in successful:
-        output = item.get("output") if isinstance(item.get("output"), dict) else {}
-        leaked = REPORT_KEYS & set(output)
-        _add(
-            checks,
-            "expert_{}_not_full_report".format(item.get("agent")),
-            not leaked,
-            "leaked={}".format(sorted(leaked) or "none"),
-            weight=2,
-        )
-
     schema_ok = True
     schema_detail = "no call_*"
     for payload in call_args:

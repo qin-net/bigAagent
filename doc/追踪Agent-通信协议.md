@@ -184,9 +184,11 @@
 | 题 | | `question` + `reason` |
 | **交卷长什么样** | | **`output_schema`** |
 
-旧设计文档写过「不能改输出 schema」。那是把专家锁成首次研究的整份 `Report`。跟踪不该这样：调度这次可能只要「这个证伪条件有没有打中」，不要 5 分评分和 stance。
+旧设计文档写过「不能改输出 schema」。那是把专家锁成首次研究的整份 `Report`。跟踪不该**系统强制**交完整 Report。
 
-所以：**首次研究继续用固定 Report；跟踪叫醒用追踪当场给的 schema。** 两套任务，不是两套专家人格。
+追踪当场要什么形状就写什么：只要一句话、要 thesis 影响、要 5 分和 stance，都可以。仓库**不**冻最小卷，也不禁 Report 字段。约束只在：必须是合法 object schema，交卷必须通过该 schema；首次研究仍用固定 Report。
+
+所以：**首次研究继续用固定 Report；跟踪叫醒用追踪当场给的 schema，内容完全由追踪定。** 两套任务，不是两套专家人格。
 
 ### 5.3 追踪 → 专家的 Task（要定的输入）
 
@@ -332,8 +334,8 @@ DeepSeek strict 工具不能传开放 object，所以 `call_*` 参数里的 `out
 
 ## 8. 请审的点
 
-1. §5.2：跟踪叫醒由追踪下发 `output_schema`，首次研究仍用固定 Report。是否就按这个冻？  
-2. schema 要不要一个仓库级「跟踪最小卷」（answer / thesis_impact / evidence_refs / abstain），追踪只能加字段不能删必填？还是每次完全自由？  
+1. §5.2：跟踪叫醒由追踪下发 `output_schema`，首次研究仍用固定 Report。**已冻。**  
+2. schema 要不要仓库级「跟踪最小卷」？**不要。** 每次完全自由，追踪要 score/stance 也可以。  
 3. 专家 System 里还要不要印任何默认交卷形状，还是 System 只写身份+禁区，交卷形状全部来自 Task？  
 4. 一轮一个专家、多轮可多个：是否仍按 §3？  
 5. `invalidate` 要不要立刻进综合决策，还是只打标？  
