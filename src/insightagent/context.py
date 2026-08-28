@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, List, Optional, Protocol, Set
 from uuid import uuid4
 
 from .contracts import LLMMessage
@@ -287,7 +287,7 @@ class ContextCompactor:
         self, messages: List[LLMMessage], layers: List[str]
     ) -> CompactionResult:
         return CompactionResult(
-            messages=messages,
+            messages=_repair_tool_protocol(messages),
             layers_applied=list(layers),
             estimated_tokens=self.token_counter.count_messages(messages),
         )
@@ -413,6 +413,9 @@ class ContextCompactor:
         self, messages: List[LLMMessage]
     ) -> List[LLMMessage]:
         keep_count = min(2, len(messages))
+        active_from = _active_tool_chain_start(messages)
+        if active_from is not None:
+            keep_count = max(keep_count, len(messages) - active_from)
         old = messages[:-keep_count] if keep_count else messages
         recent = messages[-keep_count:] if keep_count else []
         if not old:
@@ -435,6 +438,24 @@ class ContextCompactor:
             },
         )
         return [summary_message] + recent
+
+
+def _repair_tool_protocol(messages: List[LLMMessage]) -> List[LLMMessage]:
+    """Drop tool rows whose parent assistant tool_calls were compacted away."""
+    open_ids: Set[str] = set()
+    repaired: List[LLMMessage] = []
+    for message in messages:
+        if message.role == "assistant" and message.tool_calls:
+            open_ids = {call.id for call in message.tool_calls}
+            repaired.append(message)
+            continue
+        if message.role == "tool":
+            if message.tool_call_id in open_ids:
+                repaired.append(message)
+            continue
+        open_ids = set()
+        repaired.append(message)
+    return repaired
 
 
 def _active_tool_chain_start(messages: List[LLMMessage]) -> Optional[int]:

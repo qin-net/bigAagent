@@ -74,12 +74,12 @@ def _distill_llm(path: Path) -> FakeLLMAdapter:
             LLMResponse(
                 id="t3",
                 model="deepseek-v4-flash",
-                content="submit",
+                content="search",
                 tool_calls=[
                     LLMToolCall(
                         id="c3",
-                        name="submit_candidate",
-                        arguments=submit_args,
+                        name="search_existing_entries",
+                        arguments=json.dumps({"query": "现金流"}),
                     )
                 ],
                 finish_reason="tool_calls",
@@ -87,10 +87,23 @@ def _distill_llm(path: Path) -> FakeLLMAdapter:
             LLMResponse(
                 id="t4",
                 model="deepseek-v4-flash",
-                content="done",
+                content="submit",
                 tool_calls=[
                     LLMToolCall(
                         id="c4",
+                        name="submit_candidate",
+                        arguments=submit_args,
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+            LLMResponse(
+                id="t5",
+                model="deepseek-v4-flash",
+                content="done",
+                tool_calls=[
+                    LLMToolCall(
+                        id="c5",
                         name="submit_final",
                         arguments=final_args,
                     )
@@ -104,14 +117,25 @@ def _distill_llm(path: Path) -> FakeLLMAdapter:
 @pytest.mark.asyncio
 async def test_tracking_distill_writes_candidate(tmp_path: Path):
     database = SQLiteDatabase(str(tmp_path / "kb.db"))
+    llm = _distill_llm(CHAPTER)
+    from tests.llm_recording import RecordingLLM
+
+    rec = RecordingLLM(llm)
     result = await distill_chapter(
         str(CHAPTER),
         scope="fundamental",
         database=database,
-        llm_adapter=_distill_llm(CHAPTER),
+        llm_adapter=rec,
         roots=[CHAPTER.parent],
     )
     assert result.submitted_ids == ["kb_distill_cashflow"]
+    assert rec.calls == [
+        "read_source_markdown",
+        "list_allowed_flags",
+        "search_existing_entries",
+        "submit_candidate",
+        "submit_final",
+    ]
     catalog = MethodologyCatalog(database)
     item = catalog.get("kb_distill_cashflow")
     assert item["status"] == "candidate"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .business_contracts import Decision, Report, RunRecord
 from .contracts import utc_now
@@ -179,6 +179,22 @@ class ResearchStore:
         await self.database.initialize()
         return await asyncio.to_thread(self._get_run_sync, run_id)
 
+    def _pack_run(self, connection, run) -> Dict[str, Any]:
+        reports = connection.execute(
+            "SELECT * FROM reports WHERE run_id = ?",
+            (run["run_id"],),
+        ).fetchall()
+        decisions = connection.execute(
+            "SELECT * FROM decisions WHERE run_id = ?",
+            (run["run_id"],),
+        ).fetchall()
+        return {
+            "run": json.loads(run["payload_json"]),
+            "status": run["status"],
+            "reports": [json.loads(row["payload_json"]) for row in reports],
+            "decisions": [json.loads(row["payload_json"]) for row in decisions],
+        }
+
     def _get_run_sync(self, run_id: str) -> Optional[Dict[str, Any]]:
         connection = self.database.connect()
         try:
@@ -187,21 +203,106 @@ class ResearchStore:
             ).fetchone()
             if not run:
                 return None
-            reports = connection.execute(
-                "SELECT * FROM reports WHERE run_id = ?", (run_id,)
+            return self._pack_run(connection, run)
+        finally:
+            connection.close()
+
+    async def get_baseline_run(self, thesis_or_run_id: str) -> Optional[Dict[str, Any]]:
+        await self.database.initialize()
+        return await asyncio.to_thread(
+            self._get_baseline_run_sync, thesis_or_run_id
+        )
+
+    def _get_baseline_run_sync(self, thesis_or_run_id: str) -> Optional[Dict[str, Any]]:
+        connection = self.database.connect()
+        try:
+            row = connection.execute(
+                "SELECT * FROM runs WHERE run_id = ?",
+                (thesis_or_run_id,),
+            ).fetchone()
+            if row:
+                return self._pack_run(connection, row)
+            row = connection.execute(
+                """
+                SELECT * FROM runs
+                WHERE thesis_id = ? AND mode = 'research'
+                  AND status IN ('success', 'degraded')
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (thesis_or_run_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._pack_run(connection, row)
+        finally:
+            connection.close()
+
+    async def list_timeline(self, thesis_id: str) -> List[Dict[str, Any]]:
+        await self.database.initialize()
+        return await asyncio.to_thread(self._list_timeline_sync, thesis_id)
+
+    def _list_timeline_sync(self, thesis_id: str) -> List[Dict[str, Any]]:
+        connection = self.database.connect()
+        try:
+            rows = connection.execute(
+                """
+                SELECT timeline_id, payload_json, created_at
+                FROM tracking_timeline
+                WHERE thesis_id = ?
+                ORDER BY created_at DESC
+                """,
+                (thesis_id,),
             ).fetchall()
-            decisions = connection.execute(
-                "SELECT * FROM decisions WHERE run_id = ?", (run_id,)
-            ).fetchall()
-            return {
-                "run": json.loads(run["payload_json"]),
-                "status": run["status"],
-                "reports": [
-                    json.loads(row["payload_json"]) for row in reports
-                ],
-                "decisions": [
-                    json.loads(row["payload_json"]) for row in decisions
-                ],
-            }
+        finally:
+            connection.close()
+        items = []
+        for row in rows:
+            payload = json.loads(row["payload_json"])
+            payload["timeline_id"] = row["timeline_id"]
+            payload["created_at"] = row["created_at"]
+            items.append(payload)
+        return items
+
+    async def save_timeline(
+        self,
+        thesis_id: str,
+        payload: Dict[str, Any],
+        *,
+        run_id: Optional[str] = None,
+    ) -> str:
+        await self.database.initialize()
+        timeline_id = str(payload.get("timeline_id") or "{}-{}".format(
+            thesis_id, utc_now().strftime("%Y%m%d%H%M%S%f")
+        ))
+        await asyncio.to_thread(
+            self._save_timeline_sync, timeline_id, thesis_id, run_id, payload
+        )
+        return timeline_id
+
+    def _save_timeline_sync(
+        self,
+        timeline_id: str,
+        thesis_id: str,
+        run_id: Optional[str],
+        payload: Dict[str, Any],
+    ) -> None:
+        connection = self.database.connect()
+        try:
+            connection.execute(
+                """
+                INSERT INTO tracking_timeline(
+                    timeline_id, thesis_id, run_id, schema_version,
+                    payload_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    timeline_id,
+                    thesis_id,
+                    run_id,
+                    str(payload.get("schema_version") or "1"),
+                    json.dumps(payload, ensure_ascii=False),
+                    utc_now().isoformat(),
+                ),
+            )
         finally:
             connection.close()

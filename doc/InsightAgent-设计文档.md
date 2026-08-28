@@ -355,12 +355,23 @@ Agent 不直接写数据库。每次运行在交付物中返回 `state_patch` �
 
 ### 6.7 TrackingDeliverable（追踪 Agent 固定交付物）
 
-追踪 Agent 每次被唤醒后，可以自主取数、检索方法论、决定调用哪些分析 Agent、反思本次工作并生成用户输出，但最终必须交付同一个结构：
+追踪 Agent 每次被唤醒后，可以自主取数、检索方法论、决定调用哪些分析 Agent，**评测他们的交卷**（是否答到题、是否过声称、和 thesis / 预筛是否冲突），再写出自己的思考与汇总分析。四维事实仍来自专家；追踪不代写失败专家的评分和 stance。最终必须交付同一个结构：
 
 ```json
 {
   "status": "unchanged | review | invalidate",
   "work_summary": "本次检查了什么、发现了什么",
+  "thinking": "值班长自己的推理",
+  "synthesis": "汇总分析",
+  "expert_evaluations": [
+    {
+      "agent": "sentiment",
+      "reliability": "high | medium | low | unusable",
+      "verdict": "accept | discount | reject | insufficient",
+      "gaps": [],
+      "notes": ""
+    }
+  ],
   "evidence_refs": [],
   "triggers_hit": [],
   "agent_skill_calls": [

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -183,7 +183,7 @@ class RunRecord(BaseModel):
     run_id: str
     stock_code: str
     thesis_id: str
-    mode: Literal["research"] = "research"
+    mode: Literal["research", "track_day"] = "research"
     status: Literal["running", "success", "failed", "degraded"]
     snapshot_refs: dict = Field(default_factory=dict)
     session_ids: dict = Field(default_factory=dict)
@@ -206,3 +206,74 @@ class AnalysisDeliverable(BaseModel):
     ] = "none"
     reflection: dict = Field(default_factory=dict)
     state_patch: StatePatch
+
+
+class TrackingUserOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = "本次跟踪更新"
+    summary: str
+    holding_advice: Literal["unchanged", "review", "invalidate"]
+    key_changes: List[str] = Field(default_factory=list)
+    next_watch_items: List[str] = Field(default_factory=list)
+
+
+class AgentSkillCallRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agent: Literal["fundamental", "technical", "sentiment", "macro"]
+    question: str
+    required_context_refs: List[str] = Field(default_factory=list)
+    reason: str
+    status: Literal["success", "failed", "rejected"] = "success"
+
+
+class NextCheckSuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    urgency: Literal["low", "medium", "high"] = "low"
+    reason: str = ""
+
+
+class ExpertEvaluation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agent: Literal["fundamental", "technical", "sentiment", "macro"]
+    reliability: Literal["high", "medium", "low", "unusable"] = "medium"
+    verdict: Literal["accept", "discount", "reject", "insufficient"] = "accept"
+    gaps: List[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class TrackingContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stock_code: str
+    thesis_id: str
+    as_of: datetime = Field(default_factory=utc_now)
+    baseline_run_id: str
+    baseline_decision_ref: str = ""
+    current_thesis: str = ""
+    falsifiers: List[str] = Field(default_factory=list)
+    latest_market_delta: Dict[str, Any] = Field(default_factory=dict)
+    new_events: List[str] = Field(default_factory=list)
+    recent_timeline_refs: List[str] = Field(default_factory=list)
+    agent_state_summaries: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TrackingDeliverable(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["unchanged", "review", "invalidate"]
+    work_summary: str
+    thinking: str = ""
+    synthesis: str = ""
+    expert_evaluations: List[ExpertEvaluation] = Field(default_factory=list)
+    evidence_refs: List[str] = Field(default_factory=list)
+    triggers_hit: List[str] = Field(default_factory=list)
+    agent_skill_calls: List[AgentSkillCallRecord] = Field(default_factory=list)
+    decision_required: bool = False
+    user_output: TrackingUserOutput
+    next_check_suggestion: NextCheckSuggestion = Field(
+        default_factory=NextCheckSuggestion
+    )

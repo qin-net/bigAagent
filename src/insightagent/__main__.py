@@ -122,6 +122,21 @@ def build_parser() -> argparse.ArgumentParser:
     distill.add_argument("--model", default="deepseek-v4-flash")
     distill.add_argument("--json", action="store_true", dest="as_json")
     distill.add_argument("--no-thinking", action="store_true")
+    track = commands.add_parser(
+        "track", help="Tracking-task: compare thesis to current snapshots"
+    )
+    track.add_argument("thesis_id")
+    track.add_argument("--path", default=DEFAULT_DB_PATH)
+    track.add_argument("--artifact-root", default=DEFAULT_ARTIFACT_ROOT)
+    track.add_argument(
+        "--fixture",
+        action="store_true",
+        help="Use packaged fixture snapshots instead of AKShare",
+    )
+    track.add_argument("--fixtures-dir", default=None)
+    track.add_argument("--model", default="deepseek-v4-flash")
+    track.add_argument("--json", action="store_true", dest="as_json")
+    track.add_argument("--no-thinking", action="store_true")
     return parser
 
 
@@ -146,6 +161,8 @@ async def _run(args: argparse.Namespace) -> int:
         return _run_pdf2md(args)
     if args.command == "kb":
         return await _run_kb(args)
+    if args.command == "track":
+        return await _run_track(args)
 
     database = SQLiteDatabase(args.path)
     if args.db_command == "init":
@@ -258,6 +275,71 @@ async def _run_kb(args: argparse.Namespace) -> int:
         )
         return 0
     return 1
+
+
+async def _run_track(args: argparse.Namespace) -> int:
+    from .tracking_agent import track_thesis
+
+    database = SQLiteDatabase(args.path)
+    result = await track_thesis(
+        args.thesis_id,
+        database=database,
+        llm_adapter=build_llm(args.model),
+        artifact_root=args.artifact_root,
+        model=args.model,
+        thinking_enabled=not args.no_thinking,
+        fixture=args.fixture,
+        fixtures_dir=args.fixtures_dir,
+    )
+    payload = {
+        "thesis_id": result.thesis_id,
+        "run_id": result.run_id,
+        "session_id": result.session_id,
+        "prescreen": result.prescreen,
+        "deliverable": result.deliverable,
+        "skill_calls": [
+            {
+                "agent": item.get("agent"),
+                "status": item.get("status"),
+                "question": item.get("question"),
+            }
+            for item in result.skill_calls
+        ],
+    }
+    if args.as_json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    deliverable = result.deliverable
+    user = deliverable.get("user_output") or {}
+    print("thesis: {}".format(result.thesis_id))
+    print("status: {}".format(deliverable.get("status")))
+    print("summary: {}".format(user.get("summary") or deliverable.get("work_summary")))
+    synthesis = deliverable.get("synthesis") or ""
+    if synthesis:
+        print("synthesis: {}".format(synthesis))
+    evaluations = deliverable.get("expert_evaluations") or []
+    if evaluations:
+        print(
+            "evaluations: {}".format(
+                ", ".join(
+                    "{}:{}".format(item.get("agent"), item.get("verdict"))
+                    for item in evaluations
+                )
+            )
+        )
+    calls = result.skill_calls
+    if not calls:
+        print("analysts: none")
+    else:
+        print(
+            "analysts: {}".format(
+                ", ".join(
+                    "{}({})".format(item.get("agent"), item.get("status"))
+                    for item in calls
+                )
+            )
+        )
+    return 0
 
 
 def _run_pdf2md(args: argparse.Namespace) -> int:

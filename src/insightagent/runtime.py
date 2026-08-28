@@ -131,6 +131,14 @@ def _submit_final_tool(
     function: Dict[str, Any] = {
         "name": SUBMIT_FINAL,
         "description": (
+            "Submit the finished analysis. output must match this call's "
+            "output schema. The scheduler stamps state versions and "
+            "increments loop rounds; do not send those fields. "
+            "state_patch paths may only start with private_memory, "
+            "business_context, meta, or checkpoint."
+        )
+        if args_model is not SubmitFinalArgs
+        else (
             "Submit the finished analysis. output.report is required and "
             "must include role, score, stance, and summary. "
             "The scheduler stamps state versions and increments loop "
@@ -627,10 +635,13 @@ class AgentLocalScheduler:
                 remove={name: [] for name in submitted.state_patch.remove},
             )
         except ValidationError as error:
-            if require_report:
+            custom_output = self.config.final_output_model is not SubmitFinalOutput
+            if require_report or custom_output:
                 raise InvalidModelOutputError(
                     "submit_final.output.report is required and must "
                     "include role, score, and stance"
+                    if require_report
+                    else "submit_final.output must match this call's output schema"
                 ) from error
             try:
                 visible = ModelFinalResponse.model_validate(payload)

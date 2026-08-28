@@ -72,7 +72,7 @@ from ..persistence import (
 )
 from ..research_store import ResearchStore
 from ..retry import ExponentialBackoff
-from ..runtime import AgentInstance, InvalidModelOutputError
+from ..runtime import AgentInstance, InvalidModelOutputError, RuntimeConfig
 from ..state import StateConflictError
 from ..sentiment_agent import (
     SentimentToolContext,
@@ -1309,13 +1309,16 @@ async def _run_fundamental_agent(
     model: str,
     thinking_enabled: bool,
     user_query: str,
-) -> tuple[Report, str]:
+    runtime_config: Optional[RuntimeConfig] = None,
+    return_raw: bool = False,
+) -> tuple[Any, str]:
     session_id = str(uuid4())
     run.session_ids["fundamental"] = session_id
     agent = AgentInstance(
         name="fundamental",
         llm_adapter=llm_adapter,
-        config=fundamental_runtime_config(
+        config=runtime_config
+        or fundamental_runtime_config(
             model=model, thinking_enabled=thinking_enabled
         ),
         state_store=SQLiteStateStore(database),
@@ -1338,6 +1341,8 @@ async def _run_fundamental_agent(
         raise
     finally:
         reset_catalog(token)
+    if return_raw:
+        return final.output, session_id
     return (
         drop_unretrieved_kb(
             sanitize_report(parse_report(final.output)),
@@ -1463,7 +1468,9 @@ async def _run_technical_agent(
     model: str,
     thinking_enabled: bool,
     user_query: str,
-) -> tuple[Report, str]:
+    runtime_config: Optional[RuntimeConfig] = None,
+    return_raw: bool = False,
+) -> tuple[Any, str]:
     session_id = str(uuid4())
     run.session_ids["technical"] = session_id
     indicator = IndicatorSnapshot(**tech_fields["indicator"])
@@ -1476,7 +1483,8 @@ async def _run_technical_agent(
     agent = AgentInstance(
         name="technical",
         llm_adapter=llm_adapter,
-        config=technical_runtime_config(
+        config=runtime_config
+        or technical_runtime_config(
             model=model, thinking_enabled=thinking_enabled
         ),
         state_store=SQLiteStateStore(database),
@@ -1498,6 +1506,8 @@ async def _run_technical_agent(
         raise
     finally:
         reset_catalog(token)
+    if return_raw:
+        return final.output, session_id
     report = apply_computed_technical_semantics(
         drop_unretrieved_kb(
             sanitize_report(parse_technical_report(final.output)),
@@ -1517,7 +1527,9 @@ async def _run_sentiment_agent(
     model: str,
     thinking_enabled: bool,
     user_query: str,
-) -> tuple[Report, str]:
+    runtime_config: Optional[RuntimeConfig] = None,
+    return_raw: bool = False,
+) -> tuple[Any, str]:
     session_id = str(uuid4())
     run.session_ids["sentiment"] = session_id
     events = EventSnapshot(**sent_fields["events"])
@@ -1526,7 +1538,8 @@ async def _run_sentiment_agent(
     agent = AgentInstance(
         name="sentiment",
         llm_adapter=llm_adapter,
-        config=sentiment_runtime_config(
+        config=runtime_config
+        or sentiment_runtime_config(
             model=model, thinking_enabled=thinking_enabled
         ),
         state_store=SQLiteStateStore(database),
@@ -1548,6 +1561,8 @@ async def _run_sentiment_agent(
         raise
     finally:
         reset_catalog(token)
+    if return_raw:
+        return final.output, session_id
     flags = apply_event_rules(events, holders)["flags"]
     report = apply_computed_sentiment_semantics(
         drop_unretrieved_kb(
@@ -1568,7 +1583,9 @@ async def _run_macro_agent(
     model: str,
     thinking_enabled: bool,
     user_query: str,
-) -> tuple[Report, str]:
+    runtime_config: Optional[RuntimeConfig] = None,
+    return_raw: bool = False,
+) -> tuple[Any, str]:
     session_id = str(uuid4())
     run.session_ids["macro"] = session_id
     macro = MacroSnapshot(**macro_fields["macro"])
@@ -1581,7 +1598,8 @@ async def _run_macro_agent(
     agent = AgentInstance(
         name="macro",
         llm_adapter=llm_adapter,
-        config=macro_runtime_config(model=model, thinking_enabled=thinking_enabled),
+        config=runtime_config
+        or macro_runtime_config(model=model, thinking_enabled=thinking_enabled),
         state_store=SQLiteStateStore(database),
         context_archive=SQLiteContextArchive(database),
     )
@@ -1601,6 +1619,8 @@ async def _run_macro_agent(
         raise
     finally:
         reset_catalog(token)
+    if return_raw:
+        return final.output, session_id
     report = drop_unretrieved_kb(
         sanitize_report(
             apply_computed_macro_semantics(
