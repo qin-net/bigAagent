@@ -87,6 +87,7 @@ from ..user_intent import (
     build_utterance,
     compute_rerun_dims,
     extract_slots,
+    fill_tagged_empty_slots,
     format_intent_echo,
     is_decision_only_rerun,
     merge_parsed_with_slots,
@@ -758,6 +759,7 @@ async def feedback_on_run(
     parsed = parse_tags(prompt)
     slots, audit_type = await extract_slots(extract_llm, parsed.body, model)
     parsed = merge_parsed_with_slots(parsed, slots)
+    slots = fill_tagged_empty_slots(parsed, slots)
     preview = build_intent(
         utterance_id=str(uuid4()), parsed=parsed, slots=slots
     )
@@ -1269,6 +1271,7 @@ async def _prepare_intent(
     parsed = parse_tags(user_prompt)
     slots, audit_type = await extract_slots(llm_adapter, parsed.body, model)
     parsed = merge_parsed_with_slots(parsed, slots)
+    slots = fill_tagged_empty_slots(parsed, slots)
     return await _commit_intent(
         parsed=parsed,
         slots=slots,

@@ -15,6 +15,7 @@ from insightagent.user_intent import (
     build_intent,
     empty_slots,
     extract_slots,
+    fill_tagged_empty_slots,
     format_intent_echo,
     merge_parsed_with_slots,
     parse_tags,
@@ -76,6 +77,18 @@ def test_parse_tags_rerun_remember_combo():
     parsed = parse_tags("#rerun #remember 重看一次")
     assert parsed.effect == "remember_rerun"
     assert parsed.body == "重看一次"
+
+
+def test_fill_tagged_empty_slots_copies_donor_not_body():
+    parsed = parse_tags("#tracking 对照经营现金流证伪条件")
+    slots = LlmIntentSlots.model_validate(
+        _slots_payload(fundamental="对照经营现金流证伪利润条件")
+    )
+    filled = fill_tagged_empty_slots(parsed, slots)
+    assert filled.tracking == "对照经营现金流证伪利润条件"
+    assert filled.fundamental == "对照经营现金流证伪利润条件"
+    empty = fill_tagged_empty_slots(parsed, empty_slots())
+    assert empty.tracking == NONE
 
 
 def test_nl_rewrite_fundamental_is_rerun():

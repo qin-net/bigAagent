@@ -36,6 +36,15 @@ from .persistence import (
 from .research_store import ResearchStore
 from .resources import FunctionResource
 from .runtime import AgentInstance, RuntimeConfig
+from .user_contracts import DIMS, NONE, UserIntent
+from .user_intent import (
+    collect_task_user_fields,
+    compute_rerun_dims,
+    format_intent_echo,
+    overlay_none_slots,
+    should_schedule_track_rerun,
+)
+from .user_store import UserStore
 from .schema_model import model_from_json_schema
 from .tracking import (
     MAX_SKILLS_PER_LOOP,
@@ -509,6 +518,9 @@ class TrackToolContext:
     thinking_enabled: bool
     retrieved_kb_ids: set = field(default_factory=set)
     skill_calls: List[Dict[str, Any]] = field(default_factory=list)
+    intent: Optional[UserIntent] = None
+    prefs_by_scope: Dict[str, List[str]] = field(default_factory=dict)
+    must_call_dims: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -519,6 +531,19 @@ class TrackResult:
     deliverable: Dict[str, Any]
     prescreen: Dict[str, Any]
     skill_calls: List[Dict[str, Any]]
+    intent: Optional[UserIntent] = None
+    show_intent_echo: bool = False
+
+
+@dataclass
+class TrackFeedbackResult:
+    skipped: bool = False
+    noop: bool = False
+    parent_run_id: Optional[str] = None
+    intent: Optional[UserIntent] = None
+    show_intent_echo: bool = False
+    track_result: Optional[TrackResult] = None
+    error: Optional[str] = None
 
 
 def _union_flags(prescreen_payload: Dict[str, Any]) -> List[str]:
@@ -666,6 +691,11 @@ def register_track_tools(agent: AgentInstance, context: TrackToolContext) -> Non
             model=context.model,
             thinking_enabled=context.thinking_enabled,
         )
+        questions, constraints = collect_task_user_fields(
+            context.intent,
+            agent_name,
+            context.prefs_by_scope.get(agent_name) or [],
+        )
         query = json.dumps(
             {
                 "task": "reval",
@@ -676,6 +706,8 @@ def register_track_tools(agent: AgentInstance, context: TrackToolContext) -> Non
                 "reason": reason,
                 "required_context_refs": refs,
                 "output_schema": schema,
+                "required_questions": questions,
+                "constraints": constraints,
             },
             ensure_ascii=False,
         )
@@ -969,6 +1001,74 @@ def finalize_deliverable(
     )
 
 
+DEFAULT_TRACK_INSTRUCTION = (
+    "Read get_tracking_context and get_prescreen. "
+    "Decide whether a specialist is needed. "
+    "If you call one, evaluate the returned output: reliability, "
+    "gaps, and whether to accept, discount, or reject it. "
+    "Then write thinking and synthesis before submit_final. "
+    "If nothing material changed, still write brief thinking "
+    "and synthesis that the thesis still holds, and call no analyst. "
+    "Call at most one analyst in this tool round. After that "
+    "result, a later loop may call another. Do not invent an "
+    "expert dimensional conclusion when a skill fails. "
+    "A dimension tag does not force you to call that specialist."
+)
+
+
+async def _load_prefs_by_scope(
+    user_store: UserStore, *, user_id: str, stock_code: str
+) -> Dict[str, List[str]]:
+    loaded: Dict[str, List[str]] = {}
+    for dim in DIMS:
+        rows = await user_store.active_preferences(
+            user_id=user_id, scope=dim, stock_code=stock_code
+        )
+        loaded[dim] = [item.statement for item in rows]
+    return loaded
+
+
+def _track_user_query(
+    *,
+    thesis_id: str,
+    stock_code: str,
+    baseline_run_id: str,
+    instruction: Optional[str],
+    intent: Optional[UserIntent],
+    prefs_by_scope: Dict[str, List[str]],
+    must_call_dims: Sequence[str],
+) -> str:
+    questions, constraints = collect_task_user_fields(
+        intent, "tracking", prefs_by_scope.get("tracking") or []
+    )
+    extra_q, extra_c = collect_task_user_fields(
+        intent, "decision", prefs_by_scope.get("decision") or []
+    )
+    questions.extend(extra_q)
+    constraints.extend(extra_c)
+    text = instruction or DEFAULT_TRACK_INSTRUCTION
+    named = [dim for dim in must_call_dims if dim]
+    if named:
+        text = (
+            text
+            + " You must call these analysts this session, one per loop: "
+            + ", ".join(named)
+            + "."
+        )
+    return json.dumps(
+        {
+            "task": "track",
+            "thesis_id": thesis_id,
+            "stock_code": stock_code,
+            "baseline_run_id": baseline_run_id,
+            "instruction": text,
+            "required_questions": questions,
+            "constraints": constraints,
+        },
+        ensure_ascii=False,
+    )
+
+
 async def track_thesis(
     thesis_id: str,
     *,
@@ -982,11 +1082,17 @@ async def track_thesis(
     current: Optional[TrackSnapshots] = None,
     expert_adapters: Optional[Dict[str, Any]] = None,
     instruction: Optional[str] = None,
+    user_prompt: str = NONE,
+    user_id: str = "local",
+    extract_llm_adapter=None,
+    overlay_intent: Optional[UserIntent] = None,
+    must_call_dims: Optional[Sequence[str]] = None,
 ) -> TrackResult:
     await database.initialize()
     store = ResearchStore(database)
     audit = SQLiteAuditLog(database)
     artifacts = FileArtifactStore(database, artifact_root)
+    user_store = UserStore(database)
     packed = await store.get_baseline_run(thesis_id)
     if packed is None:
         raise ValueError("unknown thesis or run: {}".format(thesis_id))
@@ -1049,6 +1155,37 @@ async def track_thesis(
         run_id=track_run.run_id,
     )
 
+    from .workflows.initial_research import _prepare_intent
+
+    extract_llm = extract_llm_adapter or llm_adapter
+    intent, show_intent_echo = await _prepare_intent(
+        user_prompt=user_prompt,
+        user_id=user_id,
+        run=track_run,
+        code=track_run.stock_code,
+        llm_adapter=extract_llm,
+        model=model,
+        user_store=user_store,
+        audit=audit,
+        moment="pre_run",
+    )
+    prior = await store.latest_track_run(track_run.thesis_id)
+    if prior is not None:
+        pending = await user_store.intent_for_run_moment(
+            run_id=prior["run"]["run_id"],
+            moment="post_track",
+            effect="this_run",
+        )
+        if pending is not None:
+            intent = overlay_none_slots(intent, pending)
+    if overlay_intent is not None:
+        intent = overlay_none_slots(intent, overlay_intent)
+
+    prefs_by_scope = await _load_prefs_by_scope(
+        user_store, user_id=user_id, stock_code=track_run.stock_code
+    )
+    required = list(must_call_dims or [])
+
     tool_context = TrackToolContext(
         catalog=catalog,
         tracking_context=tracking_context.model_dump(mode="json"),
@@ -1061,6 +1198,9 @@ async def track_thesis(
         expert_adapters=expert_adapters or {},
         model=model,
         thinking_enabled=thinking_enabled,
+        intent=intent,
+        prefs_by_scope=prefs_by_scope,
+        must_call_dims=required,
     )
     agent = AgentInstance(
         name="tracking",
@@ -1075,27 +1215,14 @@ async def track_thesis(
     )
     register_track_tools(agent, tool_context)
     token = bind_catalog(catalog)
-    user_query = json.dumps(
-        {
-            "task": "track",
-            "thesis_id": track_run.thesis_id,
-            "stock_code": track_run.stock_code,
-            "baseline_run_id": baseline_run.run_id,
-            "instruction": instruction
-            or (
-                "Read get_tracking_context and get_prescreen. "
-                "Decide whether a specialist is needed. "
-                "If you call one, evaluate the returned output: reliability, "
-                "gaps, and whether to accept, discount, or reject it. "
-                "Then write thinking and synthesis before submit_final. "
-                "If nothing material changed, still write brief thinking "
-                "and synthesis that the thesis still holds, and call no analyst. "
-                "Call at most one analyst in this tool round. After that "
-                "result, a later loop may call another. Do not invent an "
-                "expert dimensional conclusion when a skill fails."
-            ),
-        },
-        ensure_ascii=False,
+    user_query = _track_user_query(
+        thesis_id=track_run.thesis_id,
+        stock_code=track_run.stock_code,
+        baseline_run_id=baseline_run.run_id,
+        instruction=instruction,
+        intent=intent,
+        prefs_by_scope=prefs_by_scope,
+        must_call_dims=required,
     )
     try:
         final = await agent.run(
@@ -1155,4 +1282,148 @@ async def track_thesis(
         deliverable=dumped,
         prescreen=prescreen_payload,
         skill_calls=list(tool_context.skill_calls),
+        intent=intent,
+        show_intent_echo=show_intent_echo,
     )
+
+
+class TrackFeedbackError(ValueError):
+    pass
+
+
+async def _resolve_track_parent(
+    store: ResearchStore, thesis_or_run_id: str
+) -> RunRecord:
+    bundle = await store.get_run(thesis_or_run_id)
+    if bundle is not None:
+        run = RunRecord.model_validate(bundle["run"])
+        if run.mode == "track_day":
+            if bundle["status"] not in {"success", "degraded"}:
+                raise TrackFeedbackError(
+                    "parent track is not successful: {}".format(bundle["status"])
+                )
+            return run
+        latest = await store.latest_track_run(run.thesis_id)
+        if latest is None:
+            raise TrackFeedbackError(
+                "no completed track for thesis {}".format(run.thesis_id)
+            )
+        return RunRecord.model_validate(latest["run"])
+    packed = await store.get_baseline_run(thesis_or_run_id)
+    if packed is None:
+        raise TrackFeedbackError(
+            "unknown thesis or run: {}".format(thesis_or_run_id)
+        )
+    thesis_id = packed["run"]["thesis_id"]
+    latest = await store.latest_track_run(thesis_id)
+    if latest is None:
+        raise TrackFeedbackError(
+            "no completed track for thesis {}".format(thesis_id)
+        )
+    return RunRecord.model_validate(latest["run"])
+
+
+async def feedback_on_track(
+    thesis_or_run_id: str,
+    *,
+    database: SQLiteDatabase,
+    llm_adapter,
+    artifact_root: str,
+    user_prompt: str = NONE,
+    model: str = "deepseek-v4-flash",
+    thinking_enabled: bool = False,
+    fixture: bool = True,
+    fixtures_dir: Optional[str] = None,
+    current: Optional[TrackSnapshots] = None,
+    expert_adapters: Optional[Dict[str, Any]] = None,
+    user_id: str = "local",
+    extract_llm_adapter=None,
+    instruction: Optional[str] = None,
+) -> TrackFeedbackResult:
+    prompt = (user_prompt or "").strip() or NONE
+    if prompt == NONE:
+        return TrackFeedbackResult(skipped=True, parent_run_id=thesis_or_run_id)
+
+    await database.initialize()
+    store = ResearchStore(database)
+    audit = SQLiteAuditLog(database)
+    user_store = UserStore(database)
+    parent = await _resolve_track_parent(store, thesis_or_run_id)
+
+    from .workflows.initial_research import _prepare_intent
+
+    extract_llm = extract_llm_adapter or llm_adapter
+    intent, show_echo = await _prepare_intent(
+        user_prompt=prompt,
+        user_id=user_id,
+        run=parent,
+        code=parent.stock_code,
+        llm_adapter=extract_llm,
+        model=model,
+        user_store=user_store,
+        audit=audit,
+        moment="post_track",
+    )
+    if not should_schedule_track_rerun(intent):
+        noop = intent.effect in {"rerun", "remember_rerun"}
+        if noop:
+            await audit.append(
+                "rerun_noop",
+                {"effect": intent.effect, "tags": intent.tags},
+                run_id=parent.run_id,
+            )
+        return TrackFeedbackResult(
+            noop=noop,
+            parent_run_id=parent.run_id,
+            intent=intent,
+            show_intent_echo=show_echo,
+        )
+    result = await track_thesis(
+        parent.thesis_id,
+        database=database,
+        llm_adapter=llm_adapter,
+        artifact_root=artifact_root,
+        model=model,
+        thinking_enabled=thinking_enabled,
+        fixture=fixture,
+        fixtures_dir=fixtures_dir,
+        current=current,
+        expert_adapters=expert_adapters,
+        user_prompt=NONE,
+        user_id=user_id,
+        extract_llm_adapter=extract_llm_adapter,
+        overlay_intent=intent,
+        must_call_dims=compute_rerun_dims(intent),
+        instruction=instruction,
+    )
+    return TrackFeedbackResult(
+        parent_run_id=parent.run_id,
+        intent=intent,
+        show_intent_echo=show_echo,
+        track_result=result,
+    )
+
+
+def format_track_feedback_result(result: TrackFeedbackResult) -> str:
+    if result.skipped:
+        return ""
+    lines = []
+    if result.show_intent_echo and result.intent is not None:
+        lines.append(format_intent_echo(result.intent))
+    if result.track_result is not None:
+        deliverable = result.track_result.deliverable
+        user = deliverable.get("user_output") or {}
+        lines.append("thesis: {}".format(result.track_result.thesis_id))
+        lines.append("status: {}".format(deliverable.get("status")))
+        lines.append(
+            "summary: {}".format(
+                user.get("summary") or deliverable.get("work_summary")
+            )
+        )
+        return "\n".join(lines)
+    lines.append(
+        "未重跑，父 track {} 结论未改".format(result.parent_run_id or "-")
+    )
+    if result.noop:
+        lines.append("rerun_noop")
+    return "\n".join(lines)

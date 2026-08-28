@@ -137,6 +137,35 @@ def build_parser() -> argparse.ArgumentParser:
     track.add_argument("--model", default="deepseek-v4-flash")
     track.add_argument("--json", action="store_true", dest="as_json")
     track.add_argument("--no-thinking", action="store_true")
+    track.add_argument(
+        "--prompt",
+        default="none",
+        help="Optional pre-track intent prompt with optional #tags",
+    )
+    track_feedback = commands.add_parser(
+        "track-feedback",
+        help="Post-track feedback; this_run waits for next track, #rerun re-runs",
+    )
+    track_feedback.add_argument("thesis_id")
+    track_feedback.add_argument("--path", default=DEFAULT_DB_PATH)
+    track_feedback.add_argument(
+        "--artifact-root",
+        default=DEFAULT_ARTIFACT_ROOT,
+    )
+    track_feedback.add_argument("--model", default="deepseek-v4-flash")
+    track_feedback.add_argument("--json", action="store_true", dest="as_json")
+    track_feedback.add_argument(
+        "--prompt",
+        default="none",
+        help="Optional post-track intent prompt with optional #tags",
+    )
+    track_feedback.add_argument("--no-thinking", action="store_true")
+    track_feedback.add_argument(
+        "--fixture",
+        action="store_true",
+        help="Use packaged fixture snapshots instead of AKShare",
+    )
+    track_feedback.add_argument("--fixtures-dir", default=None)
     return parser
 
 
@@ -163,6 +192,8 @@ async def _run(args: argparse.Namespace) -> int:
         return await _run_kb(args)
     if args.command == "track":
         return await _run_track(args)
+    if args.command == "track-feedback":
+        return await _run_track_feedback(args)
 
     database = SQLiteDatabase(args.path)
     if args.db_command == "init":
@@ -290,6 +321,7 @@ async def _run_track(args: argparse.Namespace) -> int:
         thinking_enabled=not args.no_thinking,
         fixture=args.fixture,
         fixtures_dir=args.fixtures_dir,
+        user_prompt=(args.prompt or "").strip() or "none",
     )
     payload = {
         "thesis_id": result.thesis_id,
@@ -305,6 +337,9 @@ async def _run_track(args: argparse.Namespace) -> int:
             }
             for item in result.skill_calls
         ],
+        "intent": (
+            result.intent.model_dump(mode="json") if result.intent else None
+        ),
     }
     if args.as_json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -339,6 +374,64 @@ async def _run_track(args: argparse.Namespace) -> int:
                 )
             )
         )
+    if result.show_intent_echo and result.intent is not None:
+        from .user_intent import format_intent_echo
+
+        print(format_intent_echo(result.intent))
+    return 0
+
+
+async def _run_track_feedback(args: argparse.Namespace) -> int:
+    from .tracking_agent import (
+        TrackFeedbackError,
+        feedback_on_track,
+        format_track_feedback_result,
+    )
+
+    prompt = (args.prompt or "").strip() or "none"
+    if prompt == "none":
+        return 0
+    database = SQLiteDatabase(args.path)
+    await database.initialize()
+    try:
+        result = await feedback_on_track(
+            args.thesis_id,
+            database=database,
+            llm_adapter=build_llm(args.model),
+            artifact_root=args.artifact_root,
+            user_prompt=prompt,
+            model=args.model,
+            thinking_enabled=not args.no_thinking,
+            fixture=args.fixture,
+            fixtures_dir=args.fixtures_dir,
+        )
+    except TrackFeedbackError as error:
+        print("track-feedback error: {}".format(error))
+        return 1
+    payload = {
+        "skipped": result.skipped,
+        "noop": result.noop,
+        "parent_run_id": result.parent_run_id,
+        "intent": (
+            result.intent.model_dump(mode="json") if result.intent else None
+        ),
+        "track": (
+            {
+                "thesis_id": result.track_result.thesis_id,
+                "run_id": result.track_result.run_id,
+                "deliverable": result.track_result.deliverable,
+            }
+            if result.track_result
+            else None
+        ),
+        "error": result.error,
+    }
+    if args.as_json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    text = format_track_feedback_result(result)
+    if text:
+        print(text)
     return 0
 
 

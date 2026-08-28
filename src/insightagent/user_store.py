@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import List
+from typing import List, Optional
 from uuid import uuid4
 
 from .contracts import utc_now
@@ -42,6 +42,41 @@ class UserStore:
         await asyncio.to_thread(
             self._persist_remember_sync, intent, utterance
         )
+
+    async def intent_for_run_moment(
+        self,
+        *,
+        run_id: str,
+        moment: str,
+        effect: str = "this_run",
+    ) -> Optional[UserIntent]:
+        await self.database.initialize()
+        return await asyncio.to_thread(
+            self._intent_for_run_moment_sync, run_id, moment, effect
+        )
+
+    def _intent_for_run_moment_sync(
+        self, run_id: str, moment: str, effect: str
+    ) -> Optional[UserIntent]:
+        connection = self.database.connect()
+        try:
+            row = connection.execute(
+                """
+                SELECT i.intent_id, i.utterance_id, i.effect, i.tags,
+                       i.fundamental, i.technical, i.sentiment, i.macro,
+                       i.decision, i.tracking, i.not_evidence,
+                       i.schema_version, i.created_at
+                FROM user_utterances AS u
+                JOIN user_intents AS i ON i.intent_id = u.intent_id
+                WHERE u.run_id = ? AND u.moment = ? AND u.effect = ?
+                ORDER BY u.created_at DESC
+                LIMIT 1
+                """,
+                (run_id, moment, effect),
+            ).fetchone()
+            return UserIntent.model_validate(dict(row)) if row else None
+        finally:
+            connection.close()
 
     async def active_preferences(
         self,

@@ -207,6 +207,28 @@ class ResearchStore:
         finally:
             connection.close()
 
+    async def latest_track_run(self, thesis_id: str) -> Optional[Dict[str, Any]]:
+        await self.database.initialize()
+        return await asyncio.to_thread(self._latest_track_run_sync, thesis_id)
+
+    def _latest_track_run_sync(self, thesis_id: str) -> Optional[Dict[str, Any]]:
+        connection = self.database.connect()
+        try:
+            row = connection.execute(
+                """
+                SELECT * FROM runs
+                WHERE thesis_id = ? AND mode = 'track_day'
+                  AND status IN ('success', 'degraded')
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (thesis_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._pack_run(connection, row)
+        finally:
+            connection.close()
+
     async def get_baseline_run(self, thesis_or_run_id: str) -> Optional[Dict[str, Any]]:
         await self.database.initialize()
         return await asyncio.to_thread(

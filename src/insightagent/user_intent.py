@@ -28,7 +28,7 @@ fundamental/technical/sentiment/macro/decision/tracking/not_evidence:
 each is a short Chinese task sentence, or the string none.
 effect is exactly one of: this_run, remember, rerun, remember_rerun, end.
 dims is none, or a comma-separated list from:
-fundamental, technical, sentiment, macro, decision.
+fundamental, technical, sentiment, macro, decision, tracking.
 
 Understand chat language, not only hashtags.
 Wanting a dimension rewritten / redone / another pass → effect=rerun
@@ -39,6 +39,10 @@ A constraint without asking to rerun or remember → effect=this_run
 and fill the matching slot.
 Vague praise/blame or "just look" without a real instruction → effect=this_run
 and all other keys none.
+
+Tracking-round instructions (盯证伪, 下次对照, 追踪时必须…) go in tracking.
+Do not put them only in fundamental just because cashflow or valuation
+was mentioned.
 
 Put rumors into not_evidence. Split one sentence across slots if needed.
 Do not copy the user message verbatim.
@@ -374,7 +378,36 @@ async def understand_prompt(
 ) -> Tuple[TagParse, LlmIntentSlots, str]:
     parsed = parse_tags(raw)
     slots, event = await extract_slots(llm, parsed.body, model)
-    return merge_parsed_with_slots(parsed, slots), slots, event
+    parsed = merge_parsed_with_slots(parsed, slots)
+    slots = fill_tagged_empty_slots(parsed, slots)
+    return parsed, slots, event
+
+
+def fill_tagged_empty_slots(parsed: TagParse, slots: LlmIntentSlots) -> LlmIntentSlots:
+    """If a tagged dim is still none, copy an already-extracted task sentence.
+
+    Never writes body verbatim. If every slot is none, leave them none.
+    """
+    tagged = [item for item in json.loads(parsed.tagged_dims) if item != NONE]
+    if not tagged or parsed.body == NONE:
+        return slots
+    data = slots.model_dump()
+    donor = ""
+    for dim in DIMS:
+        value = data.get(dim) or NONE
+        if value != NONE:
+            donor = value
+            break
+    if not donor:
+        return slots
+    changed = False
+    for dim in tagged:
+        if dim in DIMS and data.get(dim) == NONE:
+            data[dim] = donor
+            changed = True
+    if not changed:
+        return slots
+    return LlmIntentSlots.model_validate(data)
 
 
 def build_intent(
@@ -423,6 +456,45 @@ def should_schedule_rerun(intent: UserIntent) -> bool:
     if intent.effect not in RERUN_EFFECTS:
         return False
     return bool(compute_rerun_dims(intent)) or is_decision_only_rerun(intent)
+
+
+def overlay_none_slots(primary: UserIntent, extra: UserIntent) -> UserIntent:
+    data = primary.model_dump()
+    for dim in DIMS:
+        if data.get(dim) == NONE:
+            data[dim] = slot_of(extra, dim)
+    if data.get("not_evidence") == NONE:
+        data["not_evidence"] = extra.not_evidence
+    return UserIntent.model_validate(data)
+
+
+def collect_task_user_fields(
+    intent: Optional[UserIntent],
+    dim: str,
+    preference_statements: Sequence[str] = (),
+) -> Tuple[List[str], List[str]]:
+    questions: List[str] = []
+    constraints: List[str] = []
+    if intent is not None:
+        more_q, more_c = split_slot(slot_of(intent, dim))
+        questions.extend(more_q)
+        constraints.extend(more_c)
+    for statement in list(preference_statements)[:MAX_PREF]:
+        constraints.append(statement[:MAX_PREF_CHARS])
+    return questions, constraints
+
+
+def should_schedule_track_rerun(intent: UserIntent) -> bool:
+    if intent.effect not in RERUN_EFFECTS:
+        return False
+    tags = json.loads(intent.tags)
+    if compute_rerun_dims(intent):
+        return True
+    if intent.tracking != NONE or "tracking" in tags:
+        return True
+    if is_decision_only_rerun(intent):
+        return True
+    return False
 
 
 def _hanzi_count(text: str) -> int:
