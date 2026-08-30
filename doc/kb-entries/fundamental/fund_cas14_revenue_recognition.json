@@ -1,0 +1,77 @@
+{
+  "entry_id": "fund_cas14_revenue_recognition",
+  "title": "CAS14收入确认口径对盈利与经营现金流的校验（收入确认时点/时段的现金流验证）",
+  "scope": "fundamental",
+  "version": 1,
+  "created_at": "2026-08-29T06:46:04.044235+00:00",
+  "updated_at": "2026-08-29T06:46:14.153990+00:00",
+  "payload": {
+    "id": "fund_cas14_revenue_recognition",
+    "title": "CAS14收入确认口径对盈利与经营现金流的校验（收入确认时点/时段的现金流验证）",
+    "type": "methodology",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "cashflow_quality_issue",
+        "cashflow_lag",
+        "cashflow_seasonal"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "分析标的按《企业会计准则第14号——收入》确认的收入时需结合其现金流验证盈利质量：当收入在客户取得商品控制权（某一时点",
+        "cas14第4",
+        "13条）或按履约进度（某一时段",
+        "第9-12条）确认",
+        "而经营现金流与利润出现背离时触发；需据此判别收入确认是否激进",
+        "回款滞后或季节性",
+        "进而落定",
+        "cashflow_quality_issue",
+        "cashflow_lag",
+        "cashflow_seasonal"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 3,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "按CAS14核对标的基本收入政策后，将收入确认口径作为盈利质量校验的锚点：收入在客户取得商品控制权时点（第13条）或按履约进度（第12条）确认；交易价格不含代收第三方款与预期退款（第14条），并考虑可变对价限制（第16条，累计已确认收入极可能不发生重大转回）、重大融资成分（第17条，间隔超一年应按现金支付价折现）与应付客户对价（第19条，冲减交易价格）。据此辨析利润与经营现金流背离的成因并落旗：(1)若收入于控制权转移时确认而价款长期未收、经营性应收与存货显著扩张且无对应回款，落 cashflow_quality_issue；若主因系期末回款节奏或集中确认，落 cashflow_lag 或 cashflow_seasonal；(2)若企业确认的可变对价未受第16条约束、重大融资成分被忽视或在未履行完毕且对价无需退回前即确认收入（第6条），均属收入确认激进，落 cashflow_quality_issue 并警示 cashflow_lag；(3)不因收入口径本身落 high_leverage、roe_*、valuation_* 或 value_trap_risk，这些旗仍需各自维度证据。",
+      "text": "《企业会计准则第14号——收入》规范收入的确认、计量与披露。确认方面：在客户取得相关商品控制权时确认（第4条）；合同需同时满足批准承诺、明确权利义务与支付条款、商业实质、对价很可能收回等五项起始条件（第5条），不符合条件的合同在未履行完毕且对价无需退回前只能作为负债（第6条）；履约义务按时点或时段履行（第9-12条），某一时段按履约进度（产出法/投入法）确认。计量方面：按分摊至各单项履约义务的交易",
+      "exceptions": [
+        "收入在客户取得控制权时即已收到现金、利润与经营现金流方向一致时，不落 cashflow_quality_issue/cashflow_lag/cashflow_seasonal 任何旗",
+        "背离主因明确为季节性或期末回款节奏（自然周期性的应收与回款波动）时应落 cashflow_seasonal 而非 cashflow_quality_issue",
+        "收入准则不覆盖金融工具、租赁、保险、长期股权投资等合同（CAS14第3条），相关收入不据此落旗",
+        "无证据表明存在激进收入确认或应收异常扩张时，不得仅凭收入确认口径臆断 cashflow_quality_issue"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\fundamental\\企业会计准则第14号-收入.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "企业会计准则第14号——收入 第2/4-6/9-19/32条",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T06:46:04.043234+00:00",
+    "updated_at": "2026-08-29T06:46:04.044235+00:00",
+    "change_note": "distill"
+  }
+}

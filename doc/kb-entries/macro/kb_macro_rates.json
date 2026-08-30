@@ -1,0 +1,49 @@
+{
+  "entry_id": "kb_macro_rates",
+  "title": "宏观不是买卖理由",
+  "scope": "macro",
+  "version": 1,
+  "created_at": "2026-08-28T10:19:56.594471+00:00",
+  "updated_at": "2026-08-28T10:19:56.594471+00:00",
+  "payload": {
+    "id": "kb_macro_rates",
+    "title": "宏观不是买卖理由",
+    "type": "rule",
+    "scope": [
+      "macro"
+    ],
+    "status": "approved",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "lpr_missing",
+        "lpr_available"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "lpr",
+        "利率",
+        "宏观"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 70,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "只提供环境标签",
+      "text": "宏观只提供环境标签，不构成个股买卖理由。",
+      "exceptions": []
+    },
+    "source_refs": [],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "updated_at": "2026-08-28T10:19:56.594471+00:00"
+  }
+}

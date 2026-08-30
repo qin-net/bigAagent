@@ -1,0 +1,64 @@
+{
+  "entry_id": "kb_tech_szse_closingauction_volume",
+  "title": "深市收盘集合竞价（14:57-15:00）产生收盘价与集中量能，volume_spike 须剔除收盘集合竞价量能",
+  "scope": "technical",
+  "version": 1,
+  "created_at": "2026-08-29T07:30:49.306803+00:00",
+  "updated_at": "2026-08-29T07:31:00.485854+00:00",
+  "payload": {
+    "id": "kb_tech_szse_closingauction_volume",
+    "title": "深市收盘集合竞价（14:57-15:00）产生收盘价与集中量能，volume_spike 须剔除收盘集合竞价量能",
+    "type": "data_cleaning",
+    "scope": [
+      "technical"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "volume_spike"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "volume_spike",
+        "放量",
+        "收盘集合竞价",
+        "收盘价",
+        "集合竞价",
+        "14:57",
+        "深交所",
+        "量能"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 72,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定深交所证券 volume_spike 时，须区分连续竞价阶段真实成交与收盘集合竞价（14:57 至 15:00，规则第2.3.2条）集中撮合产生的量能。收盘集合竞价会一次性集中匹配所有买单/卖单，在尾盘集中产生收盘价及对应量能，可能虚高分钟级或日级 volume_spike 读数。计算放量基准时应以连续竞价阶段真实成交为准，将收盘集合竞价成交量单列标注，避免把制度性收盘集中撮合误判为市场放量信号。",
+      "text": "《深圳证券交易所交易规则（2026年修订）》第2.3.2条规定本所竞价交易时段为：9:15-9:25 开盘集合竞价，9:30-11:30、13:00-14:57 连续竞价，14:57-15:00 收盘集合竞价。第3.4.1条明确证券竞价交易采用集合竞价和连续竞价两种方式。收盘集合竞价在尾盘14:57-15:00将买卖申报一次性集中撮合并确定收盘价，在极短时间内集中释放大量成交量。若分钟级或日级量能",
+      "exceptions": [
+        "无收盘集合竞价交易的品种或时段"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\technical\\11_SZSE_TradingRules_2026.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:30:49.304796+00:00",
+    "updated_at": "2026-08-29T07:30:49.306803+00:00",
+    "change_note": "distill"
+  }
+}

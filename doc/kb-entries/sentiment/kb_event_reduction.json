@@ -1,0 +1,52 @@
+{
+  "entry_id": "kb_event_reduction",
+  "title": "减持抬升风险感知",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-28T10:19:56.594471+00:00",
+  "updated_at": "2026-08-28T10:19:56.594471+00:00",
+  "payload": {
+    "id": "kb_event_reduction",
+    "title": "减持抬升风险感知",
+    "type": "rule",
+    "scope": [
+      "sentiment",
+      "event"
+    ],
+    "status": "approved",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "has_reduction",
+        "holder_reduction"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "减持",
+        "reduction",
+        "控股股东",
+        "情绪",
+        "事件"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 80,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "写入 event_flags，不能单独作为买卖点",
+      "text": "控股股东减持会抬升风险感知，写入 event_flags；不能单独作为买卖点。",
+      "exceptions": []
+    },
+    "source_refs": [],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "updated_at": "2026-08-28T10:19:56.594471+00:00"
+  }
+}

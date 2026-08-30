@@ -1,0 +1,68 @@
+{
+  "entry_id": "kb_tech_szse_afterhours_fixedprice_volume",
+  "title": "深市盘后固定价格交易扩展至A股与ETF、大宗交易确认时段延长，volume_spike 须剔除盘后固定价格与协议大宗成交",
+  "scope": "technical",
+  "version": 1,
+  "created_at": "2026-08-29T07:31:19.685294+00:00",
+  "updated_at": "2026-08-29T07:31:24.842014+00:00",
+  "payload": {
+    "id": "kb_tech_szse_afterhours_fixedprice_volume",
+    "title": "深市盘后固定价格交易扩展至A股与ETF、大宗交易确认时段延长，volume_spike 须剔除盘后固定价格与协议大宗成交",
+    "type": "methodology",
+    "scope": [
+      "technical"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "volume_spike"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "volume_spike",
+        "放量",
+        "盘后固定价格交易",
+        "大宗交易",
+        "协议大宗",
+        "a股",
+        "etf",
+        "收盘价",
+        "深交所",
+        "2026修订"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 65,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定深交所（SZSE）证券 volume_spike 时，须区分连续竞价时段真实成交与两类制度性撮合成交：一是盘后固定价格交易（2026年修订将适用品种由\"创业板股票\"扩展为\"A股、交易型开放式基金\"，按当日收盘价成交）；二是创业板协议大宗交易（成交确认时间由15:00-15:30调整为9:30-11:30、13:00-15:30，即全天连续确认）。两类成交价格由收盘价/协议确定而非盘中连续竞价形成，却会计入当日成交总量，可能虚高分钟级或日级 volume_spike 读数。计算放量基准时应将盘后固定价格交易与协议大宗交易成交量单列标注、从连续竞价真实成交中剔除，避免把制度性盘中/盘外撮合误判为市场放量信号。",
+      "text": "《深圳证券交易所交易规则》（2026年修订）修订说明披露三项影响成交结构的调整：(1) 在创业板引入做市商制度；(2) 创业板协议大宗交易成交确认时间由15:00至15:30调整为9:30至11:30、13:00至15:30；(3) 盘后固定价格交易适用品种由\"创业板股票\"扩展为\"A股、交易型开放式基金\"。其中第(2)(3)项使盘中及盘后形成非连续竞价撮合的制度性成交量。盘后固定价格交易按当日收盘",
+      "exceptions": [
+        "非深交所证券不适用",
+        "若后续规则调整适用品种或确认时段，以最新版本为准",
+        "盘后与协议成交占比极低、不影响放量判断时可忽略"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\technical\\11_SZSE_TradingRules_2026_RevisionNotes.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:31:19.684296+00:00",
+    "updated_at": "2026-08-29T07:31:19.685294+00:00",
+    "change_note": "distill"
+  }
+}

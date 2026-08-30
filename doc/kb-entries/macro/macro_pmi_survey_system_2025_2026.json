@@ -1,0 +1,66 @@
+{
+  "entry_id": "macro_pmi_survey_system_2025_2026",
+  "title": "采购经理指数（PMI）调查统计报表制度：调查方法、组织与月度公布规则（2025年报/2026定期）",
+  "scope": "macro",
+  "version": 1,
+  "created_at": "2026-08-29T08:38:26.799509+00:00",
+  "updated_at": "2026-08-29T08:38:31.554696+00:00",
+  "payload": {
+    "id": "macro_pmi_survey_system_2025_2026",
+    "title": "采购经理指数（PMI）调查统计报表制度：调查方法、组织与月度公布规则（2025年报/2026定期）",
+    "type": "methodology",
+    "scope": [
+      "macro"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "lpr_missing"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "宏观分析中涉及采购经理指数（pmi）数据来源",
+        "编制方法或月度公布渠道；或需区分pmi与lpr等不同宏观指标来源并对lpr可得性边界作出说明时"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 70,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "依据国家常规统计调查制度《采购经理调查统计报表制度主要内容（2025年统计年报和2026年定期统计报表）》（国家统计局，PPS抽样，公布于stats.gov.cn）判定PMI数据来源与可得性：①PMI为抽样调查，采用成比例概率抽样（PPS）方法；②调查对象为制造业企业采购/供应经理及非制造业企业主管运营负责人或采购经理；③制造业调查涵盖生产、订货、采购、价格、库存、人员、供应商配送、采购方式、市场预期等判断，非制造业涵盖业务总量、新订单（客户需求）、存货、价格、从业人员、供应商配送、市场预期等；④组织：国家统计局各调查总队负责催报和审核，服务业调查中心负责数据汇总；⑤月度采购经理指数通过国家统计局网站（http://www.stats.gov.cn/）公布。判定：PMI月度数据由国家统计局网站常规公布，引用PMI时以该公布来源判定其可得性。关键边界：本scope冻结标记仅为lpr_available与lpr_missing（均针对贷款市场报价利率LPR）；本文主题为PMI而非LPR，全文不含LPR内容，故本来源不提供任何LPR信息，不能作为lpr_available的证据；若本来源被误用于LPR可得性判断，则属数据缺失状态（lpr_missing），应改引LPR专用来源。",
+      "text": "本chapter为国家统计局签发的国家常规统计调查制度《采购经理调查统计报表制度主要内容（2025年统计年报和2026年定期统计报表）》（2页，pymupdf提取status为ok）。制度目的：编制中国采购经理指数（PMI），国际通行的宏观经济监测先行指标，加强国民经济监测预警。调查采用抽样调查、成比例概率抽样（PPS）。调查对象为制造业采购/供应经理及非制造业运营负责人或采购经理。制造业内容包括",
+      "exceptions": [
+        "若分析目标仅为判断LPR可得性（lpr_available/lpr_missing），本PMI来源不适用，应引用LPR专用来源（如中国人民银行公告〔2019〕第15号、中国货币网规则）且不触犯本卡逻辑",
+        "当分析聚焦于PMI自身而完全不涉及LPR可得性时，本scope冻结的LPR标记均可视为不适用，勿凭PMI来源断言lpr_available",
+        "本文为调查制度说明，不提供具体PMI指数数值或历史序列"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\macro\\采购经理调查统计报表制度主要内容（2025年统计年报和2026年定期统计报表）.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\macro\\采购经理调查统计报表制度主要内容（2025年统计年报和2026年定期统计报表）.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:38:26.798503+00:00",
+    "updated_at": "2026-08-29T08:38:26.799509+00:00",
+    "change_note": "distill"
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "entry_id": "macro_lpr_transition_2019_08_action",
+  "title": "LPR改革实施时点动作：2019-08-19旧LPR停报、2019-08-20首次发布新LPR",
+  "scope": "macro",
+  "version": 1,
+  "created_at": "2026-08-29T08:32:21.993944+00:00",
+  "updated_at": "2026-08-29T08:32:30.446907+00:00",
+  "payload": {
+    "id": "macro_lpr_transition_2019_08_action",
+    "title": "LPR改革实施时点动作：2019-08-19旧LPR停报、2019-08-20首次发布新LPR",
+    "type": "action",
+    "scope": [
+      "macro"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "lpr_available",
+        "lpr_missing"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "宏观分析中需判定lpr新版机制的具体落地时点",
+        "或判断2019年8月lpr机制切换期数据可得性时"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 75,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "依据中国人民银行有关负责人就完善贷款市场报价利率形成机制答记者问（2019-08-17，央行官网），判定：原机制下的LPR于2019-08-19停报一天，2019-08-20首次发布新的LPR。据此，2019-08-20前LPR依原机制尚存，机制切换存在数据断点；2019-08-20起新LPR（1年期与5年期以上两期限、按MLF加点报价、报价行扩至18家）按每月20日规则发布。若分析时点处于新机制正常发布期且数据可得，启用lpr_available；若处于切换断点（2019-08-19）或数据缺失，启用lpr_missing。新机制下银行难以协同设定隐性下限以推降贷利率，银行LPR应用情况及贷款利率竞争行为纳入宏观审慎评估（MPA）。",
+      "text": "本卡聚焦LPR改革的落地时点动作与降低实际利率机制。央行有关负责人答记者问（2019-08-17）明确：原LPR于2019-08-19停报一天，2019-08-20首次发布新LPR，属机制切换期。降低贷款实际利率路径：一是前期市场利率下行经新机制更多反映；二是打破银行贷款基准利率隐性下限（监管及企业举报监督）；三是新发放贷款主要参考LPR定价、浮动利率合同以LPR为基准（存量按原合同）；四是银行L",
+      "exceptions": [
+        "仅当需判断切换期时点时引用本卡；常规LPR可得性判断优先复用macro_lpr_announcement_2019_15_origin",
+        "lpr_missing仅在切换断点或报价本应发布而未发布时启用",
+        "与分析无关或未引用LPR数据时慎用"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\macro\\中国人民银行有关负责人就完善贷款市场报价利率形成机制答记者问.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\macro\\中国人民银行有关负责人就完善贷款市场报价利率形成机制答记者问.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:32:21.992944+00:00",
+    "updated_at": "2026-08-29T08:32:21.993944+00:00",
+    "change_note": "distill"
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "entry_id": "tech_inertia_reversal_policymarket_a_share",
+  "title": "中国股市政策市：反转强于惯性，小盘/高成交量更易反转",
+  "scope": "technical",
+  "version": 1,
+  "created_at": "2026-08-29T07:32:47.970756+00:00",
+  "updated_at": "2026-08-29T07:32:54.438492+00:00",
+  "payload": {
+    "id": "tech_inertia_reversal_policymarket_a_share",
+    "title": "中国股市政策市：反转强于惯性，小盘/高成交量更易反转",
+    "type": "technical",
+    "scope": [
+      "technical"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "rsi_overbought",
+        "rsi_oversold",
+        "ma_bull_align",
+        "ma_bear_align",
+        "volume_spike"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "个股出现rsi_overbought或rsi_oversold极端行情；或ma_bull_align",
+        "ma_bear_align趋势形态与volume_spike共现",
+        "尤其是小市值或高换手个股",
+        "依据本章政策市模型",
+        "中国股市反转效应相对于惯性效应更明显"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 2,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "在中国股市（政策市）中，将极端超买/超卖与强势趋势形态更多视为潜在反转触发点而非简单追势：1) rsi_overbought叠加近期上涨、或ma_bull_align强势后，警惕反转，考虑逐步减仓/不追高；2) rsi_oversold叠加下跌、或ma_bear_align弱势后，可提前关注反转机会而非恐慌杀跌；3) 对于小公司股票或成交量大的股票，惯性趋势较弱、更容易发生反转，故条件成立时反转倾向更强，可相应提高应对的触发优先级；4) 需区分时间维度——除中期惯性与长期反转外，还存在超短期惯性与短期反转，故操作窗口较短时仍可保留动量思路。对应逻辑以\"反转效应相对惯性更明显，小盘/高量股更易反转\"为依据。",
+      "text": "本章（鲁臻、邹恒甫2007，基于Hong&Stein 1999）在中国股市\"政策市\"背景下建模两类投资者（信息观察者与惯性投资者）的相互作用。核心结论：中国股市反转效应比惯性效应更明显；除中期惯性与长期反转外还存在超短期惯性与短期反转；小公司股票相对大公司股票惯性较弱、更易反转；成交量大的股票相对成交量小的股票惯性较弱、更易反转。机制上，惯性源于惯性投资者的惯性策略（参数λ），反转源于信息观察者对",
+      "exceptions": [
+        "理性因子模型/成熟市场3-12月惯性主导场景并不完全适用本章推论",
+        "若处于极短持有窗口（超短期动量阶段），反转逻辑可能尚未触发"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\technical\\9b_中国股市的惯性与反转特性.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:32:47.970756+00:00",
+    "updated_at": "2026-08-29T07:32:47.970756+00:00",
+    "change_note": "distill"
+  }
+}

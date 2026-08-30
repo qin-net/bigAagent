@@ -1,0 +1,71 @@
+{
+  "entry_id": "macro_lpr_availability_pboc_whitepaper_2020",
+  "title": "LPR可得性判断补充依据：《参与国际基准利率改革和健全中国基准利率体系》白皮书（2020）对LPR基准地位的确认",
+  "scope": "macro",
+  "version": 1,
+  "created_at": "2026-08-29T08:31:26.397126+00:00",
+  "updated_at": "2026-08-29T08:31:32.378956+00:00",
+  "payload": {
+    "id": "macro_lpr_availability_pboc_whitepaper_2020",
+    "title": "LPR可得性判断补充依据：《参与国际基准利率改革和健全中国基准利率体系》白皮书（2020）对LPR基准地位的确认",
+    "type": "mapping_rule",
+    "scope": [
+      "macro"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "lpr_available"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "宏观分析需判断贷款市场报价利率(lpr)可得性",
+        "且已有或需补充权威官方文件依据时"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 70,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "宏观scope下，lpr_available与lpr_missing为唯一冻结标记。除依据中国货币网现行报价与公布规则（lpr_available/lpr_missing判断主规则）外，可补充引述中国人民银行2020年8月31日发布的《参与国际基准利率改革和健全中国基准利率体系》白皮书作为权威制度依据。该白皮书明确将贷款市场报价利率（LPR）列为中国信贷市场已培育的指标性基准利率，确认其在相应金融市场\"发挥了重要的基准作用\"，并纳入中国人民银行重点监督管理的基准利率范畴。据此确认LPR为官方持续运行、监管认可的经常性发布基准利率，正常情况下应视为可得（启用lpr_available）。仅当分析所引用的具体LPR数据不符合中国货币网规定发布规则、出现未发布或数据缺失时，方启用lpr_missing。",
+      "text": "映射规则：宏观scope下唯一冻结标记为lpr_available与lpr_missing。本白皮书第3-4页明示\"存款类金融机构间的债券回购利率（DR）、国债收益率、贷款市场报价利率（LPR）等在相应金融市场中都发挥了重要的基准作用\"，确认LPR是中国人民银行认定的信贷市场指标性基准利率，且属央行\"高度重视对基准利率的监督管理\"范畴。故在制度层面，LPR被官方确认为持续运行、经常性发布的基准利率",
+      "exceptions": [
+        "引用LPR数据但该数据未按中国货币网规定规则发布或缺失时，应启用lpr_missing",
+        "若分析对象为LIBOR等其他基准利率转换问题而非LPR，本映射规则不适用（无LPR标记启用）"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\macro\\《参与国际基准利率改革和健全中国基准利率体系》白皮书.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data/kb/markdown/macro/《参与国际基准利率改革和健全中国基准利率体系》白皮书.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "宏观scope冻结标记：lpr_available、lpr_missing",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:31:26.396126+00:00",
+    "updated_at": "2026-08-29T08:31:26.397126+00:00",
+    "change_note": "distill"
+  }
+}

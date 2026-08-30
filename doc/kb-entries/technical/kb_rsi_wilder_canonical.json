@@ -1,0 +1,64 @@
+{
+  "entry_id": "kb_rsi_wilder_canonical",
+  "title": "RSI 为本源振荡指标，超买超卖按标准区间判断",
+  "scope": "technical",
+  "version": 1,
+  "created_at": "2026-08-29T06:59:44.883250+00:00",
+  "updated_at": "2026-08-29T06:59:50.090516+00:00",
+  "payload": {
+    "id": "kb_rsi_wilder_canonical",
+    "title": "RSI 为本源振荡指标，超买超卖按标准区间判断",
+    "type": "methodology",
+    "scope": [
+      "technical"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "rsi_oversold",
+        "rsi_overbought",
+        "ma_bear_align",
+        "ma_bull_align"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "rsi",
+        "overbought",
+        "oversold",
+        "超买",
+        "超卖"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 60,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "识别到 RSI 超买/超卖触发时，将其作为短线过热/超冷信号，判断仍以趋势结构为准，不单独作为转势依据。",
+      "text": "本源为 Wilder 1978 的 RSI 原典。提取文本仅含卷首介绍页（第1-3页），确认 RSI 为被各经纪公司每日监测的标准振荡指标；正文（第4-130页）在本提取中为空白，未含 RSI 具体超买超卖阈值数值。因此本卡仅将 RSI 超买/超卖标记为本源振荡信号，判定应结合趋势结构，不单独作为转势依据。",
+      "exceptions": [
+        "没有 RSI 数据或样本不足时不触发"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data/kb/markdown/technical/01_Wilder_1978_New_Concepts_in_Technical_Trading_Systems.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T06:59:44.882203+00:00",
+    "updated_at": "2026-08-29T06:59:44.883250+00:00",
+    "change_note": "distill"
+  }
+}

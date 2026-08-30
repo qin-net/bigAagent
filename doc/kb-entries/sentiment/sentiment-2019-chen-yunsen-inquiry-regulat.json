@@ -1,0 +1,66 @@
+{
+  "entry_id": "sentiment-2019-chen-yunsen-inquiry-regulat",
+  "title": "交易所财务报告问询函一线监管抑制盈余管理",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T08:20:28.708000+00:00",
+  "updated_at": "2026-08-29T08:20:34.164420+00:00",
+  "payload": {
+    "id": "sentiment-2019-chen-yunsen-inquiry-regulat",
+    "title": "交易所财务报告问询函一线监管抑制盈余管理",
+    "type": "sentiment",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "has_inquiry"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "上市公司收到证券交易所（上交所",
+        "深交所）针对财务报告的问询函；结合信息披露直通车（2013年上交所",
+        "2014年深交所）的事后监管背景识别"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 3,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "识别\"具有问询函\"事件（has_inquiry）。本文将收到交易所财务报告问询函视为重要监管/信息事件，符合冻结flag\"has_inquiry\"。识别时确认公司是否收到针对年报/季报/半年报的交易所问询函，并关注收函总数、同一报告被问询次数、是否要求中介机构发表核查意见、问题数量及是否涉及会计/利润调整/审计/并购重组/董监高/违法违规，以及公司是否回函承认错误或延期回函——这些细分特征显著影响监管效果（从而影响信息确认价值）。结合信息披露直通车（2013年上交所、2014年深交所）事后监管背景识别。",
+      "text": "本文（陈运森、邓祎璐、李哲，2019《管理世界》）实证研究证券交易所基于财务报告问询函的一线监管有效性。以2013-2016年上交所和深交所财务报告问询函为对象，以盈余管理程度衡量治理改善，发现收到问询函后盈余管理被抑制，监管力度越大（收函总数越多、同一报告被问询次数越多）则降幅越大。问询函细分特征（要求中介机构核查、问题数量、涉及会计问题、公司回函承认错误或延期回函）及问题分类（利润调整、审计、",
+      "exceptions": [
+        "涉及财务报告格式/报告发布时间、税收、关联交易、研发、政府补助的问询函问题，对盈余管理无显著增量影响，信号价值有限",
+        "国有企业或信息环境较差企业收函后盈余管理无显著变化，监管效果欠佳，信号价值衰减"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\陈运森-2019-管理世界.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\陈运森-2019-管理世界.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:20:28.706493+00:00",
+    "updated_at": "2026-08-29T08:20:28.708000+00:00",
+    "change_note": "distill"
+  }
+}

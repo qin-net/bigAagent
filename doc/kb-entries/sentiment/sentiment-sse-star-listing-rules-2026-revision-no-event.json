@@ -1,0 +1,70 @@
+{
+  "entry_id": "sentiment-sse-star-listing-rules-2026-revision-no-event",
+  "title": "上交所《科创板股票上市规则》2026年4月修订说明为自律监管规则修订文本（无具体公司情绪事件）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T13:09:50.702132+00:00",
+  "updated_at": "2026-08-29T13:10:00.536213+00:00",
+  "payload": {
+    "id": "sentiment-sse-star-listing-rules-2026-revision-no-event",
+    "title": "上交所《科创板股票上市规则》2026年4月修订说明为自律监管规则修订文本（无具体公司情绪事件）",
+    "type": "no_material_event",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "《上海证券交易所科创板股票上市规则（2026年4月修订）》修订说明为科创板自律监管规则修订解释文本",
+        "内容围绕董事高管忠实义务与赔偿责任",
+        "董秘履职保障及任职要求（董秘空缺期不超过6个月由董事长代行）",
+        "优化上市公司合并终止上市流程（取消上市审核委员会审议）",
+        "预重整信息披露规范及自愿性披露",
+        "社会责任报告披露完善等一般性制度安排",
+        "不针对任何单一上市公司披露具体事件"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 1,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "将本文档归类为科创板自律监管规则修订解释文本，不构成任何公司层面的情绪/事件信息。冻结情绪旗标 has_buyback（回购）、has_earnings_preview（业绩预告）、has_inquiry（监管问询函）、has_reduction / holder_reduction（股东减持）均针对具体上市公司的事件/披露，而本文档系上交所对《科创板上市规则》的修订说明，规范科创板上市公司董监高履职、董秘保障、合并终止上市流程、预重整披露等制度，非股票回购公告、业绩预告、监管问询函或股东减持公告，故不触发上述任一事件旗标。映射为 no_material_event / no_recent_events，标示本修订说明不承载针对特定科创板上市公司的情绪/事件信息。参照既有已批准条目 sentiment-sse-listing-rules-2026-revision-no-event（上交所主板上市规则2026年修订归为无事件）、kb_szse_listing_rules_revision_explanation_no_event（深交所上市规则修订说明归为无事件）及 sentiment-cn-securities-law-no-event（基础监管制度文本归为无事件）之先例：交易所自律监管规则修订说明不构成公司层情绪事件，仅当出现实际公司公告时才据实映射；本修订说明虽涉董监高任职/履职管理，但未新增或细化董监高减持的实质监管要点（减持实体/持股变动规则已有专门修订说明条目 kb_shareholding_change_rules_revision_explanation），故不触发 has_reduction/holder_reduction。全文无任何公司名称、具体事件或时间点，归为 no_material_event 与 no_recent_events。",
+      "text": "《上海证券交易所科创板股票上市规则（2026年4月修订）修订说明》系上海证券交易所发布的科创板自律监管规则修订解释文本（pdf 3页，文字已完整提取），为落实中国证监会《上市公司治理准则》《上市公司董事会秘书监管规则》相关要求，并结合新\"国九条\"、\"并购六条\"后上市公司吸收合并实践，对《科创板上市规则》作出修订。主要修订内容：（1）加强董事、高管履职监管——细化董事高管忠实义务（新增例外情形下从事",
+      "exceptions": [
+        "若后续出现科创板上市公司另案公告的股票回购/业绩预告/监管问询/股东减持等具体事件披露，应据实映射相应事件旗标，本条目仅界定该修订说明文本本身"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\《上海证券交易所科创板股票上市规则（2026年4月修订）》修订说明.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data/kb/markdown/sentiment/《上海证券交易所科创板股票上市规则（2026年4月修订）》修订说明.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T13:09:50.701132+00:00",
+    "updated_at": "2026-08-29T13:09:50.702132+00:00",
+    "change_note": "distill"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "entry_id": "macro_lpr_announcement_2019_15_origin",
+  "title": "LPR可得性起源：中国人民银行公告〔2019〕第15号确立的形成机制与原依据",
+  "scope": "macro",
+  "version": 1,
+  "created_at": "2026-08-29T08:31:50.933811+00:00",
+  "updated_at": "2026-08-29T08:31:59.409223+00:00",
+  "payload": {
+    "id": "macro_lpr_announcement_2019_15_origin",
+    "title": "LPR可得性起源：中国人民银行公告〔2019〕第15号确立的形成机制与原依据",
+    "type": "canonical",
+    "scope": [
+      "macro"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "lpr_available",
+        "lpr_missing"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "宏观分析中需判断贷款市场报价利率(lpr)可得性或解释lpr形成机制来源时"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 80,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "依据中国人民银行公告〔2019〕第15号（2019-08-16发布、2019-08-20起施行）判定LPR机制原依据：LPR由中国人民银行授权全国银行间同业拆借中心于每月20日（遇节假日顺延）9时30分公布；报价行于每月20日9时前按公开市场操作利率（主要指中期借贷便利MLF利率）加点方式报价，由同业拆借中心去掉最高和最低报价后算术平均得出。报价行类型由原来的10家全国性银行扩大至全国性、城市商业、农村商业、外资、民营共18家（今后定期评估调整）；期限品种由1年期扩大至1年期和5年期以上两个期限。判定：LPR机制建立后且按规则正常发布，启用lpr_available；若LPR未按规则发布或数据缺失，则启用lpr_missing。新发放贷款应主要参考LPR定价，浮动利率贷款合同以LPR为定价基准，存量贷款利率仍按原合同执行；禁止各银行协同设定贷款利率隐性下限，银行LPR应用情况及贷款利率竞争行为纳入宏观审慎评估（MPA）。",
+      "text": "中国人民银行公告〔2019〕第15号（2019-08-16）改革完善贷款市场报价利率（LPR）形成机制，确立LPR可得性框架。LPR由中国人民银行授权全国银行间同业拆借中心于每月20日（遇节假日顺延）9时30分公布；报价行于每月20日9时前按公开市场操作利率（主要指MLF利率）加点方式报价，同业拆借中心去掉最高和最低报价后算术平均得出。报价行由10家扩大至18家（增加城市商业、农村商业、外资、民营",
+      "exceptions": [
+        "本公告适用于LPR机制建立的原依据；后续报价行数量等细节以现行中国货币网说明为准",
+        "存量贷款利率不参考LPR，仍按原合同约定执行"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\macro\\中国人民银行公告〔2019〕第15号.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\macro\\中国人民银行公告〔2019〕第15号.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:31:50.933811+00:00",
+    "updated_at": "2026-08-29T08:31:50.933811+00:00",
+    "change_note": "distill"
+  }
+}

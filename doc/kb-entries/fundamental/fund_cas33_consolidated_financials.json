@@ -1,0 +1,85 @@
+{
+  "entry_id": "fund_cas33_consolidated_financials",
+  "title": "CAS33合并报表口径对盈利、ROE与现金流质量的校验（合并范围/内部交易抵销/少数股东权益）",
+  "scope": "fundamental",
+  "version": 1,
+  "created_at": "2026-08-29T12:06:19.687275+00:00",
+  "updated_at": "2026-08-29T12:06:23.926889+00:00",
+  "payload": {
+    "id": "fund_cas33_consolidated_financials",
+    "title": "CAS33合并报表口径对盈利、ROE与现金流质量的校验（合并范围/内部交易抵销/少数股东权益）",
+    "type": "rule",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "cashflow_quality_issue",
+        "roe_quality",
+        "roe_insufficient_history",
+        "cashflow_lag",
+        "cashflow_seasonal"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "分析集团型企业（母公司及其子公司）时",
+        "按《企业会计准则第33号——合并财务报表》编制的合并报表需结合其编制口径校验盈利与现金流质量：当合并范围划分（控制判断",
+        "投资性主体与否",
+        "第二十一至二十五条）",
+        "内部交易抵销（余额",
+        "损益",
+        "现金流",
+        "第三十至三十六",
+        "四十一至四十二条）或同一",
+        "非同一控制合并的期间调整（第三十二",
+        "三十八条）受质疑时触发；若标的系投资性主体或存在大量未抵销内部交易",
+        "少数股东权益显著",
+        "需据此判别归母净利润与现金流的真实性",
+        "进而落定",
+        "cashflow_quality_issue",
+        "cashflow_lag",
+        "roe_quality"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 2,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "按CAS33核对标的合并报表编制口径，作为分析集团层面盈利、ROE与现金流的锚点：先用控制而非持股比例判定合并范围（第七条、十三条、十四条），确认母公司是否为投资性主体（第二十一至二十五条，仅合并为其投资活动提供服务的子公司、其余按公允价值计量且变动计入当期损益）；合并程序要求抵销母子公司及子公司之间的内部交易（第三十至三十六条：内部销售损益、债权债务与减值、长期股权投资与投资收益、持债券投资收益与利息费用）并在合并现金流量表抵销内部投资、股利、债务结算、销售等产生的现金流量（第四十一至四十二条）。据此辨析：(1)若标的属投资性主体或采用公允价值计量而不合并实质运营子公司，其报表权益与利润可能偏离业务实质，需落 roe_quality 并视为 cashflow_quality_issue 证据之一；(2)若合并报表存在大量未抵销或抵销不充分的内部交易（内部销售、关联债权债务与融资）使整体盈利与经营现金流虚增或失真，落 cashflow_quality_issue；若局部特征为内部回款与期末集中交易，落 cashflow_lag 或 cashflow_seasonal；(3)归母净利润与少数股东损益的分配（第三十五至三十七条）及未实现内部销售损益的归属若导致归母口径失真或少数股权重价失真，落 roe_quality；(4)同一控制合并对期初数/比较报表的追溯调整（第三十二、三十八条）重构区间利润与净资产，据此判断 roe_insufficient_history 是否因合并口径变更造成；(5)不因合并报表编制口径本身确定 high_leverage、valuation_cheap、valuation_rich、.ht价值陷阱，这些旗仍需各自维度的杠杆、估值与基本面证据。",
+      "text": "《企业会计准则第33号——合并财务报表》规范母公司与全部子公司形成的企业集团整体财务状况、经营成果与现金流量的报表编制（第二条）。合并范围以控制为基础（第七至十四条）：投资方拥有对被投资方的权力、通过参与相关活动享有可变回报、并有能力运用该权力影响回报金额。投资性主体（第二十一至二十五条）仅将为其投资活动提供服务的子公司纳入合并范围，其余按公允价值计量且变动计入当期损益。合并程序（第二十六条后）：",
+      "exceptions": [
+        "单一主体（无子公司）不涉合并范围与内部交易抵销，本卡不适用",
+        "合并口径清晰、内部交易抵销充分且无投资性主体特征时不落任何旗",
+        "仅因企业集团存在正常内外部内部交易而不构成落旗理由"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\fundamental\\企业会计准则第33号-合并财务报表.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data/kb/markdown/fundamental/企业会计准则第33号-合并财务报表.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T12:06:19.686276+00:00",
+    "updated_at": "2026-08-29T12:06:19.687275+00:00",
+    "change_note": "distill"
+  }
+}

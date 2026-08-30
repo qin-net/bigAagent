@@ -1,0 +1,67 @@
+{
+  "entry_id": "tech_reversal_overreaction_a_share",
+  "title": "China A股过度反应与反转：极端上涨后警惕追涨",
+  "scope": "technical",
+  "version": 1,
+  "created_at": "2026-08-29T07:32:21.470145+00:00",
+  "updated_at": "2026-08-29T07:32:30.446729+00:00",
+  "payload": {
+    "id": "tech_reversal_overreaction_a_share",
+    "title": "China A股过度反应与反转：极端上涨后警惕追涨",
+    "type": "technical",
+    "scope": [
+      "technical"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "rsi_overbought",
+        "ma_bull_align"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "个股出现rsi_overbought",
+        "且近期呈现ma_bull_align强势上涨形态",
+        "依据本章实证",
+        "中国a股市场惯性",
+        "追涨杀跌是最差策略",
+        "存在显著反转现象",
+        "此时应警惕反转风险",
+        "而非追高"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 3,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "当rsi_overbought与ma_bull_align共现于A股个股时，按反转/过度反应逻辑对待：不追涨或降低追涨仓位，并将超买视为潜在反转触发点；若后续动能转弱（如ma_bear_align形成或macd_pos转负），考虑减仓/回避。对应逻辑以\"反转策略有利可图、惯性/追涨杀跌为最差策略\"为依据。",
+      "text": "该文献对1994-2004年沪深A股（剔除B股、停牌6月以上及退市股，共1204只）的全样本实证表明：中国A股基本不存在惯性现象，而存在显著反转现象，投资者呈现过度反应特征；反转策略有利可图，而惯性策略/\"追涨杀跌\"为最差策略。不同形成期×持有期组合下赢家/输家组合均值高度一致地表现反转。国外(Jegadeesh-Titman等)研究显示短期3-12月惯性在欧美显著，但本章及杨忻-陈展辉(2004",
+      "exceptions": [
+        "若价涨同时伴随volume_spike强放量确认且符合macd_pos持续强势，动量或可延续，需更高证据门槛再判断反转",
+        "不同形成期与持有期组合下反转强度不同，短期(约1个月)可能反转迹象不明显",
+        "非A股/成熟市场短期(3-12月)存在惯性，本章反转优先结论不适用于普遍市场环境"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\technical\\9a_中国股市“惯性策略”和“反转策略”的实证分析.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:32:21.469643+00:00",
+    "updated_at": "2026-08-29T07:32:21.470145+00:00",
+    "change_note": "distill"
+  }
+}

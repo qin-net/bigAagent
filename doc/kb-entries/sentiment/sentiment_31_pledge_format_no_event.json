@@ -1,0 +1,85 @@
+{
+  "entry_id": "sentiment_31_pledge_format_no_event",
+  "title": "《第三十一号 上市公司股份质押（冻结、标记、解质、解冻、解除标记）公告》— 披露格式模板，无实质市场事件",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T07:41:55.171192+00:00",
+  "updated_at": "2026-08-29T07:42:00.105335+00:00",
+  "payload": {
+    "id": "sentiment_31_pledge_format_no_event",
+    "title": "《第三十一号 上市公司股份质押（冻结、标记、解质、解冻、解除标记）公告》— 披露格式模板，无实质市场事件",
+    "type": "format_template",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "监测到上交所《第三十一号",
+        "上市公司股份质押（冻结",
+        "标记",
+        "解质",
+        "解冻",
+        "解除标记）公告》格式模板文档",
+        "页码声明为10页",
+        "正文为空白格式框架",
+        "包含适用情形",
+        "披露内容标题节",
+        "各类占位表格（证券代码",
+        "公告编号",
+        "股东名称",
+        "质押股数",
+        "\"xxxx\"占位符",
+        "日末尾落款等）及逐节格式要求说明（股份质押",
+        "控股股东质押情形",
+        "股份被冻结",
+        "标记",
+        "解除质押",
+        "冻结",
+        "标记",
+        "强制平仓或强制过户风险）",
+        "不指向任何单一上市公司的具体公告或已发生事件"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 3,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定该来源为交易所公告格式模板（格式指引文本），属于披露规范文本，不构成特定上市公司的情绪事件。映射到 no_material_event 与 no_recent_events。该模板用于规范上市公司就以下事项的披露格式：①股东及其一致行动人所持公司5%以上股份被质押（含场内质押式回购及场外质押）；②5%以上股份出现强制平仓/强制过户风险；③股份被拍卖、托管、设定信托或限制表决权（参照适用）；④股份被冻结/标记、解质/解冻/解除标记；⑤控股股东累计质押比例达50%/80%时的附加披露要求。需特别说明：本模板描述了质押、冻结、解质、强制平仓等披露类型，但模板本身并非实际事件公告；若后续实际出现某公司股东质押/冻结/解质/强制平仓风险公告，才据此模板框架映射情绪信号。参照已有学术论文条目\"kb_pledge_reference_point_academic\"之结论：股权质押（含质押式回购）本身不等同于减持（reduction）标志，仅当出现实际减持公告时才使用 has_reduction/holder_reduction。本模板中的\"强制平仓/强制过户\"属于权利受限/违约处置风险范畴，亦不与 has_reduction（股东减持）等同，除非公司实际披露强制平仓导致的股份减持/权益变动。诊断依据：正文为空白格式框架（证券代码/公告编号、\"XXXX\"公司名、股东名称、年/月/日落款均为占位符），无任何特定上市公司、股东或具体质押/冻结数量，不触发 has_reduction、holder_reduction、has_inquiry、has_buyback、has_earnings_preview 等任何实质事件标志，故归为 no_material_event 与 no_recent_events。",
+      "text": "该文档为上海证券交易所《第三十一号 上市公司股份质押（冻结、标记、解质、解冻、解除标记）公告》披露格式模板，共10页（PDF版声明），正文为披露格式框架而非特定公司事实。内容结构：适用情形（场内/场外质押合并计算；5%以上股份出现强制平仓或过户风险；股份被拍卖、托管、信托、限制表决权等参照适用）→ 标准抬头（证券代码/简称/编号、\"XXXX股份有限公司\"占位）→ 重要内容提示 → 一、上市公司股份",
+      "exceptions": [
+        "has_reduction",
+        "holder_reduction",
+        "has_inquiry",
+        "has_buyback",
+        "has_earnings_preview"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\第三十一号 上市公司股份质押（冻结、标记、解质、解冻、解除标记）公告.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:41:55.169713+00:00",
+    "updated_at": "2026-08-29T07:41:55.171192+00:00",
+    "change_note": "distill"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "entry_id": "fund_ic_roe_quality_v1",
+  "title": "内控薄弱预示盈余/ROE质量下降（roe_quality）",
+  "scope": "fundamental",
+  "version": 1,
+  "created_at": "2026-08-29T06:47:34.290204+00:00",
+  "updated_at": "2026-08-29T06:47:40.011867+00:00",
+  "payload": {
+    "id": "fund_ic_roe_quality_v1",
+    "title": "内控薄弱预示盈余/ROE质量下降（roe_quality）",
+    "type": "fundamental",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "roe_quality"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "公司报告年度出现内部控制薄弱信号（发生违规",
+        "审计师对财务报表出具非标审计意见",
+        "内控自评报告披露内控缺陷）",
+        "且当期盈余用于判断盈利质量"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 3,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "标记 roe_quality 旗标：内控质量低与盈余持续性低相关，内控薄弱会增大会计估计误差并降低盈余(ROE)质量。",
+      "text": "方红星等(2013)基于2007-2010年A股非金融上市公司样本，发现内部控制质量与盈余及其组成部分(应计和现金流)的持续性正相关：内控质量越高，盈余持续性越强；内控薄弱的公司因会计估计误差增大、管理层机会主义动机未被抑制，盈余持续性更低。盈余持续性是盈余质量的重要指标，故内控薄弱信号可触发roe_quality旗标。",
+      "exceptions": [
+        "公司内控质量属中等或高质量（无低质量证据）",
+        "无足够财务数据支撑盈余持续性判断"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data/kb/markdown/fundamental/内部控制对盈余持续性的影响及其市场反应——来自A股非金融类上市公司的经验证据_方红星.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T06:47:34.290204+00:00",
+    "updated_at": "2026-08-29T06:47:34.290204+00:00",
+    "change_note": "distill"
+  }
+}

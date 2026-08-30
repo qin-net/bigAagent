@@ -1,0 +1,80 @@
+{
+  "entry_id": "kb_reduction_measures_legislative_explanation",
+  "title": "《上市公司股东减持股份管理暂行办法》立法说明——减持事件新老划断与绕道减持识别的补充基准（has_reduction/holder_reduction）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T08:18:46.912686+00:00",
+  "updated_at": "2026-08-29T08:18:53.849759+00:00",
+  "payload": {
+    "id": "kb_reduction_measures_legislative_explanation",
+    "title": "《上市公司股东减持股份管理暂行办法》立法说明——减持事件新老划断与绕道减持识别的补充基准（has_reduction/holder_reduction）",
+    "type": "methodology",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "has_reduction",
+        "holder_reduction"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "减持",
+        "立法说明",
+        "新老划断",
+        "离婚式减持",
+        "绕道减持",
+        "协议转让",
+        "质押违约",
+        "融资融券违约",
+        "破发破净",
+        "分红不达标",
+        "股东减持股份管理暂行办法",
+        "立法说明",
+        "has_reduction",
+        "holder_reduction"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 50,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定 has_reduction / holder_reduction 时，在《减持管理办法》实体规则（kb_reduction_measures_2024）基础上叠加本办法立法说明所明确的适用边界：(1) 新老划断——离婚、法人/非法人组织终止、公司分立等分割股票过户时点在办法施行前的，按当时规定执行；过户在施行后的，按本办法执行；质押登记或作为融资融券担保物时点在办法施行前、后则分别按旧规/本办法执行；故对历史时间点减持事件须先依过户/质押登记时点判定适用规则版本。(2) 绕道减持防范——离婚、法人终止、公司分立后相关方应持续共同遵守减持限制；一致行动关系解除后6个月内继续共同遵守；协议转让受让方锁定6个月、丧失大股东身份的出让方6个月内继续受限；司法强制执行/质押、两融违约处置按减持方式不同遵守本办法。因此，若离婚分割、协议转让、解除一致行动、质押违约处置等形式上不构成直接减持公告的事件实为绕道减持，亦应纳入 has_reduction/holder_reduction 风险识别。(3) 排除适用——控股股东/实控人减持集中竞价买入的股份不受破发破净、分红不达标不得减持之限制；已按办法披露减持计划的不受此限。在量化破发破净/分红条件时须排除集中竞价买入部分。(4) 违规追责——对违规减持可采取“责令购回并向上市公司上缴价差”、监管谈话、出具警示函等；被责令购回并上缴价差的违规处置本身不作为独立的风险事件，但其反映出违规减持事实、可用以佐证 has_reduction/holder_reduction 属于风险敏感情形。",
+      "text": "本办法立法说明阐述减持管理办法（2024年发布，取代2017年减持规定）的立法背景、主要内容和公开征求意见采纳情况，为 sentiment 的 has_reduction / holder_reduction 提供适用性边界与绕道减持识别的补充基准。关键增量：(1) 新老划断——离婚、法人/非法人组织终止、公司分立等分割股票过户时点在办法施行前的按当时规定及交易所规则执行，施行后的按本办法执行；质",
+      "exceptions": [
+        "对施行前已办理的过户或质押/两融担保登记事件不适用本办法（按当时规则执行），不据此抬升风险",
+        "减持集中竞价买入的股份不属于破发破净、分红不达标之受限范围（不构成 holder_reduction 的触发）",
+        "已按办法披露减持计划的控股股东/实控人不适用破发破净、分红不达标不得减持的限制",
+        "违规减持经责令购回并上缴价差的，自身不构成独立风险事件，仅作为佐证"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\附件2：《上市公司股东减持股份管理暂行办法》立法说明.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "附件2：《上市公司股东减持股份管理暂行办法》立法说明",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:18:46.911685+00:00",
+    "updated_at": "2026-08-29T08:18:46.912686+00:00",
+    "change_note": "distill"
+  }
+}

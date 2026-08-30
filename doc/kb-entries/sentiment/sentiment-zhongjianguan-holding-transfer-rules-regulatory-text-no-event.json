@@ -1,0 +1,78 @@
+{
+  "entry_id": "sentiment-zhongjianguan-holding-transfer-rules-regulatory-text-no-event",
+  "title": "《上市公司董事、监事和高级管理人员所持本公司股份及其变动管理规则》——监管规章文本（无具体公司事件，董监高减持合规基准来源）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T08:17:09.034730+00:00",
+  "updated_at": "2026-08-29T08:17:19.008300+00:00",
+  "payload": {
+    "id": "sentiment-zhongjianguan-holding-transfer-rules-regulatory-text-no-event",
+    "title": "《上市公司董事、监事和高级管理人员所持本公司股份及其变动管理规则》——监管规章文本（无具体公司事件，董监高减持合规基准来源）",
+    "type": "regulatory_frame",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "《上市公司董事",
+        "监事和高级管理人员所持本公司股份及其变动管理规则》为证监会规章全文文本",
+        "内容围绕董监高所持本公司股份及其变动的管理规则",
+        "含转让限制（上市一年内",
+        "离职后半年内",
+        "立案调查处罚未满六个月",
+        "公开谴责未满三个月",
+        "重大违法强制退市限制期等）年度可转让比例（25%）减持计划披露（首次卖出前15个交易日报告并披露",
+        "实施完毕或区间届满后2个交易日公告）个人信息申报（离任职后2个交易日等）禁止交易期间（年报半年报前15日",
+        "季报业绩预告业绩快报前5日",
+        "重大事件至披露日等）监管措施（责令购回",
+        "监管谈话",
+        "警示函",
+        "市场禁入）不针对任何单一上市公司披露具体事项"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 40,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "将本文档归类为证监会监管规章全文文本。冻结情绪旗标中 has_buyback、has_earnings_preview、has_inquiry、has_reduction、holder_reduction 均针对具体公司事件/披露，本文档既非股票回购公告、业绩预告、监管问询函，也非某公司的股东减持公告，故不触发上述任一事件旗标。映射为 no_material_event / no_recent_events，标示本文档不承载针对特定上市公司的情绪/事件信息。同时，本文档作为董监高减持行为的合规约束基准（第4条禁止情形、第5条25%比例、第9条减持计划披露、第13条禁止交易期间、第16-17条违规处罚），在判定 has_reduction/holder_reduction 时作为底层制度框架参考，与《上市公司股东减持股份管理暂行办法》配套使用；但规章本身不构成公司层面的减持事件证据。",
+      "text": "《上市公司董事、监事和高级管理人员所持本公司股份及其变动管理规则》系中国证监会发布的监管规章全文文本（依据《公司法》《证券法》《上市公司股东减持股份管理暂行办法》等制定），用于规范上市公司董监高所持本公司股份及其变动的管理，共18条。核心内容包括：(1) 转让限制（第4条）：上市一年内、离职后半年内、本人被立案调查/处罚未满六个月、被公开谴责未满三个月、可能触发重大违法强制退市等情形下不得转让；(",
+      "exceptions": [
+        "若后续出现某公司在特定时点披露的董监高减持公告、减持计划、问询函回复等具体事件材料，则应依据该具体事件另行判定 has_reduction/holder_reduction，不能直接引用本文档作为事件证据",
+        "本文档系配套《上市公司股东减持股份管理暂行办法》的董监高层面实施细则，与已入库 kb_reduction_measures_2024 为互补关系而非重复"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\附件1：上市公司董事、监事和高级管理人员所持本公司股份及其变动管理规则.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\附件1：上市公司董事、监事和高级管理人员所持本公司股份及其变动管理规则.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:17:09.033729+00:00",
+    "updated_at": "2026-08-29T08:17:09.034730+00:00",
+    "change_note": "distill"
+  }
+}

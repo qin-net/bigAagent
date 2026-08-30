@@ -1,0 +1,68 @@
+{
+  "entry_id": "kb_tech_szse_pricelimit_rsi",
+  "title": "深市10%/20%涨跌幅限制下 RSI 超买超卖须结合涨跌停价判断",
+  "scope": "technical",
+  "version": 1,
+  "created_at": "2026-08-29T07:30:49.299620+00:00",
+  "updated_at": "2026-08-29T07:31:00.479651+00:00",
+  "payload": {
+    "id": "kb_tech_szse_pricelimit_rsi",
+    "title": "深市10%/20%涨跌幅限制下 RSI 超买超卖须结合涨跌停价判断",
+    "type": "indicator_calibration",
+    "scope": [
+      "technical"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "rsi_overbought",
+        "rsi_oversold"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "rsi_overbought",
+        "rsi_oversold",
+        "超买",
+        "超卖",
+        "涨停",
+        "跌停",
+        "涨跌幅限制",
+        "10%",
+        "20%",
+        "创业板",
+        "深交所"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 80,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定深交所（SZSE）证券 rsi_overbought / rsi_oversold 时须区分涨跌停锁价机制：当 RSI 超买/超卖信号当日股价触及或封住涨跌停价，且该价格与涨跌幅限制价（主板±10%、创业板±20%，规则第3.3.13条、算法第3.3.14条：涨跌幅限制价格=前收盘价×（1±限制比例））一致时，该 RSI 读数由制度性锁价人为推高/压低，不视为真实市场过热/超冷。应结合当日是否封板修正：未触及涨跌停价的 RSI 超买/超卖仍按标准区间判断。",
+      "text": "《深圳证券交易所交易规则（2026年修订）》第3.3.13条规定本所对证券交易实行价格涨跌幅限制：主板股票涨跌幅限制比例为10%，创业板股票为20%，多数基金为10%（跟踪创业板等20%涨跌幅成份的指数型ETF/LOF为20%）；第3.3.14条规定涨跌幅限制价格=前收盘价×（1±涨跌幅限制比例）。第3.3.15条列明首次公开发行上市后前五个交易日、重新上市首日、进入退市整理期首日不实行价格涨跌幅",
+      "exceptions": [
+        "首次公开发行上市后前五个交易日、重新上市首日、进入退市整理期首日等无涨跌幅限制情形（第3.3.15条）不适用"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\technical\\11_SZSE_TradingRules_2026.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:30:49.296615+00:00",
+    "updated_at": "2026-08-29T07:30:49.299620+00:00",
+    "change_note": "distill"
+  }
+}

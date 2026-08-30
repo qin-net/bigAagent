@@ -1,0 +1,68 @@
+{
+  "entry_id": "piotroski_value_wscreen",
+  "title": "高账面市值比选股须用基本面信号区分输赢，否则落入价值陷阱",
+  "scope": "fundamental",
+  "version": 1,
+  "created_at": "2026-08-29T06:45:26.850718+00:00",
+  "updated_at": "2026-08-29T06:45:32.194418+00:00",
+  "payload": {
+    "id": "piotroski_value_wscreen",
+    "title": "高账面市值比选股须用基本面信号区分输赢，否则落入价值陷阱",
+    "type": "methodology",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "valuation_cheap",
+        "high_leverage",
+        "roe_quality",
+        "cashflow_quality_issue",
+        "value_trap_risk"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "value_trap",
+        "valuation_cheap",
+        "high_leverage",
+        "roe_quality",
+        "高账面市值比",
+        "价值股",
+        "便宜"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 80,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "在估值便宜（高 B/P、低估值）的标的上，不能仅凭便宜就给出买入。Piotroski (2002) 显示高 BM 组合中只有不到 44% 的公司在建仓后两年取得正市场调整收益，单纯低估值即买入即落入 value trap。须用历史财务报表信号（盈利改善趋势、杠杆水平、资产周转、营运资金变动）筛选出财务强健的公司，并将其收益分布左尾（10/25 分位及中位数）整体右移后才可提高安全边际评价。该策略在信息慢扩散环境（小中型公司、低换手、无分析师覆盖）中效果最强；而在大市值、高换手、有分析师覆盖的标的上效率最低。高 BM 公司多处于财务困境，估值应聚焦杠杆、流动性、盈利趋势与现金流充足性。若财务信号为负（盈利恶化、高杠杆、资产回报下滑、现金流不足），应置位 value_trap_risk 并禁用买入。",
+      "text": "Piotroski (2002) 的核心实证贡献：高账面市值比（价值股）组合内胜负分布极不均匀——建仓后两年内仅有不到 44% 的公司取得正市场调整收益，多数高 BM 公司持续恶化。仅凭低估值（高 B/P）买入即落入价值陷阱（value trap）。该文证明可用简单财务报表信号（ROA 及其变化、经营现金流、杠杆变化、流动比率、是否增发、毛利变化、资产周转变化）构造 F-score，将组合均值年收",
+      "exceptions": [
+        "若标的近期盈利与现金流质量指标均趋强（roe_quality 为正、无 cashflow_quality_issue），且信息扩散充分，可下调 value_trap_risk",
+        "若已有独立估值模型支持且基本面信号（盈利、杠杆、现金流）与估值一致，可维持正常评价"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\fundamental\\Value Investing The Use of Historical Financial Statement Informationto Separate Winners from Losers.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T06:45:26.849625+00:00",
+    "updated_at": "2026-08-29T06:45:26.850718+00:00",
+    "change_note": "distill"
+  }
+}

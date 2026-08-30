@@ -1,0 +1,68 @@
+{
+  "entry_id": "macro-ipp-survey-2026-official-data",
+  "title": "工业生产者价格统计调查制度（2026定期报表）确立官方宏观价格数据发布渠道",
+  "scope": "macro",
+  "version": 1,
+  "created_at": "2026-08-29T12:01:58.314506+00:00",
+  "updated_at": "2026-08-29T12:02:08.050600+00:00",
+  "payload": {
+    "id": "macro-ipp-survey-2026-official-data",
+    "title": "工业生产者价格统计调查制度（2026定期报表）确立官方宏观价格数据发布渠道",
+    "type": "context",
+    "scope": [
+      "macro"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "lpr_available"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "在宏观分析中需要确认国家统计局官方宏观价格数据（工业生产者出厂价格指数ppi",
+        "购进价格指数）的可得性与发布渠道；评估官方统计数据基础设施（统计云",
+        "数据发布库",
+        "年鉴）是否可支撑对央行",
+        "宏观利率类指标（如lpr）的引用"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 3,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "认定LPR数据可经由官方渠道获取（lpr_available）。依据：国家统计局通过统计云联网直报系统上报审核数据，并经门户网站、国家统计局数据发布库、《中国统计年鉴》、新闻发布会、两微一端等渠道定期发布工业生产者价格统计。该官方统计发布体系在案，说明官方宏观数据（含LPR类由央行/授权机构发布的利率指标）经官方渠道可得。",
+      "text": "国家常规统计调查制度中工业生产者价格统计调查制度（2026年定期报表）确立：调查对象为全国被抽中的规模以上工业企业，内容包括产品第一次出售的出厂价与中间投入原材料购进价；出厂价格指数涵盖41个工业行业大类，购进价格指数涵盖9大类；调查方法为重点调查与典型调查相结合；国家统计局负责编制，调查总队负责省域实施。数据经统计云直报系统报送，并通过门户网站、数据发布库、《中国统计年鉴》、新闻发布会及两微一端",
+      "exceptions": [
+        "本制度仅覆盖工业生产者价格，不含LPR数值本身",
+        "该材料不改变LPR实际数值或发布时点，仅作为官方宏观统计数据可得性的佐证；若需LPR具体取值仍需查证央行/授权媒体发布"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\macro\\工业生产者价格统计调查制度主要内容（2026年定期统计报表）.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\macro\\工业生产者价格统计调查制度主要内容（2026年定期统计报表）.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T12:01:58.313001+00:00",
+    "updated_at": "2026-08-29T12:01:58.314506+00:00",
+    "change_note": "distill"
+  }
+}

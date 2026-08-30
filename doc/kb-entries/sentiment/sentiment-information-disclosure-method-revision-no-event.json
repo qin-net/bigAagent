@@ -1,0 +1,85 @@
+{
+  "entry_id": "sentiment-information-disclosure-method-revision-no-event",
+  "title": "《上市公司信息披露管理办法》修订说明（附件2）为证监会监管规章修订解释文本（无具体公司情绪事件）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T08:18:13.473326+00:00",
+  "updated_at": "2026-08-29T08:18:18.009696+00:00",
+  "payload": {
+    "id": "sentiment-information-disclosure-method-revision-no-event",
+    "title": "《上市公司信息披露管理办法》修订说明（附件2）为证监会监管规章修订解释文本（无具体公司情绪事件）",
+    "type": "no_material_event",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "监测到《上市公司信息披露管理办法》修订说明（附件2",
+        "源pdf",
+        "4页",
+        "status:",
+        "ok",
+        "已提取文字）为中国证监会为贯彻落实新《公司法》和资本市场“1+n”政策体系要求发布的部门规章修订解释文本",
+        "内容围绕修订背景",
+        "主要修订内容（强化风险揭示",
+        "行业经营信息披露",
+        "非交易时段发布信息",
+        "暂缓",
+        "豁免披露制度",
+        "可持续发展报告",
+        "信息披露外包监管",
+        "重大事项披露时点优化",
+        "公开承诺主体扩充",
+        "落实新公司法调整监事会",
+        "审计委员会规定",
+        "处罚金额上限调整至十万元）公开征求意见情况（2024年12月27日至2025年1月26日收到意见70条",
+        "市场持支持态度）及实施日期（2025年7月1日施行）等制度性安排",
+        "不针对任何单一上市公司披露具体事件"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 1,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "将本文档归类为证监会监管规章修订解释文本，不构成任何公司层面的情绪/事件信息。冻结情绪旗标 has_buyback（回购）、has_earnings_preview（业绩预告）、has_inquiry（监管问询函）、has_reduction / holder_reduction（股东减持）均针对具体上市公司的事件/公告，而本文档系《信披办法》修订说明，规范全国上市公司信息披露制度，既非上述任何一类公司公告，亦非针对特定公司的披露，故不触发任一事件旗标。将其映射为 no_material_event / no_recent_events，标示本文档不承载针对特定上市公司的情绪/事件信息。注：文本虽涉及与事件名称字面相近的制度表述（未盈利成因披露、行业经营信息、可持续发展报告、信息披露外包监管、公开承诺主体、审计委员会定期报告监督等），但均为一般性信息披露法律制度/修订安排而非具体公司的回购/减持/业绩/问询事件，不构成情绪旗标触发。参照既有已批准条目 sentiment-information-disclosure-method-no-event（附件1全文规章）与 sentiment-cn-securities-law-no-event（证券法为一般性成文法不构成事件）、sentiment-sse-disciplinary-measures-2026-revision-no-event（自律监管修订说明不构成情绪事件）之先例：基础性监管规章框架文本本身不构成公司层情绪事件，仅当出现实际公司公告时才据实映射。",
+      "text": "《上市公司信息披露管理办法》修订说明系中国证监会发布的部门规章修订解释文本（附件2，pdf 4页，文字已完整提取），为落实新《公司法》及资本市场“1+N”政策体系要求而修订《信披办法》。主要内容：（1）修订背景——2007年发布、2021年为落实新《证券法》修订，此次随注册制全面落地进一步优化；（2）主要修订内容——强化风险揭示要求（未盈利公司须披露未盈利成因及影响）、明确行业经营信息披露、非交易",
+      "exceptions": [
+        "若后续出现与《信披办法》修订直接关联的单一上市公司实际公告（如某公司据此披露回购/业绩预告/收到问询函/股东减持），则届时据实映射对应 has_buyback / has_earnings_preview / has_inquiry / has_reduction / holder_reduction 旗标",
+        "若本修订内容被市场解读为针对特定公司板块或个股的重大情绪事件，需据实际公司公告重新判定"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\附件2：《上市公司信息披露管理办法》修订说明.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\附件2：《上市公司信息披露管理办法》修订说明.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:18:13.472327+00:00",
+    "updated_at": "2026-08-29T08:18:13.473326+00:00",
+    "change_note": "distill"
+  }
+}

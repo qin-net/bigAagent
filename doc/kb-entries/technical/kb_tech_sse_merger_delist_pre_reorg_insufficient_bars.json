@@ -1,0 +1,69 @@
+{
+  "entry_id": "kb_tech_sse_merger_delist_pre_reorg_insufficient_bars",
+  "title": "上交所《股票上市规则》2026年修订：合并终止上市取消上市委审议及预重整披露强化，相关标的应标注 insufficient_bars",
+  "scope": "technical",
+  "version": 1,
+  "created_at": "2026-08-29T07:31:50.885361+00:00",
+  "updated_at": "2026-08-29T07:31:58.026615+00:00",
+  "payload": {
+    "id": "kb_tech_sse_merger_delist_pre_reorg_insufficient_bars",
+    "title": "上交所《股票上市规则》2026年修订：合并终止上市取消上市委审议及预重整披露强化，相关标的应标注 insufficient_bars",
+    "type": "process_change",
+    "scope": [
+      "technical"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "insufficient_bars"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "insufficient_bars",
+        "上市公司合并",
+        "终止上市",
+        "吸收合并",
+        "停牌",
+        "预重整",
+        "重整",
+        "停牌",
+        "数据终止",
+        "数据不连续",
+        "关键少数",
+        "董秘"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 60,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定沪市标的技术指标时，须结合《上交所股票上市规则（2026年4月修订）》两条影响行情连续性/披露真实性的新安排：（1）上市公司合并终止上市不再经上市审核委员会审议，由本所依据证监会对合并方案的注册批复及公司合并实施情况直接决定是否终止上市——此流程缩短了合并终止上市的可预见时间，相关标的在合并实施期至摘牌间存在制度性行情断点；（2）债权人向法院申请上市公司预重整的，公司知悉并披露法院受理时应充分评估自身启动重整可行性，不得利用存在重大不确定性的重整信息误导投资者——预重整阶段标的可能停牌或披露不确定信息，行情与基本面存在重大不确定性；上述情形均应在技术计算中标注 insufficient_bars，MA/MACD/RSI/量能不得跨合并终止或预重整停牌缺口简单拼接。本次修订同时厘清董秘职责范围、提高董秘任职门槛（受到三次以上行政监管措施列负面清单）、强化董秘履职保障并及时解聘、以及细化董事高管忠实义务与解聘要求，属公司治理类规则，对行情的实际影响主要体现在合并/重整两类事件引发的数据连续性风险。",
+      "text": "《上海证券交易所股票上市规则（2026年4月修订）》（为落实证监会《上市公司治理准则》《上市公司董事会秘书监管规则》并优化合并机制而修订）披露下列影响技术分析数据连续性与披露真实性的安排。（1）合并终止上市流程：取消上市公司合并导致终止上市情形下的上市审核委员会审议，本所根据证监会对合并方案的注册批复文件和公司合并实施情况直接作出是否终止股票上市的决定——缩短了合并终止上市的可预见时间，相关标的在",
+      "exceptions": [
+        "合并方案被否决或终止、预重整未被受理或撤回，标的继续正常连续竞价交易，不属于 insufficient_bars",
+        "标的仅涉及董秘任职、履职保障等公司治理条款而无交易、停牌或行情中断的，不触发本规则"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data/kb/markdown/technical/12_SSE_ListingRules_2026_RevisionNotes.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:31:50.885361+00:00",
+    "updated_at": "2026-08-29T07:31:50.885361+00:00",
+    "change_note": "distill"
+  }
+}

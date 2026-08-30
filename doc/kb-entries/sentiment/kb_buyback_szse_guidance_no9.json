@@ -1,0 +1,69 @@
+{
+  "entry_id": "kb_buyback_szse_guidance_no9",
+  "title": "深交所自律监管指引第9号——回购股份（2025年修订）增量判定基准（has_buyback 及回购窗口内减持）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T07:40:25.614989+00:00",
+  "updated_at": "2026-08-29T07:40:30.848880+00:00",
+  "payload": {
+    "id": "kb_buyback_szse_guidance_no9",
+    "title": "深交所自律监管指引第9号——回购股份（2025年修订）增量判定基准（has_buyback 及回购窗口内减持）",
+    "type": "sentiment",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "has_buyback",
+        "has_reduction",
+        "holder_reduction"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "回购",
+        "buyback",
+        "增持",
+        "深交所",
+        "自律监管",
+        "减持",
+        "reduction",
+        "董事会",
+        "回购专用账户",
+        "维护公司价值"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 60,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定 has_buyback 时，除按《上市公司股份回购规则》核验程序与披露要件外，须叠加深交所指引第9号的增量要件：区分维护价值型（第二条第一款第(四)项，须满足收盘价低于最近一期每股净资产、或连续20个交易日累计跌幅达20%、或收盘价低于最近一年最高收盘价50%三者之一）与常规型回购，核验回购方案（拟回购数量/资金上下限、上限不得超下限一倍，第14条）、实施期限（第一至三项情形不超过12个月，第(四)项不超过3个月，第16条）、集中竞价委托不得为当日涨幅限制价格且不得在开盘/收盘集合竞价及无涨跌幅限制交易日委托（第18条）。若公司已披露回购且处于自首次披露回购事项至回购结果暨股份变动公告期间，则董事、高管、控股股东、实控人、回购股份提议人不得直接或间接减持（第22条），该窗口内相关减持公告属规则禁止事项，不构成独立的 has_reduction/holder_reduction 风险事件，不作为独立风险抬升，仅作为回购事件背景。",
+      "text": "《深圳证券交易所上市公司自律监管指引第9号——回购股份（2025年修订）》系深交所层面回购实施细则，相对《上市公司股份回购规则》提供增量判定基准。要点：(1) 维护公司价值及股东权益情形（第二条第一款第(四)项）须满足收盘价低于最近一期每股净资产、或连续20个交易日累计跌幅达20%、或收盘价低于最近一年最高收盘价50%三者之一；(2) 该情形应在事实发生或收到提议之日起10个交易日内召开董事会审议",
+      "exceptions": [
+        "no_material_event",
+        "no_recent_events"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\深圳证券交易所上市公司自律监管指引.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:40:25.613990+00:00",
+    "updated_at": "2026-08-29T07:40:25.614989+00:00",
+    "change_note": "distill"
+  }
+}

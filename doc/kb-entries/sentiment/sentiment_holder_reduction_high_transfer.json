@@ -1,0 +1,75 @@
+{
+  "entry_id": "sentiment_holder_reduction_high_transfer",
+  "title": "高送转伴随大股东减持——减持套现风险信号（holder_reduction）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T08:28:25.930051+00:00",
+  "updated_at": "2026-08-29T08:28:41.524880+00:00",
+  "payload": {
+    "id": "sentiment_holder_reduction_high_transfer",
+    "title": "高送转伴随大股东减持——减持套现风险信号（holder_reduction）",
+    "type": "event",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "has_reduction",
+        "holder_reduction"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "上市公司推出高比例送转股方案（高送转",
+        "送股来自未分配利润",
+        "转股来自资本公积）",
+        "同时公司存在控股股东或持股5%以上大股东的减持公告",
+        "减持意向",
+        "高管减持行为",
+        "或高送转公告与大股东减持在相近窗口内出现",
+        "高送转强度越大",
+        "大股东减持规模越大"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 4,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "识别为高风险情绪信号，标记holder_reduction。将高送转视作大股东可能\"明修栈道、暗度陈仓\"借股价拉升高位减持套现的预警，投资者需警惕非理性追捧带来的高位减值风险，监管层关注大股东利用高送转变相操纵股价并减持的行为。",
+      "text": "依据《上市公司股东、董监高减持股份的若干规定》，将控股股东和持股5%以上股东界定为大股东。研究发现高送转强度与大股东减持规模正相关（H1）：大股东凭借信息优势，利用高送转拉升股价后在非理性上涨高位进行减持套现。会计稳健性对二者关系具有U型调节作用（H2）：适度会计稳健性通过提高信息透明度、抑制非效率投资缓解代理冲突从而抑制减持套现；而过度会计稳健性降低可分配利润和资金留存，反而强化大股东借高送转抬",
+      "exceptions": [
+        "适度会计稳健性可抑制高送转与大股东减持规模的正向关系（当信息质量高、代理问题低时风险减弱）",
+        "未见大股东减持公告或减持意向时，仅高送转本身不构成减持套现信号",
+        "缺乏高送转与大股东减持时间上关联证据时，可能为正常分红行为而非套现动机",
+        "no_recent_events"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\高送转、会计稳健性与大股东减持规模_赖丹.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data/kb/markdown/sentiment/高送转、会计稳健性与大股东减持规模_赖丹.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:28:25.929051+00:00",
+    "updated_at": "2026-08-29T08:28:25.930051+00:00",
+    "change_note": "distill"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "entry_id": "kb_cashflow_lag",
+  "title": "利润需要经营现金流验证",
+  "scope": "fundamental",
+  "version": 1,
+  "created_at": "2026-08-28T10:19:56.594471+00:00",
+  "updated_at": "2026-08-28T10:19:56.594471+00:00",
+  "payload": {
+    "id": "kb_cashflow_lag",
+    "title": "利润需要经营现金流验证",
+    "type": "rule",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "approved",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "cashflow_lag",
+        "cashflow_quality_issue"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": [
+        "operating_cf",
+        "net_profit"
+      ]
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "现金流",
+        "净利润",
+        "盈利质量"
+      ],
+      "aliases": [
+        "经营性现金流",
+        "利润含金量",
+        "现金利润"
+      ],
+      "intent_tags": [
+        "quality_check",
+        "falsifier"
+      ],
+      "priority": 90,
+      "mandatory": true
+    },
+    "guidance": {
+      "action": "区分季节性和盈利含金量",
+      "text": "净利润增长但经营现金流为负时，应先判断季节性和现金流质量。",
+      "exceptions": [
+        "明确存在可验证的行业季节性"
+      ]
+    },
+    "source_refs": [],
+    "tests": {
+      "should_match": [
+        {
+          "flags": [
+            "cashflow_lag"
+          ],
+          "query": "利润含金量",
+          "intent_tags": []
+        }
+      ],
+      "should_not_match": [
+        {
+          "flags": [
+            "ma_bull_align"
+          ],
+          "query": "现金流",
+          "intent_tags": []
+        }
+      ]
+    },
+    "updated_at": "2026-08-28T10:19:56.594471+00:00"
+  }
+}

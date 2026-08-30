@@ -1,0 +1,64 @@
+{
+  "entry_id": "penman_value_trap_risky_growth",
+  "title": "高B/P价值股买的是有风险的盈利增长",
+  "scope": "fundamental",
+  "version": 2,
+  "created_at": "2026-08-29T06:40:39.395315+00:00",
+  "updated_at": "2026-08-29T10:39:42.661315+00:00",
+  "payload": {
+    "id": "penman_value_trap_risky_growth",
+    "title": "高B/P价值股买的是有风险的盈利增长",
+    "type": "risk_flag",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "candidate",
+    "version": 2,
+    "applicability": {
+      "any_flags": [
+        "value_trap_risk",
+        "valuation_cheap"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "value_trap_risk",
+        "账面市值比",
+        "保守会计",
+        "低价",
+        "高e",
+        "盈利增长风险"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 70,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "当估值倍数(高B/P、低估值)与盈利增长风险结合时，将 value_trap_risk 置位并禁用买入。E/P 与 B/P 应一并使用：在给定 E/P(内含市场增长预期)下，高 B/P 表明预期盈利增长更难兑现，即账面市值比越高，买入所购增长越有风险。需识别会计/保守会计是否已预示该风险 ex ante。",
+      "text": "Penman & Reggiani (2014) 的核心洞见：value 标签(高 B/P、低倍数)并不等于低风险增长，恰恰相反——value 买的是更高但更有风险的盈利增长。在给定 E/P(内含市场增长预期)下，高 B/P 表明预期盈利增长更难兑现，投资者买入高 B/P 股票即落入 value trap。风险可由会计事先识别：价格倍数本就是会计数字的倍数，保守会计(conservative ac",
+      "exceptions": [
+        "valuation_rich",
+        "roe_quality"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data/kb/markdown/fundamental/Penman_value_trap.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T10:39:42.654794+00:00",
+    "updated_at": "2026-08-29T10:39:42.655802+00:00",
+    "change_note": "source-bound candidate review"
+  }
+}
