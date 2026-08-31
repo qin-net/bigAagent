@@ -1,0 +1,89 @@
+{
+  "entry_id": "sentiment-szse-disciplinary-measures-2025-revision-full-text-no-event",
+  "title": "深交所《自律监管措施和纪律处分实施办法（2025年修订）》为监管规章文本（无具体公司情绪事件）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T07:41:25.532176+00:00",
+  "updated_at": "2026-08-29T07:41:30.668522+00:00",
+  "payload": {
+    "id": "sentiment-szse-disciplinary-measures-2025-revision-full-text-no-event",
+    "title": "深交所《自律监管措施和纪律处分实施办法（2025年修订）》为监管规章文本（无具体公司情绪事件）",
+    "type": "regulatory rule text mapping",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "《深圳证券交易所自律监管措施和纪律处分实施办法（2025年修订）》为交易所自律监管规则全文文本；内容围绕监管对象范围（发行人",
+        "上市公司",
+        "中介机构",
+        "会员",
+        "其他交易参与人",
+        "投资者等）",
+        "自律监管措施种类（口头警示",
+        "书面警示",
+        "监管函",
+        "约见谈话",
+        "要求限期改正",
+        "要求公开更正",
+        "澄清",
+        "说明",
+        "要求公开致歉",
+        "限制交易",
+        "暂停受理或办理相关业务等）",
+        "纪律处分种类（通报批评",
+        "公开谴责",
+        "公开认定不适合担任相关职务",
+        "暂不接受发行上市申请文件",
+        "收取惩罚性违约金",
+        "暂停",
+        "取消交易权限",
+        "取消会员资格等）",
+        "以及从轻减轻",
+        "从重加重情节考量因素和自律处分委员会审议程序等一般性制度安排",
+        "不针对任何单一上市公司的具体事件"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 1,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "将本文档归类为深交所自律监管规章文本，不构成任何公司层面的情绪/事件信息。冻结情绪旗标中 has_buyback、has_earnings_preview、has_inquiry、has_reduction、holder_reduction 均针对具体公司事件/披露：本文档既非股票回购公告、业绩预告/快报、针对特定公司出具的监管问询函（监管函），亦非股东或持股人减持公告。虽然文档列明监管函、约见谈话、限制交易等自律监管措施以及通报批评、公开谴责等纪律处分种类，但这属于制度性规则框架，不等于对某家上市公司实施了具体自律监管或纪律处分，故不触发 has_inquiry 事件旗标。将其映射为 no_material_event 与 no_recent_events，标示本文档不承载针对特定上市公司的情绪/事件信息。",
+      "text": "《深圳证券交易所自律监管措施和纪律处分实施办法（2025年修订）》系深圳证券交易所发布的交易所自律监管规则全文文本，依据《证券法》《证券交易所管理办法》《深圳证券交易所章程》制定，用于规范本所自律监管措施和纪律处分的实施。主要内容涵盖：（1）自律监管措施种类——对发行人、上市公司及中介机构可直接实施口头警示、书面警示（监管函）、约见谈话、要求中介机构核查发表意见、要求限期改正、要求公开更正澄清说明",
+      "exceptions": [
+        "has_inquiry",
+        "has_buyback",
+        "has_reduction",
+        "holder_reduction",
+        "has_earnings_preview"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\深圳证券交易所自律监管措施和纪律处分.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:41:25.529977+00:00",
+    "updated_at": "2026-08-29T07:41:25.532176+00:00",
+    "change_note": "distill"
+  }
+}

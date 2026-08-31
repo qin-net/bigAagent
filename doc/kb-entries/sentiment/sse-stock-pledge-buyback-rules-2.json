@@ -1,0 +1,67 @@
+{
+  "entry_id": "sse-stock-pledge-buyback-rules-2",
+  "title": "上交所股票质押式回购业务办法为制度性规则文件，无公司层面情绪事件",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T07:38:13.737956+00:00",
+  "updated_at": "2026-08-29T07:38:22.819683+00:00",
+  "payload": {
+    "id": "sse-stock-pledge-buyback-rules-2",
+    "title": "上交所股票质押式回购业务办法为制度性规则文件，无公司层面情绪事件",
+    "type": "sentiment",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "读取上交所《股票质押式回购交易及登记结算业务办法》时",
+        "若正文为交易所层面的业务规则（交易权限管理",
+        "适当性管理",
+        "业务协议",
+        "交易申报",
+        "清算交收",
+        "质押登记",
+        "违约处置等程序性规定）",
+        "且不指向任何单一上市公司事件"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 3,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定该来源为交易所制度性规范性文件，不构成公司特定情绪事件。映射到 no_material_event（未披露重大情绪事件）与 no_recent_events（无近期情绪事件）。若后续检索到具体的质押式回购公告（如某公司股东/大股东进行股票质押式回购、违约处置、解押购回等），方可将具体公告另行映射到相应情绪标志，勿将本办法当作公司事件证据。",
+      "text": "本来源为上交所股票质押式回购交易及登记结算业务办法（2025年3月修订），属于交易所层面的业务规则文件，规范股票质押式回购交易的总体框架。正文逐条规范证券公司交易权限、适当性管理、业务协议必备条款、交易申报类型（初始、购回、补充质押、部分解除质押、终止购回、违约处置）、清算交收与质押登记程序，并包含质押率上限、预警线/平仓线、回购期限不超过3年、融入资金不得用于新股申购或买入股票等要求。全文不涉及",
+      "exceptions": [
+        "若来源被当作某公司股票质押式回购具体事项（如初始交易、补充质押、违约处置、解除质押购回）的公告依据，则须按具体事件另行映射，不适用本办法通用的 no_material_event 判定",
+        "若其他来源提供某公司实际发生的质押式回购违约处置等重大情绪事件，则需以具体事件为准处理"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\上海证券交易所股票质押式回购交易及登记结算业务办法.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:38:13.736956+00:00",
+    "updated_at": "2026-08-29T07:38:13.737956+00:00",
+    "change_note": "distill"
+  }
+}

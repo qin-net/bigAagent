@@ -1,0 +1,68 @@
+{
+  "entry_id": "kb_tech_sse_afterhours_fixedprice_volume",
+  "title": "盘后固定价格交易扩展至全部A股与ETF、基金收盘改集合竞价，volume_spike 须剔除收盘后固定价量能",
+  "scope": "technical",
+  "version": 1,
+  "created_at": "2026-08-29T07:29:35.333280+00:00",
+  "updated_at": "2026-08-29T07:29:42.273147+00:00",
+  "payload": {
+    "id": "kb_tech_sse_afterhours_fixedprice_volume",
+    "title": "盘后固定价格交易扩展至全部A股与ETF、基金收盘改集合竞价，volume_spike 须剔除收盘后固定价量能",
+    "type": "volume_spike",
+    "scope": [
+      "technical"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "volume_spike"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "volume_spike",
+        "放量",
+        "盘后固定价格交易",
+        "固定价格",
+        "收盘集合竞价",
+        "基金",
+        "收盘价",
+        "etf",
+        "a股",
+        "科创板"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 72,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定 A 股与 ETF 的 volume_spike 时，须区分连续竞价真实成交与两类新增的收盘端量能：其一，基金收盘阶段交易方式已由连续竞价调整为收盘集合竞价（与股票一致），收盘集合竞价会集中产生收盘价及对应量能；其二，盘后固定价格交易适用品种已由科创板股票扩展至全部 A 股和交易型开放式基金，盘后固定价格交易在收盘后按收盘价成交，只增记成交量、不改变价格。若分钟级或日级量能口径混入收盘集合竞价或盘后固定价格成交量，会虚高或扭曲 volume_spike 读数。计算时应仅以连续竞价阶段真实成交为放量基准，将收盘集竞价与盘后固定价格成交量单列标注。",
+      "text": "《上交所交易规则（2026年修订）草案说明》列明三项直接影响日线与量能结构的技术机制修订：(1) 基金收盘阶段交易方式由连续竞价调整为收盘集合竞价，通过集合竞价产生收盘价，与股票保持一致；(2) 盘后固定价格交易适用品种由科创板股票扩展至全部 A 股和交易型开放式基金（ETF），允许投资者以收盘价在收盘后继续成交；(3) 主板风险警示股票涨跌幅限制由 5% 上调至 10%，与主板其他股票一致。前两",
+      "exceptions": [
+        "科创板盘后固定价格交易此前已存在，本卡不覆盖科创板原有机制，只针对2026修订扩展至全部A股与ETF的新增适用品种",
+        "盘中放量（14:57 前连续竞价阶段）不涉及收盘集合竞价与盘后固定价格量，仍按标准 volume_spike 口径判断",
+        "停牌复牌或数据断点情形另由 insufficient_bars 处理"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data/kb/markdown/technical/10_SSE_TradingRules_2026_b.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:29:35.332281+00:00",
+    "updated_at": "2026-08-29T07:29:35.333280+00:00",
+    "change_note": "distill"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "entry_id": "kb_tech_sse_pricelimit_rsi",
+  "title": "上交所主板10%涨跌幅限制下 RSI 超买超卖须结合涨跌停价判断锁定机制",
+  "scope": "technical",
+  "version": 3,
+  "created_at": "2026-08-29T07:28:30.435264+00:00",
+  "updated_at": "2026-08-29T13:09:30.006183+00:00",
+  "payload": {
+    "id": "kb_tech_sse_pricelimit_rsi",
+    "title": "上交所主板10%涨跌幅限制下 RSI 超买超卖须结合涨跌停价判断锁定机制",
+    "type": "methodology",
+    "scope": [
+      "technical"
+    ],
+    "status": "candidate",
+    "version": 3,
+    "applicability": {
+      "any_flags": [
+        "rsi_overbought",
+        "rsi_oversold"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "rsi_overbought",
+        "rsi_oversold",
+        "超买",
+        "超卖",
+        "涨停",
+        "跌停",
+        "涨跌幅限制",
+        "10%",
+        "主板",
+        "上交所",
+        "上海证券交易所",
+        "前收盘价"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 80,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定上交所（SSE）沪市证券 rsi_overbought / rsi_oversold 时须区分涨跌停锁价机制。上交所交易规则（2026年修订）第3.3.13条规定对本所股票、基金交易实行价格涨跌幅限制，限制比例为10%；涨跌幅限制价格=前收盘价×（1±涨跌幅限制比例）。当 RSI 超买/超卖信号当日股价触及或封住涨跌停价、且该价格与涨跌幅限制价（±10%前收盘价）一致时，该 RSI 读数由制度性锁价人为推高/压低，不视为真实市场过热/超冷。应结合当日是否封板修正：未触及涨跌停价的 RSI 超买/超卖仍按标准区间判断；触及涨跌停价当日应将 RSI 超买/超卖意见降级或标注为锁价噪音。",
+      "text": "上交所交易规则（2026年修订）第3.3.13条规定对股票、基金交易实行价格涨跌幅限制，限制比例10%；涨跌幅限制价格=前收盘价×（1±比例）。技术判定 RSI 超买/超卖时，若股价因触及涨跌停而锁价，RSI 读数被制度性推高/压低，不反映真实市场情绪，应结合锁价修正而非按标准区间直接采信。",
+      "exceptions": [
+        "首次公开发行上市股票上市后前5个交易日不实行价格涨跌幅限制（第3.3.13条）",
+        "进入退市整理期交易的退市整理股票首个交易日、退市后重新上市股票首个交易日不实行价格涨跌幅限制",
+        "经证监会批准调整涨跌幅限制比例的情形",
+        "科创板（第六章特别规定）及风险警示板若规定不同比例，按对应比例判断锁价，不以10%一概套用"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\technical\\10_SSE_TradingRules_2026_a.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\technical\\10_SSE_TradingRules_2026_a.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T13:09:19.930124+00:00",
+    "updated_at": "2026-08-29T13:09:19.931123+00:00",
+    "change_note": "distill"
+  }
+}

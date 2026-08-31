@@ -1,0 +1,65 @@
+{
+  "entry_id": "kb_macro_lpr_prereform_dualtrack",
+  "title": "宏观LPR可行性的前史基线：2019年前为\"贷款基准利率管下限+存款管上限\"双轨制",
+  "scope": "macro",
+  "version": 1,
+  "created_at": "2026-08-29T08:32:58.018949+00:00",
+  "updated_at": "2026-08-29T08:33:07.155915+00:00",
+  "payload": {
+    "id": "kb_macro_lpr_prereform_dualtrack",
+    "title": "宏观LPR可行性的前史基线：2019年前为\"贷款基准利率管下限+存款管上限\"双轨制",
+    "type": "baseline",
+    "scope": [
+      "macro"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "lpr_missing"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "宏观分析或行情过滤中需判定2019年8月lpr机制推行之前",
+        "贷款市场报价利率(lpr)尚未上线时的利率定价状态",
+        "或需界定早期存贷款基准利率管制体系以解释lpr改革为何替代旧制"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 55,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "依据易纲《中国改革开放三十年的利率市场化进程》（金融研究2009年第1期）：中国的利率市场化以与价格改革类似的\"双轨制\"推进——管制利率与市场化利率并行，在边际上引入利率市场化，形成帕累托改进。至2008年前后，人民币贷款利率已过渡到\"上限放开、实行下限管理\"阶段（此前基本取消金融机构人民币贷款利率上限，仅对城乡信用社保留上限管理），存款利率实行\"管住上限、向下浮动\"，整体形成\"贷款利率管下限、存款利率管上限\"的阶段性架构。在此架构下，金融机构贷款定价以人民银行公布的贷款基准利率为锚并受下限约束，未出现2019年8月LPR机制意义上按月发布的贷款市场报价利率。判定：本文所述贷款基准利率双轨制区间（2019年8月LPR机制建立之前）不存在可用的新机制LPR，启用lpr_missing；新LPR机制（2019-08-20起按月发布）建立并正常发布后的区间才启用lpr_available。本卡为LPR可得性判断提供改革前史基线，不改变现有2019年LPR机制卡对lpr_available/lpr_missing的判定逻辑。",
+      "text": "本卡将易纲（金融研究2009年第1期）对中国利率市场化三十年进程的论述映射到宏观scope的lpr_available/lpr_missing冻结旗标上，作为LPR机制改革的前史基线。文章系统总结了\"双轨制\"推进利率市场化：一方面逐步放开利率管制、推动金融机构自主定价，至2008年前后形成\"贷款利率管下限、存款利率管上限\"的阶段性目标（人民币贷款利率已过渡到\"上限放开、实行下限管理\"，存款实行\"管",
+      "exceptions": [
+        "lpr_available"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\macro\\中国改革开放三十年的利率市场化进程_易纲_金融研究2009年第1期.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\macro\\中国改革开放三十年的利率市场化进程_易纲_金融研究2009年第1期.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:32:58.017945+00:00",
+    "updated_at": "2026-08-29T08:32:58.018949+00:00",
+    "change_note": "distill"
+  }
+}

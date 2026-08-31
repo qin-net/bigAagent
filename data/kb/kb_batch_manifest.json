@@ -1,0 +1,1637 @@
+[
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/2026CPA-教材-会计-中国注册会计师协会.md",
+    "sha256": "29933c481cacead2d1a51eb9a0a4cefd94000fbc1f4ed66c491552530988d25a",
+    "chars": 1030914,
+    "status": "skipped_too_large",
+    "submitted_ids": [],
+    "reason": "over 150000 characters",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/Do Stock Prices Fully Reflect Information in Accruals and Cash Flows about Future Earnings.md",
+    "sha256": "6ecfaa10495772cf46f81270057679bd4e1c6f1ef5c7b93b9a456bd6c31fb310",
+    "chars": 89876,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_sloan_accrual_quality"
+    ],
+    "reason": "",
+    "approved_ids": [
+      "fund_sloan_accrual_quality"
+    ],
+    "estimated_cost_yuan": 0.2,
+    "updated_at": "2026-08-29T06:40:20.175624+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/Penman_value_trap.md",
+    "sha256": "fda611c4790a9a850c694d7bf27813edce3a03a52e339373c210a663c5b4435e",
+    "chars": 65233,
+    "status": "approved",
+    "submitted_ids": [
+      "penman_value_trap_risky_growth"
+    ],
+    "reason": "penman_value_trap_risky_growth: candidate has no matching source reference",
+    "estimated_cost_yuan": 0.4,
+    "updated_at": "2026-08-29T06:40:45.505317+00:00",
+    "approved_ids": [
+      "penman_value_trap_risky_growth"
+    ]
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/The Intelligent Investor - BENJAMIN GRAHAM.md",
+    "sha256": "06ee59c3de6f7a70dfcdedf84eeee1036eb750befea7db665a490ea2d4d92780",
+    "chars": 1312437,
+    "status": "skipped_too_large",
+    "submitted_ids": [],
+    "reason": "over 150000 characters",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/The Quality of Accruals and Earnings The Role of Accrual Estimation Errors.md",
+    "sha256": "12f769bf57afdac05d69820ff9d13bc264f774e245e5df1527435d890bb6256a",
+    "chars": 3367,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_dechow_dichev_accrual_quality"
+    ],
+    "reason": "",
+    "approved_ids": [
+      "fund_dechow_dichev_accrual_quality"
+    ],
+    "estimated_cost_yuan": 0.6,
+    "updated_at": "2026-08-29T06:41:13.869289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/The_Little_Book_of_Valuation.md",
+    "sha256": "6cca500f54a689177664bb1885b926185026180704f99c6501f57bb179e2e2bf",
+    "chars": 639013,
+    "status": "skipped_too_large",
+    "submitted_ids": [],
+    "reason": "over 150000 characters",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/Value Investing The Use of Historical Financial Statement Informationto Separate Winners from Losers.md",
+    "sha256": "9d8c1884684e4c58817838facbf7c8089f804568ed621cd929415e7d2b23a5fe",
+    "chars": 107028,
+    "status": "approved",
+    "submitted_ids": [
+      "piotroski_value_wscreen"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:45:32.198417+00:00",
+    "approved_ids": [
+      "piotroski_value_wscreen"
+    ],
+    "estimated_cost_yuan": 0.2
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/《企业会计准则应用指南汇编》第三十二章「现金流量表」.md",
+    "sha256": "78c95cdd80bbbe932194eddba8924bfc0827c2a349f5ea677aabd63d08c2c492",
+    "chars": 659,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/企业会计准则-基本准则.md",
+    "sha256": "2b4ebd655f6cae5b74650e4a1c38adace53ac6043a6dff6ad8af3d7d81f42b2f",
+    "chars": 344,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/企业会计准则第14号-收入.md",
+    "sha256": "e93d939dd3f56db2c1391dda85aee6a70ac4001d6ea426bdaf58582ee7d8b766",
+    "chars": 11988,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_cas14_revenue_recognition"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:46:14.157651+00:00",
+    "approved_ids": [
+      "fund_cas14_revenue_recognition"
+    ],
+    "estimated_cost_yuan": 0.4
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/企业会计准则第20号--企业合并.md",
+    "sha256": "8a6ca17141555c1ef72e62605dcc943bde2039eda520bbf4075d3e0587417c3f",
+    "chars": 2580,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/企业会计准则第20号--企业合并（后续有修订的）.md",
+    "sha256": "82a48308ddf41237d1abe551efc8d406c53cd68f05accc24ac0edffcbd43c4a9",
+    "chars": 360,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/企业会计准则第31号-现金流量表.md",
+    "sha256": "58a3a5d752fd58a5bea021709307abd47e753257db513b670b33d31fa891119a",
+    "chars": 2566,
+    "status": "already_processed",
+    "submitted_ids": [],
+    "reason": "existing card source",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/企业会计准则第33号-合并财务报表.md",
+    "sha256": "4b1d581df0943bb0581d86f10d5d96db42081f85f9f4cd23982dda8547f6e92a",
+    "chars": 10096,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_cas33_consolidated_financials"
+    ],
+    "reason": "explicit retry",
+    "updated_at": "2026-08-29T12:06:23.931891+00:00",
+    "approved_ids": [
+      "fund_cas33_consolidated_financials"
+    ],
+    "estimated_cost_yuan": 14.2
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/企业会计准则第6号--无形资产.md",
+    "sha256": "f1724a57a539a827814e1071a854f5c3325c54ca1f99f0d60cf760880c67fa3e",
+    "chars": 340,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/企业会计准则第8号-资产减值.md",
+    "sha256": "af532ef65c0cc24ef0f871f67dda7cbcfe0085e05b9ef50a842ed768e530c2b6",
+    "chars": 386,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/信息可靠性、企业成长性与会计盈余持续性_彭韶兵.md",
+    "sha256": "25426391fc8b0352882eea0e8c922e242b8190eaf888439c53e6906c1519314a",
+    "chars": 21863,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_info_reliability_earnings_persistence"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:47:00.176576+00:00",
+    "approved_ids": [
+      "fund_info_reliability_earnings_persistence"
+    ],
+    "estimated_cost_yuan": 0.6
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/公司理财-斯蒂芬A.罗斯__伦道夫W.威斯特菲尔德__杰弗利F.杰富.md",
+    "sha256": "8efc7865badcdf148319d2d22a3c8d6640836bd7d0630dad8c0b828297963e5e",
+    "chars": 776977,
+    "status": "skipped_too_large",
+    "submitted_ids": [],
+    "reason": "over 150000 characters",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/内部控制对盈余持续性的影响及其市场反应——来自A股非金融类上市公司的经验证据_方红星.md",
+    "sha256": "1cf3ce1e8f38e36409a992dcac0a3553b5291d4cb29df7ae35958e140f339eda",
+    "chars": 20692,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_ic_roe_quality_v1",
+      "fund_ic_cashflow_quality_v1"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:47:40.020374+00:00",
+    "approved_ids": [
+      "fund_ic_roe_quality_v1",
+      "fund_ic_cashflow_quality_v1"
+    ],
+    "estimated_cost_yuan": 0.8
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/投资学.md",
+    "sha256": "7d90dc858eaf14ee85e6f28fde28d21526ad31df378e80ac57a342e0302816aa",
+    "chars": 451552,
+    "status": "skipped_too_large",
+    "submitted_ids": [],
+    "reason": "over 150000 characters",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/机构投资者能抑制上市公司商誉减值风险吗_——基于中国A股市场的经验证据_李安泰 (1).md",
+    "sha256": "b03d9467c5b3a32012a31db45bd227508b56d890d45b87290310c6e8d516bac1",
+    "chars": 30053,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_goodwill_impairment_institutional_monitoring"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:48:25.072177+00:00",
+    "approved_ids": [
+      "fund_goodwill_impairment_institutional_monitoring"
+    ],
+    "estimated_cost_yuan": 1.0
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/机构投资者能抑制上市公司商誉减值风险吗_——基于中国A股市场的经验证据_李安泰.md",
+    "sha256": "3f549ed5cd4c7a7add3fa6b783c3cbb305f40ec518b99ce92a41d87cffcbf097",
+    "chars": 30045,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_goodwill_impairment_cashflow_distress"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:49:02.469987+00:00",
+    "approved_ids": [
+      "fund_goodwill_impairment_cashflow_distress"
+    ],
+    "estimated_cost_yuan": 1.2
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/纽约大学Stern估值讲义.md",
+    "sha256": "521200bef2d0e1c409becde4b467c5111aa4c86b056cff903298f83c9b4e0ce6",
+    "chars": 2624640,
+    "status": "skipped_too_large",
+    "submitted_ids": [],
+    "reason": "over 150000 characters",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/经营分析与估值  第5版=BUSINESS ANALYSIS AND VALUATION  FIFTH EDITION_13431859.md",
+    "sha256": "d84b72de385a2f9b7783673893b84cd8c4c4750aa360fa5b5626204e7d510d7a",
+    "chars": 4872,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/财务成本管理-中国注册会计师协会.md",
+    "sha256": "6153c55efe50b528311b282f118f94b1872d42f0e2280b727d15b4cdbde96009",
+    "chars": 7818,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/财务报表分析与证券估值  原书第5版(高清).md",
+    "sha256": "ba14723742065443300e095328f9e58dda39e15671c23b16f78048215cfbbe4b",
+    "chars": 10518,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/资产减值准备与非经常性损益披露管制——来自中国上市公司的经验证据_谭燕.md",
+    "sha256": "16da8f93b23e998209a4dc8d3b68937a224dc29b64b9759a2d76ec5231613972",
+    "chars": 36297,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_impairment_reversal_earnings_mgmt"
+    ],
+    "reason": "fund_impairment_reversal_earnings_mgmt: candidate has no matching source reference",
+    "updated_at": "2026-08-29T06:49:56.326630+00:00",
+    "estimated_cost_yuan": 1.4,
+    "approved_ids": [
+      "fund_impairment_reversal_earnings_mgmt"
+    ]
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/附件1：上市公司信息披露管理办法.md",
+    "sha256": "f5304b894543118ffbb8e99170c8a71dcbaad1e59d34d671b475a6f7a9f827db",
+    "chars": 11843,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_disclosure_major_event_red_flag_signals"
+    ],
+    "reason": "explicit retry",
+    "updated_at": "2026-08-29T12:14:33.793860+00:00",
+    "approved_ids": [
+      "fund_disclosure_major_event_red_flag_signals"
+    ],
+    "estimated_cost_yuan": 14.2
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/附件1：公开发行证券的公司信息披露编报规则第15号——财务报告的一般规定（2023年修订）.md",
+    "sha256": "fa5f57360248e9d3a57d52281747c3eaa8386ded5202fea5ee3fe9ab65b3eae9",
+    "chars": 19260,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_finreport15_rev2023_item_note"
+    ],
+    "reason": "explicit retry",
+    "updated_at": "2026-08-29T12:15:30.598297+00:00",
+    "approved_ids": [
+      "fund_finreport15_rev2023_item_note"
+    ],
+    "estimated_cost_yuan": 14.4
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/附件1：公开发行证券的公司信息披露解释性公告第1号——非经常性损益（2023年修订）.md",
+    "sha256": "1a0e64ffa1da3e5c2bbba2d30f7393d1a7527266b264e12175b8befbc353cb29",
+    "chars": 2009,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_nonrecurring_pnl_roe_quality"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:56:16.680759+00:00",
+    "approved_ids": [
+      "fund_nonrecurring_pnl_roe_quality"
+    ],
+    "estimated_cost_yuan": 0.2
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/附件2：《上市公司信息披露管理办法》修订说明.md",
+    "sha256": "5d43feb270bb4550b86f2a371a9a17930c05374e4737cfe091c5eb1a2d0528d4",
+    "chars": 2538,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_info_disclosure_quality_support"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:57:10.209973+00:00",
+    "approved_ids": [
+      "fund_info_disclosure_quality_support"
+    ],
+    "estimated_cost_yuan": 0.4
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/附件2：《公开发行证券的公司信息披露编报规则第15号——财务报告的一般规定（2023年修订）》修订说明.md",
+    "sha256": "2828c27b3187eeae3a77632257b1b3d28066e11de52d418094f7ba7a6778bf43",
+    "chars": 1572,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_finreport15_rev2023_quality_note"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:57:53.597418+00:00",
+    "approved_ids": [
+      "fund_finreport15_rev2023_quality_note"
+    ],
+    "estimated_cost_yuan": 0.6
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/附件2：《公开发行证券的公司信息披露解释性公告第1号——非经常性损益（2023年修订）》修订说明.md",
+    "sha256": "86a039d042a36592c5430bbb5c2d4e361a42a259f77e06807719470b2e49403f",
+    "chars": 1345,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_nonrecurring_2023_revnote_principles"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:58:47.008935+00:00",
+    "approved_ids": [
+      "fund_nonrecurring_2023_revnote_principles"
+    ],
+    "estimated_cost_yuan": 0.8
+  },
+  {
+    "scope": "fundamental",
+    "path": "data/kb/markdown/fundamental/非经常性损益盈余管理的动机、手段和作用研究——来自中国上市公司的经验证据_魏涛.md",
+    "sha256": "d0d947b3702bb56ee3cb9a1da4666f99c9c90bd0f42928f4f42e0fae328d0163",
+    "chars": 22689,
+    "status": "approved",
+    "submitted_ids": [
+      "fund_nonrecurring_earnings_mgmt_empirical_2007"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:59:23.522546+00:00",
+    "approved_ids": [
+      "fund_nonrecurring_earnings_mgmt_empirical_2007"
+    ],
+    "estimated_cost_yuan": 1.0
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/01_Wilder_1978_New_Concepts_in_Technical_Trading_Systems.md",
+    "sha256": "8cbca207f75e820350dabdf2c4f3e3851950808901250604e696192c0c564232",
+    "chars": 3578,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_rsi_wilder_canonical"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T06:59:50.093526+00:00",
+    "approved_ids": [
+      "kb_rsi_wilder_canonical"
+    ],
+    "estimated_cost_yuan": 1.2
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/02_Murphy_1999_Technical_Analysis_of_the_Financial_Markets.md",
+    "sha256": "e24a8fc8cbace7978e265b741a12491c4615932217e5bf33703276b1deace36d",
+    "chars": 8460,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/02b_金融市场技术分析_丁圣元译_清晰版.md",
+    "sha256": "f718a1bbf1ab57dca71c61d2800325464c3281869a1ff43a2ffd828a93a79bdf",
+    "chars": 7014,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/03_Appel_2005_Technical_Analysis_Power_Tools.md",
+    "sha256": "f50e8f9e52caf66a209e9a68933111fad685c983b1d20ff7b0e78959d29bd315",
+    "chars": 596466,
+    "status": "skipped_too_large",
+    "submitted_ids": [],
+    "reason": "over 150000 characters",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/04_Pring_2014_Technical_Analysis_Explained_5th.md",
+    "sha256": "ac556f4f3146ea1a74dfca2717ff2d371fc74b306e0dd9ea699633d391327a9f",
+    "chars": 1161611,
+    "status": "skipped_too_large",
+    "submitted_ids": [],
+    "reason": "over 150000 characters",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/05_李向科_证券投资技术分析_第5版.md",
+    "sha256": "84f2039acb08cdb7b90f915b566b5cd0b7be3492b748139c8582c32fc2ad9b57",
+    "chars": 5008,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/06_Brock_Lakonishok_LeBaron_1992_NBER_w4038.md",
+    "sha256": "59ba6904e5435510c16caff114421462ea2155b9fa526721939e961af1b115bb",
+    "chars": 1119,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/07_Lo_Mamaysky_Wang_2000_NBER_w7613.md",
+    "sha256": "1a9ce7d4c0cc59553f11f22c78862e851aa5d62ae052ee1608811bff2f913cbf",
+    "chars": 109403,
+    "status": "skipped_difficult",
+    "submitted_ids": [],
+    "reason": "over 80000 characters; reserve for chapter-level review",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/08_Jegadeesh_Titman_1993_Winners_Losers.md",
+    "sha256": "0ae2ddd0cff7e876788a8212865565a040dc06a3d596e08c3ad0ba7f37290566",
+    "chars": 81157,
+    "status": "skipped_difficult",
+    "submitted_ids": [],
+    "reason": "over 80000 characters; reserve for chapter-level review",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/10_SSE_TradingRules_2026_a.md",
+    "sha256": "ce2f1ab6f16010fdaf5a50e38797457942436d03f068f58ddef12f50ed5cc70a",
+    "chars": 23298,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_tech_sse_pricelimit_rsi"
+    ],
+    "reason": "explicit retry",
+    "updated_at": "2026-08-29T13:09:30.011023+00:00",
+    "estimated_cost_yuan": 14.6,
+    "rejection_reason": "candidate cleanup: see database review_rejection_reason",
+    "approved_ids": [
+      "kb_tech_sse_pricelimit_rsi"
+    ]
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/10_SSE_TradingRules_2026_b.md",
+    "sha256": "d6b38ce2e365574eb953320f9bc222ae84ff0dddb6da177a93e4c4a18e8eec4a",
+    "chars": 1233,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_tech_sse_afterhours_fixedprice_volume"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:29:42.277656+00:00",
+    "approved_ids": [
+      "kb_tech_sse_afterhours_fixedprice_volume"
+    ],
+    "estimated_cost_yuan": 4.2
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/10_SSE_TradingRules_2026_c.md",
+    "sha256": "285787ae7a4cfd7cd8e51e9df391a5ed8a7e1011c20b3249bb58a7563c0db74d",
+    "chars": 1277,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_tech_sse_block_deferred_vwap"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:30:17.946433+00:00",
+    "approved_ids": [
+      "kb_tech_sse_block_deferred_vwap"
+    ],
+    "estimated_cost_yuan": 4.4
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/11_SZSE_TradingRules_2026.md",
+    "sha256": "2fff369d1da5215426a9f6a2d6b3c36245e2f02fcec826b10c29f3d0f6bda1f4",
+    "chars": 20400,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_tech_szse_pricelimit_rsi",
+      "kb_tech_szse_closingauction_volume"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:31:00.488860+00:00",
+    "approved_ids": [
+      "kb_tech_szse_pricelimit_rsi",
+      "kb_tech_szse_closingauction_volume"
+    ],
+    "estimated_cost_yuan": 4.6
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/11_SZSE_TradingRules_2026_RevisionNotes.md",
+    "sha256": "10f81aa36b1c92290b2de3b7f3c049ff8de9951389f210c2f3380adbdedecd82",
+    "chars": 1496,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_tech_szse_afterhours_fixedprice_volume"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:31:24.846527+00:00",
+    "approved_ids": [
+      "kb_tech_szse_afterhours_fixedprice_volume"
+    ],
+    "estimated_cost_yuan": 4.8
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/12_SSE_ListingRules_2026.md",
+    "sha256": "4610a8751f731043e359d5ea28a0f0a2aa05e236f1a34179f820150e4eb3b4bb",
+    "chars": 113169,
+    "status": "skipped_difficult",
+    "submitted_ids": [],
+    "reason": "over 80000 characters; reserve for chapter-level review",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/12_SSE_ListingRules_2026_RevisionNotes.md",
+    "sha256": "39e7b8e4d85541b0b3cd943965fe0a1644683603d8f99803a6f9945251d0b409",
+    "chars": 2243,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_tech_sse_merger_delist_pre_reorg_insufficient_bars"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:31:58.031127+00:00",
+    "approved_ids": [
+      "kb_tech_sse_merger_delist_pre_reorg_insufficient_bars"
+    ],
+    "estimated_cost_yuan": 5.0
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/9a_中国股市“惯性策略”和“反转策略”的实证分析.md",
+    "sha256": "53da79d5b5379b9477cae3b014376ae2b88d8b33d03c60f2bc48b9f49496b1f2",
+    "chars": 21956,
+    "status": "approved",
+    "submitted_ids": [
+      "tech_reversal_overreaction_a_share"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:32:30.451241+00:00",
+    "approved_ids": [
+      "tech_reversal_overreaction_a_share"
+    ],
+    "estimated_cost_yuan": 5.2
+  },
+  {
+    "scope": "technical",
+    "path": "data/kb/markdown/technical/9b_中国股市的惯性与反转特性.md",
+    "sha256": "c9a840fae0252c68d30721b966ec5f06d8931037b0a0ec050be728dbc5263b1a",
+    "chars": 20559,
+    "status": "approved",
+    "submitted_ids": [
+      "tech_inertia_reversal_policymarket_a_share"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:32:54.443005+00:00",
+    "approved_ids": [
+      "tech_inertia_reversal_policymarket_a_share"
+    ],
+    "estimated_cost_yuan": 5.4
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/The Journal of Finance - 2006 - BAKER - Investor Sentiment and the Cross‐Section of Stock Returns.md",
+    "sha256": "2cc2c129679219e2aa11f23a05c1efa89e74fe249e0a01e2d4deb790957a024f",
+    "chars": 124193,
+    "status": "skipped_difficult",
+    "submitted_ids": [],
+    "reason": "over 80000 characters; reserve for chapter-level review",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/《上市公司收购管理办法》.md",
+    "sha256": "ec5b07d65e3c4fa077d4f2e7a917e7062d658933db71c4436acda982abaaf501",
+    "chars": 23216,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-cn-takeover-measures-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:33:20.725165+00:00",
+    "approved_ids": [
+      "sentiment-cn-takeover-measures-no-event"
+    ],
+    "estimated_cost_yuan": 5.6
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/《上海证券交易所科创板股票上市规则（2026年4月修订）》修订说明.md",
+    "sha256": "95eedf0ef5cdb2a456e751582bd6677e2dcb0661e73c297effa521beb0269ac2",
+    "chars": 1788,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-sse-star-listing-rules-2026-revision-no-event"
+    ],
+    "reason": "explicit retry",
+    "updated_at": "2026-08-29T13:10:00.541484+00:00",
+    "estimated_cost_yuan": 14.8,
+    "rejection_reason": "candidate cleanup: see database review_rejection_reason",
+    "approved_ids": [
+      "sentiment-sse-star-listing-rules-2026-revision-no-event"
+    ]
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/《上海证券交易所纪律处分和监管措施实施办法（2026 年修订）》修订说明.md",
+    "sha256": "7bd2eec676c6fc02b60fd7cb248cb61bc7b002b061a4adf432722c14a2d6f7e9",
+    "chars": 1627,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-sse-disciplinary-measures-2026-revision-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:34:03.412053+00:00",
+    "approved_ids": [
+      "sentiment-sse-disciplinary-measures-2026-revision-no-event"
+    ],
+    "estimated_cost_yuan": 6.0
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/《上海证券交易所股票上市规则.md",
+    "sha256": "ca04cf82a5514bd4ac2a8738890c4ddf92c6b2b5856ab5424b371ce910823cdb",
+    "chars": 2218,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-sse-listing-rules-2026-revision-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:34:25.334319+00:00",
+    "approved_ids": [
+      "sentiment-sse-listing-rules-2026-revision-no-event"
+    ],
+    "estimated_cost_yuan": 6.2
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/《中华人民共和国公司法》.md",
+    "sha256": "da02dfbc73d71cd17d666b34d4a0139ae0d873d0ab443016453807c0fb992b14",
+    "chars": 850,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-cn-company-law-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:34:46.611429+00:00",
+    "approved_ids": [
+      "sentiment-cn-company-law-no-event"
+    ],
+    "estimated_cost_yuan": 6.4
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/《中华人民共和国证券法》.md",
+    "sha256": "69920e202831dcd922697e2043e25e126f24b358d4e6ddd37aa9aafb4c5ac2c8",
+    "chars": 36663,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-cn-securities-law-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:35:23.044010+00:00",
+    "approved_ids": [
+      "sentiment-cn-securities-law-no-event"
+    ],
+    "estimated_cost_yuan": 6.6
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/《中国注册会计师审计准则第1503号——.md",
+    "sha256": "8498bfaf9ad2632828116339e065d84d972f3f4c3cbdcea185e1a515e82c9e2f",
+    "chars": 8616,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment_1503_audit_standard_guide"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:35:45.068794+00:00",
+    "approved_ids": [
+      "sentiment_1503_audit_standard_guide"
+    ],
+    "estimated_cost_yuan": 6.8
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/《深圳证券交易所股票上市规则》.md",
+    "sha256": "da89dc28b21b0717cad24c54d312a91f16f545877088be7169788e1d2b3962ec",
+    "chars": 109817,
+    "status": "skipped_difficult",
+    "submitted_ids": [],
+    "reason": "over 80000 characters; reserve for chapter-level review",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/《深圳证券交易所股票上市规则》修订说明.md",
+    "sha256": "38ab62aafebe7e50e29c0b0f7ad10d96276e15e10e840e969cbc5d5bcab6215d",
+    "chars": 2356,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_szse_listing_rules_revision_explanation_no_event"
+    ],
+    "reason": "explicit retry",
+    "updated_at": "2026-08-29T12:01:27.759780+00:00",
+    "estimated_cost_yuan": 14.2,
+    "approved_ids": [
+      "kb_szse_listing_rules_revision_explanation_no_event"
+    ]
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/《深圳证券交易所自律监管措施和纪律处分.md",
+    "sha256": "1e202985a1ba579d28f05a3d6482df329fc0fb33827d8240a50bd597c87cc4d7",
+    "chars": 2314,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-szse-disciplinary-measures-revision-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:37:01.068926+00:00",
+    "approved_ids": [
+      "sentiment-szse-disciplinary-measures-revision-no-event"
+    ],
+    "estimated_cost_yuan": 7.2
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/上海证券交易所上市公司自律监管指引.md",
+    "sha256": "8c2a1548f228b9499ba5fd983341fb81ce2059f14f1b11e87fc679ee5eb8819b",
+    "chars": 10114,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_buyback_sse_guidance_no7"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:37:27.686058+00:00",
+    "approved_ids": [
+      "kb_buyback_sse_guidance_no7"
+    ],
+    "estimated_cost_yuan": 7.4
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/上海证券交易所科创板股票上市规则.md",
+    "sha256": "60703112487c2900f1d4426d0d44563acb5369b36eaea9d9fa13512fb68c0266",
+    "chars": 88363,
+    "status": "skipped_difficult",
+    "submitted_ids": [],
+    "reason": "over 80000 characters; reserve for chapter-level review",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/上海证券交易所纪律处分和监管措施实施办法（2026 年修订）.md",
+    "sha256": "45a0c020d4f610b702cf076d7e797a80ed06d016801741a4c6f7e72c03779a33",
+    "chars": 20396,
+    "status": "candidate_review_failed",
+    "submitted_ids": [],
+    "reason": "no candidate submitted",
+    "updated_at": "2026-08-29T13:10:41.746674+00:00",
+    "estimated_cost_yuan": 15.0,
+    "rejection_reason": "candidate cleanup: see database review_rejection_reason"
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/上海证券交易所股票上市规则.md",
+    "sha256": "8e71c7480d537bddca5f31a7118c463d56ccfeee0377880e809d48476a7f3dd5",
+    "chars": 115545,
+    "status": "skipped_difficult",
+    "submitted_ids": [],
+    "reason": "over 80000 characters; reserve for chapter-level review",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/上海证券交易所股票质押式回购交易及登记结算业务办法.md",
+    "sha256": "7e9eb3f38c33d984c8a8c598cf054275b22d5dff476f26c007fb382dc56dfe94",
+    "chars": 27140,
+    "status": "approved",
+    "submitted_ids": [
+      "sse-stock-pledge-buyback-rules-2"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:38:22.824192+00:00",
+    "approved_ids": [
+      "sse-stock-pledge-buyback-rules-2"
+    ],
+    "estimated_cost_yuan": 7.8
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/中国注册会计师审计准则第1501号.md",
+    "sha256": "1961e69fa80734670404495d30d68daf9ac7fcfa6ada3840a1bf4fae8699f002",
+    "chars": 7787,
+    "status": "candidate_review_failed",
+    "submitted_ids": [],
+    "reason": "no candidate submitted",
+    "updated_at": "2026-08-29T13:11:08.278481+00:00",
+    "estimated_cost_yuan": 15.2,
+    "rejection_reason": "candidate cleanup: see database review_rejection_reason"
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/中国注册会计师审计准则第1502号.md",
+    "sha256": "e1d326231c08ac472b63d1a82d2d68ded6c414348178c27db5fb32d8cb3f15b6",
+    "chars": 4796,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment_1502_audit_standard_no_event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:39:06.307827+00:00",
+    "approved_ids": [
+      "sentiment_1502_audit_standard_no_event"
+    ],
+    "estimated_cost_yuan": 8.2
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/企业绩效参照点与控股股东股权质押：动机与治理_姜富伟.md",
+    "sha256": "668020a4be461c3a532d9f712fa58e89530f9372e4c326201a3914f622b5c783",
+    "chars": 29141,
+    "status": "failed_schema",
+    "submitted_ids": [
+      "kb_pledge_reference_point_academic"
+    ],
+    "reason": "Agent loop reached max_loop_round=16",
+    "updated_at": "2026-08-29T13:13:18.514384+00:00",
+    "estimated_cost_yuan": 8.4,
+    "rejection_reason": "candidate cleanup: see database review_rejection_reason"
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/审计2026年注册会计师全国统一考试辅导教材-中国注册会计师协会.md",
+    "sha256": "475f2ae4f7ac923fd67bc7c0fd3e5fb84a1443ead96a55100515a0562d3a5d60",
+    "chars": 10074,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/控股股东股权质押与注册会计师视角下的会计信息质量——基于业绩快报与年报差异的证据_谭劲松.md",
+    "sha256": "2e8c4f02dc463f266580f47a76c99b42d04328bcad89ccd8e1bd4a84002fa274",
+    "chars": 33208,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment_pledge_earnings_preview_diff"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:40:06.840344+00:00",
+    "approved_ids": [
+      "sentiment_pledge_earnings_preview_diff"
+    ],
+    "estimated_cost_yuan": 8.6
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/深圳证券交易所上市公司自律监管指引.md",
+    "sha256": "56d292e7e7993914885e3a07e29336fb66f0a8bd9bd078e65eab794a73dda28a",
+    "chars": 9535,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_buyback_szse_guidance_no9"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:40:30.853388+00:00",
+    "approved_ids": [
+      "kb_buyback_szse_guidance_no9"
+    ],
+    "estimated_cost_yuan": 8.8
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/深圳证券交易所创业板上市公司自律监管指南第 2 号——公告格式（2026 年 7 月修订.md",
+    "sha256": "d8648bda34ff34dfecd76a2dfc3b77babbd8d784cc941b6a37eb45ae27f63b2d",
+    "chars": 143756,
+    "status": "skipped_difficult",
+    "submitted_ids": [],
+    "reason": "over 80000 characters; reserve for chapter-level review",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/深圳证券交易所股票质押式回购交易及登记结算业务办法.md",
+    "sha256": "dc6d9b132b03582caa96434cb7c5c41bd91209cdc92ac4916e071c1d912ba365",
+    "chars": 26993,
+    "status": "approved",
+    "submitted_ids": [
+      "szse-stock-pledge-repo-rules-2025-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:41:03.037843+00:00",
+    "approved_ids": [
+      "szse-stock-pledge-repo-rules-2025-no-event"
+    ],
+    "estimated_cost_yuan": 9.0
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/深圳证券交易所自律监管措施和纪律处分.md",
+    "sha256": "354518a681a93a3ebe32536ae40166b0904c9ef8a91f0c8d3c17bc34f6541a1d",
+    "chars": 13100,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-szse-disciplinary-measures-2025-revision-full-text-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:41:30.673068+00:00",
+    "approved_ids": [
+      "sentiment-szse-disciplinary-measures-2025-revision-full-text-no-event"
+    ],
+    "estimated_cost_yuan": 9.2
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/第三十一号 上市公司股份质押（冻结、标记、解质、解冻、解除标记）公告.md",
+    "sha256": "f974f6f512d9ce481850956e344e6024ac077952c893f942d9bb965e2e8e03d2",
+    "chars": 5204,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment_31_pledge_format_no_event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:42:00.109844+00:00",
+    "approved_ids": [
+      "sentiment_31_pledge_format_no_event"
+    ],
+    "estimated_cost_yuan": 9.4
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/第三十二号 上市公司获得政府补助的公告.md",
+    "sha256": "c71897dd964411a9e397d90b9bb7f3a25f8f2678feaae27cdb3ae4f178931295",
+    "chars": 1091,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment_gov_subsidy_routine"
+    ],
+    "reason": "explicit retry",
+    "updated_at": "2026-08-29T13:13:45.066287+00:00",
+    "estimated_cost_yuan": 15.4,
+    "rejection_reason": "candidate cleanup: see database review_rejection_reason",
+    "approved_ids": [
+      "sentiment_gov_subsidy_routine"
+    ]
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/第三十号 上市公司变更公司全称、证券简称.md",
+    "sha256": "bfbd8b3bd5a4d241045a56e4d3b222de2b0fb6185ecee9a06b15895a28aea5aa",
+    "chars": 1449,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment_30_rename_format_no_event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:43:08.062459+00:00",
+    "approved_ids": [
+      "sentiment_30_rename_format_no_event"
+    ],
+    "estimated_cost_yuan": 9.8
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/第二十八号 上市公司业绩预告（快报）及更正公告.md",
+    "sha256": "1267b22721a961fc8b969c44f5b8c578b9b35b143b2f8a42b45b95f67f14c927",
+    "chars": 7168,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment_earnings_preview_correction_signal"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T07:43:34.831741+00:00",
+    "approved_ids": [
+      "sentiment_earnings_preview_correction_signal"
+    ],
+    "estimated_cost_yuan": 10.0
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/附件1.上市公司治理准则.md",
+    "sha256": "db980c82c65ed024e189da0c3fe71d3ce86f76974cbb8ed7a6f3c76ffe7e5b63",
+    "chars": 12315,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-corporate-governance-code-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:15:41.643757+00:00",
+    "approved_ids": [
+      "sentiment-corporate-governance-code-no-event"
+    ],
+    "estimated_cost_yuan": 10.2
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/附件1：《上市公司股份回购规则》.md",
+    "sha256": "0309ec5469179e6952b0fcdc8dfa077a90dc1936faa504368074f1cb8342289f",
+    "chars": 5923,
+    "status": "already_processed",
+    "submitted_ids": [],
+    "reason": "existing card source",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/附件1：上市公司信息披露管理办法.md",
+    "sha256": "6e91f05c97b37ad6e01679389409cd7dfbcc76daa13369d186b77f856d505852",
+    "chars": 11841,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-information-disclosure-method-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:16:09.390569+00:00",
+    "approved_ids": [
+      "sentiment-information-disclosure-method-no-event"
+    ],
+    "estimated_cost_yuan": 10.4
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/附件1：上市公司股东减持股份管理暂行办法.md",
+    "sha256": "adce2004f3bfac6ad2176a288d3447b2055f0fe6eb0f513dd98770927bc20a88",
+    "chars": 4716,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_reduction_measures_2024"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:16:44.123256+00:00",
+    "approved_ids": [
+      "kb_reduction_measures_2024"
+    ],
+    "estimated_cost_yuan": 10.6
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/附件1：上市公司董事、监事和高级管理人员所持本公司股份及其变动管理规则.md",
+    "sha256": "63b466c3521caee6233e706b211dbdf7646285704cc940ae05642c5d5b19c09e",
+    "chars": 3426,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-zhongjianguan-holding-transfer-rules-regulatory-text-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:17:19.012356+00:00",
+    "approved_ids": [
+      "sentiment-zhongjianguan-holding-transfer-rules-regulatory-text-no-event"
+    ],
+    "estimated_cost_yuan": 10.8
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/附件2.《上市公司治理准则》修订说明.md",
+    "sha256": "6ead225f276f6d655b4de6d650c1777555c48ce8442b8279b66b5ca51b0ff8d3",
+    "chars": 2374,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-corporate-governance-revision-note-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:17:52.338898+00:00",
+    "approved_ids": [
+      "sentiment-corporate-governance-revision-note-no-event"
+    ],
+    "estimated_cost_yuan": 11.0
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/附件2：《上市公司信息披露管理办法》修订说明.md",
+    "sha256": "3253304aa0809740dcd5e9e574738dcf01b8f2d11049149c374beb2851ba8d03",
+    "chars": 2536,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-information-disclosure-method-revision-no-event"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:18:18.014714+00:00",
+    "approved_ids": [
+      "sentiment-information-disclosure-method-revision-no-event"
+    ],
+    "estimated_cost_yuan": 11.2
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/附件2：《上市公司股东减持股份管理暂行办法》立法说明.md",
+    "sha256": "ccf675fa02b9ecc8294537e38f8be1060014a411fcb13a54bd92b60bbdc3f71e",
+    "chars": 3148,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_reduction_measures_legislative_explanation"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:18:53.853908+00:00",
+    "approved_ids": [
+      "kb_reduction_measures_legislative_explanation"
+    ],
+    "estimated_cost_yuan": 11.4
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/附件2：《上市公司股份回购规则》修订说明.md",
+    "sha256": "25f4c3a5935c83602bc180ea68abaa242931afcb6b58c1ad56e5b2697a5d5574",
+    "chars": 2217,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_buyback_rule_revision_note"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:19:26.724335+00:00",
+    "approved_ids": [
+      "kb_buyback_rule_revision_note"
+    ],
+    "estimated_cost_yuan": 11.6
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/附件2：《上市公司董事、监事和高级管理人员所持本公司股份及其变动管理规则》修订说明.md",
+    "sha256": "5ec073a637f84b52c84514709317fa31fd6bef4677b33a75f927353918e5ab65",
+    "chars": 1797,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_shareholding_change_rules_revision_explanation"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:20:09.122743+00:00",
+    "approved_ids": [
+      "kb_shareholding_change_rules_revision_explanation"
+    ],
+    "estimated_cost_yuan": 11.8
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/陈运森-2019-管理世界.md",
+    "sha256": "ea6d4e23bd6ce4cc5c8d60740f5a0052600c3e7f0706ac1052bed7f874f1503f",
+    "chars": 48077,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment-2019-chen-yunsen-inquiry-regulat"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:20:34.171438+00:00",
+    "approved_ids": [
+      "sentiment-2019-chen-yunsen-inquiry-regulat"
+    ],
+    "estimated_cost_yuan": 12.0
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/高送转、会计稳健性与大股东减持规模_赖丹.md",
+    "sha256": "697f3a0a2bb24a20c52a63bec5ce244b931333017e4d631e46d76dbc7988ea51",
+    "chars": 23213,
+    "status": "approved",
+    "submitted_ids": [
+      "sentiment_holder_reduction_high_transfer"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:28:41.530135+00:00",
+    "approved_ids": [
+      "sentiment_holder_reduction_high_transfer"
+    ],
+    "estimated_cost_yuan": 12.2
+  },
+  {
+    "scope": "sentiment",
+    "path": "data/kb/markdown/sentiment/高送转、财务业绩与大股东减持规模_蔡海静.md",
+    "sha256": "b22db657179234414aec26c377c3045af2aebc505bff976f67193505f76f1c4a",
+    "chars": 19519,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_cai_gaosongzhuan_reduction"
+    ],
+    "reason": "explicit retry",
+    "updated_at": "2026-08-29T12:06:53.921876+00:00",
+    "approved_ids": [
+      "kb_cai_gaosongzhuan_reduction"
+    ],
+    "estimated_cost_yuan": 14.4
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/Bernanke_Gertler_Monetary_Policy_and_Asset_Price_Volatility_NBER_WP7559.md",
+    "sha256": "7fef03aabfcc4183d55e83cbd743e903ef664e0bce8d92d488728fdc32ff37ed",
+    "chars": 113290,
+    "status": "skipped_difficult",
+    "submitted_ids": [],
+    "reason": "over 80000 characters; reserve for chapter-level review",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/LPR报价与公布规则（中国货币网现行说明全文）.md",
+    "sha256": "eb828025d68d62ca19dbd615d96e3d7cc777a086db51d68650b6ef9060b9d233",
+    "chars": 894,
+    "status": "already_processed",
+    "submitted_ids": [],
+    "reason": "existing card source",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/Shibor实施准则（中国货币网现行全文）.md",
+    "sha256": "fcfa0fd24bfd22fc1fda5c1be997453fdd6c1a177ef85f72940e9f8d1f7adeaa",
+    "chars": 2831,
+    "status": "approved",
+    "submitted_ids": [
+      "macro_shibor_rules_distinct_from_lpr"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:31:09.003808+00:00",
+    "approved_ids": [
+      "macro_shibor_rules_distinct_from_lpr"
+    ],
+    "estimated_cost_yuan": 12.4
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/《参与国际基准利率改革和健全中国基准利率体系》白皮书.md",
+    "sha256": "e45987bbda9a55d5335999df1df7ed966ddb980afa1b8c4bb5d79a0d49947102",
+    "chars": 22819,
+    "status": "approved",
+    "submitted_ids": [
+      "macro_lpr_availability_pboc_whitepaper_2020"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:31:32.384539+00:00",
+    "approved_ids": [
+      "macro_lpr_availability_pboc_whitepaper_2020"
+    ],
+    "estimated_cost_yuan": 12.6
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/中国人民银行公告〔2019〕第15号.md",
+    "sha256": "14c405728268778d6ddb728aeebd20c9d42a2a61ff9c74ff5109b3f4224d86bf",
+    "chars": 1689,
+    "status": "approved",
+    "submitted_ids": [
+      "macro_lpr_announcement_2019_15_origin"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:31:59.413730+00:00",
+    "approved_ids": [
+      "macro_lpr_announcement_2019_15_origin"
+    ],
+    "estimated_cost_yuan": 12.8
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/中国人民银行有关负责人就完善贷款市场报价利率形成机制答记者问.md",
+    "sha256": "eb7c964c3e798b8a0973101a6a01e3208f9006f99517b9a3de82d869e8e2f9fb",
+    "chars": 2621,
+    "status": "approved",
+    "submitted_ids": [
+      "macro_lpr_transition_2019_08_action"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:32:30.451411+00:00",
+    "approved_ids": [
+      "macro_lpr_transition_2019_08_action"
+    ],
+    "estimated_cost_yuan": 13.0
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/中国改革开放三十年的利率市场化进程_易纲_金融研究2009年第1期.md",
+    "sha256": "d2d880ed8e78a244739b1e482a6c71cda2915e370d26698f4e3beb662ab5b522",
+    "chars": 18017,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_macro_lpr_prereform_dualtrack"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:33:07.160928+00:00",
+    "approved_ids": [
+      "kb_macro_lpr_prereform_dualtrack"
+    ],
+    "estimated_cost_yuan": 13.2
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/中国货币政策执行报告2025年第三季度.md",
+    "sha256": "3ab8f50d9ffb6be6b21d95c8c75ab4f64df0f833550fe9228352c8c8dcf6241e",
+    "chars": 39887,
+    "status": "approved",
+    "submitted_ids": [
+      "macro_lpr_available_2025q3_report"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:33:28.415510+00:00",
+    "approved_ids": [
+      "macro_lpr_available_2025q3_report"
+    ],
+    "estimated_cost_yuan": 13.4
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/中国货币政策执行报告2025年第四季度.md",
+    "sha256": "275e9816c9866075b5c713554f8010f12c739c4fb150d9bf417c0b3fcb586293",
+    "chars": 46830,
+    "status": "approved",
+    "submitted_ids": [
+      "macro_lpr_available_2025q4_report"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:33:50.989430+00:00",
+    "approved_ids": [
+      "macro_lpr_available_2025q4_report"
+    ],
+    "estimated_cost_yuan": 13.6
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/中国货币政策执行报告2026年第一季度.md",
+    "sha256": "8ca70ce5a1983f5c6914be13b7b256122f584bf4e862e91e9894e296cf58317b",
+    "chars": 40203,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_macro_lpr_available_2026q1"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:34:11.686569+00:00",
+    "approved_ids": [
+      "kb_macro_lpr_available_2026q1"
+    ],
+    "estimated_cost_yuan": 13.8
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/中国货币政策执行报告2026年第二季度.md",
+    "sha256": "1ecfb1434ec17df2f2e70cc2d3bb4278188be3710565bedee105e282ae911f1d",
+    "chars": 43338,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_macro_lpr_available_2026q2"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:35:00.781996+00:00",
+    "approved_ids": [
+      "kb_macro_lpr_available_2026q2"
+    ],
+    "estimated_cost_yuan": 14.2
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/中国金融稳定报告（2025）.md",
+    "sha256": "081939edccb5c18fbbf0567870eeaf49edb43c790cfa9d78ddd07d968f001bf0",
+    "chars": 102031,
+    "status": "skipped_difficult",
+    "submitted_ids": [],
+    "reason": "over 80000 characters; reserve for chapter-level review",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/公开市场业务交易公告 [2026]第162号.md",
+    "sha256": "b990113c80eef41ce0b1be8ce7084db89012ef1baebc071b6c35bac46568392e",
+    "chars": 1021,
+    "status": "approved",
+    "submitted_ids": [
+      "macro_omo_2026_08_21_revrepo_140_lpr"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:35:33.002835+00:00",
+    "approved_ids": [
+      "macro_omo_2026_08_21_revrepo_140_lpr"
+    ],
+    "estimated_cost_yuan": 14.4
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/国民经济行业分类_GB／T4754-2017_按第1号修改单修订.md",
+    "sha256": "79b5599125443c7d01e3cbff9fbaf6e116c5b23f25246c72bdef418fed1736cf",
+    "chars": 190719,
+    "status": "skipped_too_large",
+    "submitted_ids": [],
+    "reason": "over 150000 characters",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/宏观经济学（第10版）_曼昆_人大社.md",
+    "sha256": "288db66481b203b31904147ca01c9f98a203a0611fae2e2132f783e10bbd9ab6",
+    "chars": 6894,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/工业生产者价格统计调查制度主要内容（2026年定期统计报表）.md",
+    "sha256": "162f5fe911282624e8024cd7e135549c3345a6df6069ef83ad1ed8df6598451b",
+    "chars": 786,
+    "status": "approved",
+    "submitted_ids": [
+      "macro-ipp-survey-2026-official-data"
+    ],
+    "reason": "explicit retry",
+    "updated_at": "2026-08-29T12:02:08.055612+00:00",
+    "estimated_cost_yuan": 14.4,
+    "approved_ids": [
+      "macro-ipp-survey-2026-official-data"
+    ]
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/平替_美联储_TheFederalReserveSystem_PurposesFunctions_官方.md",
+    "sha256": "7de3b73bff88ec123c5f4f5a4ce302f42bda9ef5435103e3759ba0fddc5a7294",
+    "chars": 20240,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_macro_lpr_fed_benchmark_structure"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:36:20.691124+00:00",
+    "approved_ids": [
+      "kb_macro_lpr_fed_benchmark_structure"
+    ],
+    "estimated_cost_yuan": 14.8
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/流通和消费价格统计报表制度主要内容（2025年统计年报和2026年定期统计报表）.md",
+    "sha256": "043e7811bb8986b37e289523e9ae499dd99f0dc0332c872a1158c3401e58a88d",
+    "chars": 1071,
+    "status": "approved",
+    "submitted_ids": [
+      "macro-cpi-statistics-methodology"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:36:45.031915+00:00",
+    "approved_ids": [
+      "macro-cpi-statistics-methodology"
+    ],
+    "estimated_cost_yuan": 15.0
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/货币政策与金融资产价格_易纲王召_经济研究2002年第3期.md",
+    "sha256": "15449101e31ef7799f3e3ef5a7c6d7b817d480f096e2fa92739874ee3e128494",
+    "chars": 12973,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_macro_lpr_prereform_assetprices_theory"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:37:11.569205+00:00",
+    "approved_ids": [
+      "kb_macro_lpr_prereform_assetprices_theory"
+    ],
+    "estimated_cost_yuan": 15.2
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/货币金融学_Mishkin英文原版.md",
+    "sha256": "da779a305bdcf343989de11a05c40b8f7803d53acc76fb101457ffec062fb4da",
+    "chars": 2579801,
+    "status": "skipped_too_large",
+    "submitted_ids": [],
+    "reason": "over 150000 characters",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/资产价格与货币政策_瞿强_经济研究2001年第7期.md",
+    "sha256": "bcdf5772d299503af021022530895f60b39129b3a0651bdb40eed9b5c106c761",
+    "chars": 17025,
+    "status": "approved",
+    "submitted_ids": [
+      "kb_macro_lpr_prereform_assetprices_policytarget"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:37:53.829230+00:00",
+    "approved_ids": [
+      "kb_macro_lpr_prereform_assetprices_policytarget"
+    ],
+    "estimated_cost_yuan": 15.4
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/采购经理调查统计报表制度主要内容（2025年统计年报和2026年定期统计报表）.md",
+    "sha256": "1301738cb657ef0b9c7134d1efe5bd417ed469b8b15b2c72a82c9873f155961b",
+    "chars": 1007,
+    "status": "approved",
+    "submitted_ids": [
+      "macro_pmi_survey_system_2025_2026"
+    ],
+    "reason": "",
+    "updated_at": "2026-08-29T08:38:31.566717+00:00",
+    "approved_ids": [
+      "macro_pmi_survey_system_2025_2026"
+    ],
+    "estimated_cost_yuan": 15.6
+  },
+  {
+    "scope": "macro",
+    "path": "data/kb/markdown/macro/金融学（第5版）_黄达_张杰_人大社.md",
+    "sha256": "b47c2b48005864469aefb6952a2f986bd81438bb01a345481c8e3137d9f0f8b5",
+    "chars": 11808,
+    "status": "skipped_needs_ocr",
+    "submitted_ids": [],
+    "reason": "conversion requires OCR",
+    "updated_at": "2026-08-29T06:41:13.870289+00:00"
+  }
+]

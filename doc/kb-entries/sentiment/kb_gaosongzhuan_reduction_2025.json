@@ -1,0 +1,69 @@
+{
+  "entry_id": "kb_gaosongzhuan_reduction_2025",
+  "title": "kb_gaosongzhuan_reduction_2025",
+  "scope": "sentiment",
+  "version": 2,
+  "created_at": "2026-08-29T08:29:09.597890+00:00",
+  "updated_at": "2026-08-29T10:39:42.745500+00:00",
+  "payload": {
+    "id": "kb_gaosongzhuan_reduction_2025",
+    "title": "kb_gaosongzhuan_reduction_2025",
+    "type": "supplement",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 2,
+    "applicability": {
+      "any_flags": [
+        "holder_reduction",
+        "has_reduction"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "高送转",
+        "送转",
+        "大股东减持",
+        "减持规模",
+        "财务业绩",
+        "盈余管理",
+        "应计收益",
+        "现金收益",
+        "净资产收益率",
+        "holder_reduction",
+        "has_reduction"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 40,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定 holder_reduction（及佐证 has_reduction）时，在《减持管理办法》等合规规则（kb_reduction_measures_2024 等）基础上叠加本篇实证证据所揭示的减持风险信号：(1) 本篇以2010-2015年A股581个\"高送转\"且发生大股东减持的样本（总减持样本2916个）回归发现：发生大股东减持的公司中，推出\"高送转\"方案的减持规模显著大于未推出公司；\"高送转\"强度越大（每10股送转5-15股），减持规模越大；故公司近期公告\"高送转\"方案时，应提高对大股东借机减持套现（holder_reduction）的风险敏感度，尤其在高送转强度高（送转比例高）时。(2) 财务业绩调节作用：好的财务业绩（ROE高）抑制\"高送转\"与大股东减持规模的正向关系，差的财务业绩加剧之；故对绩差公司公告高送转，减持风险显著上移，应记为 holder_reduction 风险敏感情形。(3) 盈余管理视角：现金收益（经营净现金流/净资产）负向调节、应计收益（应计利润/净资产）正向调节\"高送转\"与减持规模的关系。即若公司\"高送转\"时现金收益偏低、应计收益偏高（盈余质量低、业绩被粉饰），大股东减持动机更强、规模更大，应视为减持风险加剧信号；反之现金收益高、真实业绩好则减持风险相对低。(4) 与合规基准的衔接：本篇界定大股东为控股股东及持股5%以上其他大股东，与《减持管理办法》主体范围一致，可直接用于为 holder_reduction 作经验佐证；本篇不改变《减持管理办法》的合规判断，仅在减持风险定性/定级上补充经验证据维度。",
+      "text": "本篇系浙江财经大学蔡海静等发表于专业期刊的实证研究（2010-2015年数据），研究\"高送转\"与大股东减持规模的关系及财务业绩的调节作用。核心发现：(1) 发生大股东减持的公司中，推出\"高送转\"方案的公司减持规模显著更大（H1成立）；(2) \"高送转\"强度越大，减持规模越大（H2成立）；(3) 财务业绩（ROE）负向调节二者的正向关系（H3）；进一步从盈余管理视角，现金收益负向调节、应计收益正向调",
+      "exceptions": [
+        "绩优公司公告高送转且现金收益充足、盈余质量高时，减持风险相对低，可视为弱信号而非风险敏感情形",
+        "未发生或未披露大股东减持事件的，不因高送转本身单独触发 holder_reduction 风险判定"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data/kb/markdown/sentiment/????????????????_???.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T10:39:42.738985+00:00",
+    "updated_at": "2026-08-29T10:39:42.739985+00:00",
+    "change_note": "source-bound candidate review"
+  }
+}

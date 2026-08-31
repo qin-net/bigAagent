@@ -1,0 +1,64 @@
+{
+  "entry_id": "fund_ic_cashflow_quality_v1",
+  "title": "内控薄弱引致现金流质量/持续性下降（cashflow_quality_issue）",
+  "scope": "fundamental",
+  "version": 1,
+  "created_at": "2026-08-29T06:47:34.294019+00:00",
+  "updated_at": "2026-08-29T06:47:40.016865+00:00",
+  "payload": {
+    "id": "fund_ic_cashflow_quality_v1",
+    "title": "内控薄弱引致现金流质量/持续性下降（cashflow_quality_issue）",
+    "type": "fundamental",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "cashflow_quality_issue"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "公司内控薄弱信号",
+        "叠加真实活动盈余管理迹象（异常削价促销",
+        "出售固定资产",
+        "证券投资",
+        "减少原材料采购",
+        "削减广告支出等导致的现金流操控）",
+        "当期经营现金流质量存疑"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 3,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "标记 cashflow_quality_issue 旗标：内控薄弱的公司现金流持续性更低，并可能因真实活动盈余管理而扭曲现金流真实性。",
+      "text": "方红星等(2013)假设2及经验证据显示，内控质量越高，应计持续性和现金流持续性越强。内控薄弱的公司更可能从事真实活动盈余管理（异常削价促销、出售固定资产与证券、减少采购、降低广告支出）以增加当期现金流，从而降低现金流在未来期间的持续性与真实性，构成cfo质量隐患。",
+      "exceptions": [
+        "内控质量属中高且无现金流操控迹象",
+        "现金流变化可由正常经营周期解释而非盈余管理所致"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data/kb/markdown/fundamental/内部控制对盈余持续性的影响及其市场反应——来自A股非金融类上市公司的经验证据_方红星.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T06:47:34.293209+00:00",
+    "updated_at": "2026-08-29T06:47:34.294019+00:00",
+    "change_note": "distill"
+  }
+}

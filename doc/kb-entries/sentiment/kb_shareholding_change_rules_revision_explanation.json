@@ -1,0 +1,85 @@
+{
+  "entry_id": "kb_shareholding_change_rules_revision_explanation",
+  "title": "《持股变动规则》修订说明——董监高减持禁止/预披露/离婚绕道与窗口期中止认定的补充基准（has_reduction/holder_reduction，窗口期佐证 has_earnings_preview）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T08:20:00.788963+00:00",
+  "updated_at": "2026-08-29T08:20:09.118711+00:00",
+  "payload": {
+    "id": "kb_shareholding_change_rules_revision_explanation",
+    "title": "《持股变动规则》修订说明——董监高减持禁止/预披露/离婚绕道与窗口期中止认定的补充基准（has_reduction/holder_reduction，窗口期佐证 has_earnings_preview）",
+    "type": "supplement",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "has_reduction",
+        "holder_reduction",
+        "has_earnings_preview",
+        "no_material_event"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "董监高",
+        "减持",
+        "持股变动规则",
+        "修订",
+        "窗口期",
+        "业绩预告",
+        "业绩快报",
+        "集中竞价",
+        "大宗交易",
+        "预披露",
+        "离婚",
+        "绕道减持",
+        "增持",
+        "禁止减持",
+        "持股变动规则修订说明",
+        "has_reduction",
+        "holder_reduction",
+        "has_earnings_preview"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 50,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "判定 has_reduction / holder_reduction 时，在《减持管理办法》实体规则（kb_reduction_measures_2024）及立法说明基础上叠加《持股变动规则》修订说明所明确的董监高专属要求：(1) 禁止减持情形——董监高自身违法、公司违法、触及重大违法强制退市、未足额缴纳罚没款等情形下不得减持（由减持规定第7、8条移入）；集中竞价或大宗减持前均须预先披露。\"本人适用\"限定使禁止情形不牵连无违规的其他董监高。(2) 离婚绕道规避——董监高离婚分割股票后双方持续共同遵守相关减持限制，故离婚过户形式上的非直接减持亦纳入 has_reduction/holder_reduction 识别；新老划断以离婚分割股票过户时点为准。(3) 窗口期（has_earnings_preview 佐证）——年报/半年报公告前15日内、季报/业绩预告/业绩快报公告前5日内为董监高不得买卖本公司股份的窗口期；因未采纳延长窗口期建议以依法支持董监高增持，故在年报/业绩预告等披露节点临近时，董监高增持属于支持信号而非窗口期风险，但董监高不得利用未披露信息内幕交易。据此对披露节点附近出现的减持/增持事件作法规适用判定。",
+      "text": "《上市公司董事、监事和高级管理人员所持本公司股份及其变动管理规则》（《持股变动规则》）修订说明，整合《减持规定》第七条、第八条内容并针对董监高股份转让/增持作出细化，为 sentiment 的 has_reduction / holder_reduction 及窗口期判断提供补充基准。修订要点：(1) 规范减持——明确董监高在自身违法、上市公司违法以及重大违法强制退市、未足额缴纳罚没款等情形下不得",
+      "exceptions": [
+        "不涉及董监高（董事、监事、高级管理人员）持股减持/增持事件的场景不适用本卡",
+        "离婚协议分割但尚未按本规则履行过户/披露程序的，不适用新规下双方持续共同受限的认定",
+        "窗口期表述用于判定董监高个别交易的时段限制，不单独构成 has_earnings_preview 事件本体"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\附件2：《上市公司董事、监事和高级管理人员所持本公司股份及其变动管理规则》修订说明.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data/kb/markdown/sentiment/附件2：《上市公司董事、监事和高级管理人员所持本公司股份及其变动管理规则》修订说明.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:20:00.787952+00:00",
+    "updated_at": "2026-08-29T08:20:00.788963+00:00",
+    "change_note": "distill"
+  }
+}

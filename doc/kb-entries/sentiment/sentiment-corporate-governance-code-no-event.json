@@ -1,0 +1,74 @@
+{
+  "entry_id": "sentiment-corporate-governance-code-no-event",
+  "title": "《上市公司治理准则》为监管规章文本（无具体公司情绪事件）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T08:15:36.654929+00:00",
+  "updated_at": "2026-08-29T08:15:41.638520+00:00",
+  "payload": {
+    "id": "sentiment-corporate-governance-code-no-event",
+    "title": "《上市公司治理准则》为监管规章文本（无具体公司情绪事件）",
+    "type": "sentiment",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "监测到《上市公司治理准则》全文文本",
+        "内容为公司治理规范（股东权利",
+        "股东会",
+        "董事与董事会",
+        "独立董事",
+        "专门委员会",
+        "高级管理人员与激励约束等）",
+        "属国家层面监管规章",
+        "准则",
+        "不针对任何单一上市公司的具体事件或披露"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 3,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "将本文档归类为无实质市场事件（no_material_event）与无近期事件（no_recent_events），不触发任何情绪信号。本文档系中国证监会发布的《上市公司治理准则》，为上市公司治理的通用规范框架，其\"积极回报股东\"\"现金分红政策\"均属于制度性要求而非特定公司的回购公告；\"披露……原因\"等要求系准则性条款而非对某公司的问询。冻结旗标中 has_buyback（股票回购）、has_earnings_preview（业绩预告/快报）、has_inquiry（针对特定公司的监管/问询函）、has_reduction 与 holder_reduction（股东/持股人减持公告）均针对具体公司行动与披露：本文档既非回购公告、业绩预告/快报、针对特定公司的监管问询函，亦非减持公告，故均不触发。与已入库的深交所自律监管实施办法类条目保持一致归类：监管规章文本不构成公司层面情绪/事件信息，映射为 no_material_event 与 no_recent_events。",
+      "text": "《上市公司治理准则》（共25页）为国家层面监管规章，依据《公司法》《证券法》制定，用于规范上市公司治理。主要内容：①第一章总则（第1-6条）：适用范围、治理目标、党建、中国证监会及自律组织的监督管理；②第二章股东与股东会（第7-17条）：股东权利、现金分红政策、股东会召集表决程序、征集投票权、累积投票制；③第三章董事与董事会（第18-49条）：董事选任与任职资格、忠实勤勉义务、民事责任、董事会构成",
+      "exceptions": [
+        "若后续文档为某公司依据本准则发出的回购公告、业绩预告、因治理问题收到的监管函，或某股东的减持公告，则需重新归类为对应情绪事件",
+        "若文档针对特定公司下发问询/纪律处分类文件，应改判 has_inquiry"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\附件1.上市公司治理准则.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\附件1.上市公司治理准则.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:15:36.654406+00:00",
+    "updated_at": "2026-08-29T08:15:36.654929+00:00",
+    "change_note": "distill"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "entry_id": "kb_value_trap",
+  "title": "便宜不能压过现金流质量",
+  "scope": "fundamental",
+  "version": 1,
+  "created_at": "2026-08-28T10:19:56.594471+00:00",
+  "updated_at": "2026-08-28T10:19:56.594471+00:00",
+  "payload": {
+    "id": "kb_value_trap",
+    "title": "便宜不能压过现金流质量",
+    "type": "rule",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "approved",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "value_trap_risk"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "value_trap",
+        "价值陷阱",
+        "便宜",
+        "现金流"
+      ],
+      "aliases": [],
+      "intent_tags": [
+        "falsifier"
+      ],
+      "priority": 95,
+      "mandatory": true
+    },
+    "guidance": {
+      "action": "value_trap_risk 时不得买入",
+      "text": "估值便宜不能压过现金流质量问题；value_trap_risk 时不得给出买入。",
+      "exceptions": []
+    },
+    "source_refs": [],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "updated_at": "2026-08-28T10:19:56.594471+00:00"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "entry_id": "fund_info_reliability_earnings_persistence",
+  "title": "信息可靠性直接计量：经营资产利润率与现金获取率(均方差)判读盈余持续性与 ROE 质量",
+  "scope": "fundamental",
+  "version": 1,
+  "created_at": "2026-08-29T06:46:54.175815+00:00",
+  "updated_at": "2026-08-29T06:47:00.173069+00:00",
+  "payload": {
+    "id": "fund_info_reliability_earnings_persistence",
+    "title": "信息可靠性直接计量：经营资产利润率与现金获取率(均方差)判读盈余持续性与 ROE 质量",
+    "type": "flag_mapping",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "roe_quality",
+        "cashflow_quality_issue",
+        "cashflow_lag",
+        "cashflow_seasonal"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "分析标的时需评估当期盈利",
+        "roe的可持续性与可信度：当经营资产利润率(rnoa",
+        "营业利润",
+        "经营性净资产)与经营资产现金获取率(rcfo",
+        "经营现金流净额",
+        "经营性净资产)存在明显背离",
+        "或需检验应计制盈利是否由现金制盈利支撑",
+        "判断当前盈利水平是否会在未来大幅回落时触发",
+        "亦在盈利较高但需甄别其质量与持续性",
+        "避免将不可持续盈利外推为长期能力时触发",
+        "交叉于",
+        "roe_quality",
+        "cashflow_quality_issue",
+        "的取证"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 60,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "依据彭韶兵等对信息可靠性的直接计量(R3/R5 = 前后3年或5年经营资产利润率RNOA与经营资产现金获取率RCFO之间的均方差;R越小可靠性越强)，按以下步骤判定盈余质量并落旗：(1)若 RNOA 与 RCFO 的均方差(R3/R5)偏大，即应计制盈利与现金制回报长期背离，则信息可靠性低、会计扭曲重，会计盈余持续性差，对其当期盈利水平应下调预期，落 cashflow_quality_issue；此类盈利未来易反转。(2)若 RNOA 与 RCFO 的均值方差较小(可靠性高)，盈余持续性高，盈利质量好，不落 cashflow_quality_issue。(3)RNOA 是 ROE 同族盈利指标；评估 roe_quality 时应叠加检验 RNOA 与 RCFO 的一致性：不应仅看单期 RNOA/ROE 高低，还应验证应计制回报能否被经营现金流持续印证；若盈利主要由应计/异常应计(信息失真)驱动而现金流支撑不足，则盈利质量存疑，落 cashflow_quality_issue 并联动 roe_quality 下调对盈利持续性的评价。(4)注意：应计利润较现金收益的持续性差这一现象不因可靠性高低而改变——即使用纯现金视角也须认识到应计利润本身的持续性天然低于现金流；不能仅因可靠性高就忽略应计的固有反转倾向，只应据此上调对可靠盈利的持续性预期。(5)不因本维度单独落 high_leverage、valuation_* 或 value_trap_risk，这些旗仍须各自维度证据；若高 RNOA 但可靠性低、应计驱动，且恰逢高估值/高杠杆，可叠加提示 value_trap_risk 的考察。",
+      "text": "彭韶兵、黄益建、赵根(西南财经大学)延续 FWY 与 RSST 方法，以我国2001-2006年深沪上市公司为样本，构建信息可靠性的直接计量指标：以经营资产利润率 RNOA(营业利润/经营性净资产期初额)与经营资产现金获取率 RCFO(经营现金流净额/经营性净资产期初额)的均方差(R3为3年、R5为5年)衡量会计计量方法在期限内的稳定性/一致性，R 越小则可靠性越强。核心发现：企业成长性越好则信息",
+      "exceptions": [
+        "信息可靠性高（R3/R5 小）不等于盈利强或可买入，只能上调对盈利持续性的预期",
+        "RNOA 与 RCFO 短期单期背离可能源于回款节奏或季节性，应先用3年以上窗口(R3/R5)判断平均一致性，短期背离不单独落 cashflow_quality_issue；必要时先区分 cashflow_lag 与 cashflow_seasonal",
+        "不落 high_leverage、valuation_cheap/rich、value_trap_risk；这些旗需要各自维度的独立证据",
+        "金融保险行业不在该文样本范围内，模型中剔除了金融保险上市公司"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\fundamental\\信息可靠性、企业成长性与会计盈余持续性_彭韶兵.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T06:46:54.174818+00:00",
+    "updated_at": "2026-08-29T06:46:54.175815+00:00",
+    "change_note": "distill"
+  }
+}

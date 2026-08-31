@@ -1,0 +1,65 @@
+{
+  "entry_id": "sentiment-cn-company-law-no-event",
+  "title": "《中华人民共和国公司法》为一般性成文法文本，非公司具体事件披露（无情绪事件触发）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T07:34:41.213790+00:00",
+  "updated_at": "2026-08-29T07:34:46.606919+00:00",
+  "payload": {
+    "id": "sentiment-cn-company-law-no-event",
+    "title": "《中华人民共和国公司法》为一般性成文法文本，非公司具体事件披露（无情绪事件触发）",
+    "type": "sentiment/dedup",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "《中华人民共和国公司法》为公司法一般性成文法文本（源文件为44页扫描件",
+        "needs_ocr",
+        "未提取文字",
+        "标题猜测为公司法）内容为规范公司设立",
+        "组织机构",
+        "股份发行与转让",
+        "高管责任等一般性法律制度",
+        "不针对任何单一上市公司披露具体事件"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 1,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "将本文档归类为一般性成文法/法律文本，不构成任何公司层面的情绪事件。冻结情绪旗标中 has_buyback、has_earnings_preview、has_inquiry、has_reduction、holder_reduction 均针对具体上市公司事件/披露（股票回购、业绩预告、监管问询、股东减持），而本文档既非上述任一公告，亦非针对特定公司的事件披露，故不触发这些事件旗标。将其映射为 no_material_event / no_recent_events，标示本文档不承载针对特定上市公司的情绪/事件信息。注：源文件为需要OCR的扫描件，未提取到可阅读正文，但根据标题即可判定其属一般性成文法而非公司事件公告。",
+      "text": "《中华人民共和国公司法》为中国全国人大常委会通过的综合性公司法典，为一般性成文法/法律文本，规范有限责任公司与股份有限公司的设立、组织机构、股份与债券发行转让、高管义务责任、公司合并分立解散清算等一般性法律制度。本文档对应的源PDF（44页）经pymupdf提取后未获得任何文字（status: needs_ocr，疑似扫描件），但根据标题即可判定其属于一般性法律文本，而非针对任何单一上市公司的事件",
+      "exceptions": [
+        "若后续OCR后正文显示为特定公司事件公告或披露，应重新评估并撤销本条映射"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\《中华人民共和国公司法》.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:34:41.212792+00:00",
+    "updated_at": "2026-08-29T07:34:41.213790+00:00",
+    "change_note": "distill"
+  }
+}

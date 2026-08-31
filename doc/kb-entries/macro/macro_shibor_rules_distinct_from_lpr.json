@@ -1,0 +1,66 @@
+{
+  "entry_id": "macro_shibor_rules_distinct_from_lpr",
+  "title": "Shibor实施准则与LPR标记的区分映射",
+  "scope": "macro",
+  "version": 1,
+  "created_at": "2026-08-29T08:30:59.979135+00:00",
+  "updated_at": "2026-08-29T08:31:08.998298+00:00",
+  "payload": {
+    "id": "macro_shibor_rules_distinct_from_lpr",
+    "title": "Shibor实施准则与LPR标记的区分映射",
+    "type": "rule",
+    "scope": [
+      "macro"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "lpr_available",
+        "lpr_missing"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "宏观分析涉及上海银行间同业拆放利率（shibor）时",
+        "需判断该基准利率与lpr冻结标记的关系"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 70,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "Shibor实施准则全文仅规定Shibor（上海银行间同业拆放利率）的形成、发布与监督管理机制：由18家商业银行组成报价团，依次剔除最高、最低各4家报价后对其余报价算术平均，于每个交易日11:00对外发布，品种包括隔夜、1周、2周、1个月、3个月、6个月、9个月及1年，年利率按Act/360、T+0、保留4位小数。该文档未涉及贷款市场报价利率（LPR）。宏观scope冻结标记仅为lpr_available与lpr_missing，均专指LPR可得性判断。因此不得依据本Shibor文档对LPR标记做出任何取舍：既不能因该文档启用lpr_available，也不能据其启用lpr_missing。Shibor作为货币市场基准与LPR（贷款市场报价利率）属不同品种，二者发布时点、期限与计算规则各异；若需对Shibor本身进行可得性判断，需另寻对应规则与标记。",
+      "text": "映射规则：宏观scope下，唯一冻结标记为lpr_available与lpr_missing，均专指贷款市场报价利率（LPR）的可得性。本来源文档为《上海银行间同业拆放利率（Shibor）实施准则》，其内容仅规范Shibor基准利率：由18家商业银行组成报价团，剔除最高、最低各4家报价后对其余算术平均，每交易日11:00发布，期限包括O/N、1W、2W、1M、3M、6M、9M、1Y，年利率，Act",
+      "exceptions": [
+        "若后续新增Shibor可得性标记的冻结旗标，则应按新标记重新映射",
+        "若本Shibor文档后续修订并入LPR条款，则按其启用对应LPR标记"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\macro\\Shibor实施准则（中国货币网现行全文）.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data/kb/markdown/macro/Shibor实施准则（中国货币网现行全文）.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:30:59.978137+00:00",
+    "updated_at": "2026-08-29T08:30:59.979135+00:00",
+    "change_note": "distill"
+  }
+}

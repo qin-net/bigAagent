@@ -1,0 +1,68 @@
+{
+  "entry_id": "sentiment-cn-securities-law-no-event",
+  "title": "《中华人民共和国证券法》为一般性成文法文本（非任一上市公司具体事件披露，无情绪事件触发）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T07:35:10.797637+00:00",
+  "updated_at": "2026-08-29T07:35:23.033446+00:00",
+  "payload": {
+    "id": "sentiment-cn-securities-law-no-event",
+    "title": "《中华人民共和国证券法》为一般性成文法文本（非任一上市公司具体事件披露，无情绪事件触发）",
+    "type": "methodology",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "《中华人民共和国证券法》为中国全国人大常委会通过的综合性证券市场基础性成文法文本（2019年第二次修订版",
+        "源文件为72页已成功提取文字）规范证券发行注册制",
+        "证券交易",
+        "上市公司的收购",
+        "信息披露",
+        "投资者保护",
+        "证券交易场所",
+        "证券公司监管及法律责任等一般性法律制度明文规定禁止内幕交易",
+        "操纵市场等行为",
+        "不针对任何单一上市公司披露具体事件"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 1,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "将本文档归类为一般性成文法/基础法律文本，不构成任何公司层面的情绪事件。冻结情绪旗标 has_buyback、has_earnings_preview、has_inquiry、has_reduction、holder_reduction 均针对具体上市公司的事件/披露（股票回购公告、业绩预告、监管问询函、股东减持公告），而本文档系规范全国证券市场的综合性法律，既非上述任何公告，亦非针对特定公司的事件披露，故不触发任一事件旗标。将其映射为 no_material_event / no_recent_events，标示本文档不承载针对特定上市公司的情绪/事件信息。注：文本虽偶见与事件名称字面相近的制度安排（如第二十四条注册制下监管责令回购、第三十六条/第四十四条股东转让与六个月短线交易窗口、第二十条发行预披露），但均为一般性法律机制而非具体公司的回购/减持/业绩/问询事件，不构成情绪旗标触发。",
+      "text": "《中华人民共和国证券法》为中国全国人大常委会通过的规范全国证券市场的基础性成文法（最后一次为2019年12月28日二次修订），共十四章。源文档72页文字已完整提取（status: ok）。全文规范证券发行注册制条件与程序、证券交易及禁止的交易行为（内幕交易、操纵市场）、上市公司的收购、信息披露、投资者保护、证券交易场所与证券公司监管、法律责任等一般性法律制度。本文档不针对任何单一上市公司披露具体事",
+      "exceptions": [
+        "若该证券法文本为特定单一上市公司涉诉/被处罚事件一并附载的公告（如监管决定书），则需按事件实体重判",
+        "若未来新增的证券法配套解释或个案执法公告明确涉及具体上市公司回购/减持/问询，须另行单独建卡"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\《中华人民共和国证券法》.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:35:10.796634+00:00",
+    "updated_at": "2026-08-29T07:35:10.797637+00:00",
+    "change_note": "distill"
+  }
+}

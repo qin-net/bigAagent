@@ -1,0 +1,64 @@
+{
+  "entry_id": "sentiment-cn-takeover-measures-no-event",
+  "title": "CSRC《上市公司收购管理办法》为监管规章，非公司具体事件公告（无情绪事件触发）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T07:33:14.860431+00:00",
+  "updated_at": "2026-08-29T07:33:20.721158+00:00",
+  "payload": {
+    "id": "sentiment-cn-takeover-measures-no-event",
+    "title": "CSRC《上市公司收购管理办法》为监管规章，非公司具体事件公告（无情绪事件触发）",
+    "type": "sentiment",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "权益变动",
+        "要约收购监管规则文本（证监会令第10号",
+        "2002年公布",
+        "经多轮修订）",
+        "内容为上市公司收购管理的一般性规章",
+        "不针对任何单一上市公司披露具体事件"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 1,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "将此文档归类为监管规章性文本，不构成任何公司层面的情绪事件。冻结情绪旗标中 has_buyback、has_earnings_preview、has_inquiry、has_reduction、holder_reduction 均针对具体公司事件/披露，而本文档既非股票回购公告、业绩预告、监管问询函，也非股东减持公告，故不触发上述任一事件旗标。将其映射为 no_material_event / no_recent_events，以标示本文档不承载针对特定上市公司的情绪/事件信息。",
+      "text": "《上市公司收购管理办法》为中国证监会发布的部门规章（证监会令第10号，2002年公布，经2008/2012/2014/2020年多次修订），规范上市公司的收购及相关股份权益变动活动（权益披露、要约收购、协议收购、豁免等），属于一般性监管规则文本，而非针对特定上市公司的事件披露。综述识别要点：（1）权益披露——投资者及其一致行动人持股达5%、每增减5%、每增减1%等需编制权益变动报告书并公告（第十三",
+      "exceptions": [
+        "若文档来源后续改为公司就收购/权益变动发布的公告（引用本办法第五条、第十三条等并给出具体公司、比例、价格），则应改判为对应事件旗标（如 has_reduction 或其他）",
+        "若证监会问询/决定文件附于文末构成具体监管事件，则可考虑 has_inquiry"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\《上市公司收购管理办法》.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T07:33:14.859925+00:00",
+    "updated_at": "2026-08-29T07:33:14.860431+00:00",
+    "change_note": "distill"
+  }
+}

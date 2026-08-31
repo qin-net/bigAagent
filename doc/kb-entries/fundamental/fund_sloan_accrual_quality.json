@@ -1,0 +1,67 @@
+{
+  "entry_id": "fund_sloan_accrual_quality",
+  "title": "应计异象：盈利中应计(accruals)vs现金流成分的持续性差异与盈余质量判断",
+  "scope": "fundamental",
+  "version": 1,
+  "created_at": "2026-08-29T06:40:14.941507+00:00",
+  "updated_at": "2026-08-29T06:40:20.172473+00:00",
+  "payload": {
+    "id": "fund_sloan_accrual_quality",
+    "title": "应计异象：盈利中应计(accruals)vs现金流成分的持续性差异与盈余质量判断",
+    "type": "fundamental",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "cashflow_quality_issue",
+        "cashflow_lag",
+        "cashflow_seasonal",
+        "roe_quality",
+        "valuation_rich",
+        "value_trap_risk"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "评估盈余质量或判断当期盈利的可信度与持续性时；当净利润较高但构成中应计成分(应收",
+        "存货",
+        "其他应计)占比偏大",
+        "经营现金流占比偏低时触发；或交叉检验估值是否被低质量盈利支撑时触发"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 60,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "拆解当期盈余为应计成分与现金流成分：应计=净利润−经营现金流(即应收/存货/其他营运资本变动等)。若盈利主要由应计贡献而经营现金流偏低，则视为 cashflow_quality_issue——应计驱动的盈利持续性低于现金流驱动的盈利，未来盈利倾向回落，需下调对当前盈利水平的预期。同时按盈利质量交叉价值判断：现金流支持度不足的高盈利若恰逢高估值，叠加 value_trap_risk / valuation_rich；反之低应计、现金流扎实的盈利质量高。避免仅以表面净利润或ROE下结论，须以经营现金流与净利的背离程度校正。",
+      "text": "依据 Sloan (1996, The Accounting Review 71(3):289-315)：当期盈余中来自应计成分的表现持续性低于来自现金流成分的表现；市场投资者常\"盯住\"净利润，未能充分区分应计与现金流成分的不同属性，直到该信息反映到未来盈余。后果：应计(accruals)水平相对较高(低)的公司未来出现负(正)超额回报，且集中在未来盈余披露期附近。据此，盈余质量判断必须以应计/现",
+      "exceptions": [
+        "已确认的季节性因素：经营现金流为负属正常季节性范畴且周期内可验证(链接 cashflow_seasonal)时，不应直接判为质量缺陷",
+        "应计扩张由可解释的经营增长(如真实销售扩张带来的应收/存货同步增长且周转指标未恶化)支撑，经验证后可不适用",
+        "金融/类金融标的中按业务特性应计与现金流内涵有别，套用前需调整口径"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\fundamental\\Do Stock Prices Fully Reflect Information in Accruals and Cash Flows about Future Earnings.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T06:40:14.940455+00:00",
+    "updated_at": "2026-08-29T06:40:14.941507+00:00",
+    "change_note": "distill"
+  }
+}

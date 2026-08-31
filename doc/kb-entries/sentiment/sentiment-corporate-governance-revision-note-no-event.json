@@ -1,0 +1,74 @@
+{
+  "entry_id": "sentiment-corporate-governance-revision-note-no-event",
+  "title": "《上市公司治理准则》修订说明为证监监管规章修订解释文本（无具体公司情绪事件）",
+  "scope": "sentiment",
+  "version": 1,
+  "created_at": "2026-08-29T08:17:46.861853+00:00",
+  "updated_at": "2026-08-29T08:17:52.334391+00:00",
+  "payload": {
+    "id": "sentiment-corporate-governance-revision-note-no-event",
+    "title": "《上市公司治理准则》修订说明为证监监管规章修订解释文本（无具体公司情绪事件）",
+    "type": "regulatory_note",
+    "scope": [
+      "sentiment"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "no_material_event",
+        "no_recent_events"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "《上市公司治理准则》修订说明",
+        "为证监会发布的监管规章修订解释文本；内容围绕修订背景（落实国务院关于资本市场高质量发展意见及完善中国特色现代企业制度意见）主要修订内容（强化董监高及控股股东实控人“关键少数”责任",
+        "完善任职履职离职管理",
+        "健全薪酬激励约束机制",
+        "规范控股股东实控人同业竞争与关联交易",
+        "与现行规则衔接）公开征求意见采纳情况（董事责任保险",
+        "累积投票制",
+        "薪酬适用范围",
+        "可持续发展",
+        "董事会多元化）以及施行日期（2026年1月1日）不针对任何单一上市公司的具体事件或披露"
+      ],
+      "aliases": [],
+      "intent_tags": [],
+      "priority": 1,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "将本文档归类为无实质市场事件（no_material_event）与无近期事件（no_recent_events），不触发任何情绪事件旗标。本文档系中国证监会就《上市公司治理准则》修订所发布的修订说明，属于国家层面监管规章的修订解释文本，其内容为一般性制度安排（强化“关键少数”责任、薪酬与业绩匹配、同业竞争限制、关联交易识别等），而非对任何特定上市公司的行动或披露。冻结情绪旗标中 has_buyback（股票回购公告）、has_earnings_preview（业绩预告/快报）、has_inquiry（针对特定公司的监管/问询函）、has_reduction 与 holder_reduction（股东/持股人减持公告）均针对具体公司事件与披露：本文档既非回购公告、业绩预告/快报、监管问询函，亦非减持公告，故均不触发。与已入库的同名《上市公司治理准则》全文文本、深交所/上交所自律监管规章及修订说明类条目保持一致归类：监管规章及其修订说明文本不构成公司层面情绪/事件信息，映射为 no_material_event 与 no_recent_events。同时该修订说明中“强化董监高及控股股东实控人责任、规范同业竞争与关联交易”等制度性约束在判定 has_reduction/holder_reduction/has_inquiry 时可作为底层治理合规基准参考，但修订说明本身不构成公司层面的事件证据。",
+      "text": "《上市公司治理准则》修订说明系中国证监会就修订该准则发布的修订解释文本，依据《国务院关于加强监管防范风险推动资本市场高质量发展的若干意见》《中共中央办公厅国务院办公厅关于完善中国特色现代企业制度的意见》以及新《公司法》等制定，用于督促上市公司经营管理层忠实勤勉履职、防范控股股东滥用控制地位、强化“关键少数”责任。主要内容涵盖四部分：（1）修订背景——现行准则在规范股东会、董事会、高管激励约束、控股",
+      "exceptions": [
+        "若后续出现基于《治理准则》修订而针对具体公司出具的监管问询/纪律处分文件，则触发的应是 has_inquiry 等公司层面事件旗标，而非本文档本身",
+        "本文档的施行日期（2026年1月1日）及制度要求仅作治理合规基准，不作为公司层面情绪事件的证据"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\附件2.《上市公司治理准则》修订说明.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      },
+      {
+        "source_id": "data\\kb\\markdown\\sentiment\\附件2.《上市公司治理准则》修订说明.md",
+        "chapter": "",
+        "pages": "",
+        "source_sha256": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    },
+    "created_at": "2026-08-29T08:17:46.860849+00:00",
+    "updated_at": "2026-08-29T08:17:46.861853+00:00",
+    "change_note": "distill"
+  }
+}
