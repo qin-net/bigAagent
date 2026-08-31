@@ -29,11 +29,16 @@ def quote(code: str, *, name: str = "测试公司", turnover: float = 100.0, pri
 class FakeCollector:
     source = "fixture"
 
-    def __init__(self, rows: list[QuoteInput]) -> None:
+    def __init__(self, rows: list[QuoteInput], bars: list[DailyBar] | None = None) -> None:
         self.rows = rows
+        self.bars = bars or []
 
     def collect(self) -> CollectionResult:
         return CollectionResult(source=self.source, quotes=self.rows)
+
+    def collect_deep(self, stock_code: str) -> tuple[list[DailyBar], list[NoticeHeadline]]:
+        items = [bar for bar in self.bars if bar.stock_code == stock_code]
+        return items, []
 
 
 def test_store_publishes_complete_batch_and_pages(tmp_path):
@@ -95,6 +100,7 @@ def test_api_exposes_health_and_quotes(tmp_path):
     assert response.json()["items"][0]["stock_code"] == "000001"
     assert client.get("/").status_code == 200
     assert "采集行情" in client.get("/").text
+    assert "折线" in client.get("/").text
 
 
 def test_quotes_collect_button_publishes_batch(tmp_path):
@@ -115,6 +121,32 @@ def test_quotes_collect_button_publishes_batch(tmp_path):
     assert payload["stock_count"] == 1
     assert client.get("/api/v1/quotes").json()["items"][0]["stock_code"] == "000002"
     assert client.post("/api/v1/quotes/collect").status_code in {200, 409}
+
+
+def test_bars_collect_button_saves_daily_line(tmp_path):
+    import time
+    db_path = str(tmp_path / "board.db")
+    BoardStore(db_path).initialize()
+    bars = [
+        DailyBar("000002", "2026-08-28", 10.0, 10.5, 9.8, 10.2, 1.0, 1.0),
+        DailyBar("000002", "2026-08-29", 10.2, 10.8, 10.0, 10.6, 1.0, 1.0),
+        DailyBar("000002", "2026-08-30", 10.6, 11.0, 10.4, 10.9, 1.0, 1.0),
+    ]
+    client = TestClient(create_app(db_path, collector=FakeCollector([quote("000002")], bars=bars)))
+    started = client.post("/api/v1/stocks/000002/bars/collect")
+    assert started.status_code == 200
+    assert started.json()["collecting"] is True
+    items = []
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        items = client.get("/api/v1/bars/000002").json()["items"]
+        if items:
+            break
+        time.sleep(0.05)
+    assert [item["close"] for item in items] == [10.2, 10.6, 10.9]
+    html = client.get("/").text
+    assert "chart-mode-line" in html
+    assert "拉取日线" in html
 
 
 def test_old_batch_is_stale(tmp_path):

@@ -45,6 +45,8 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
     quote_collector = collector or AkshareQuoteCollector()
     collect_lock = threading.Lock()
     collect_state = {"running": False}
+    bars_lock = threading.Lock()
+    bars_running: set[str] = set()
     app = FastAPI(title="InsightBoard", version="0.1.0")
     static_dir = Path(__file__).with_name("web")
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -106,6 +108,33 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
     @app.post("/api/v1/stocks/{stock_code}/refresh-request")
     def refresh_request(stock_code: str) -> dict:
         return {"stock_code": stock_code, "queue": store.enqueue_deep(stock_code, reason="detail", priority=5)}
+
+    @app.post("/api/v1/stocks/{stock_code}/bars/collect")
+    def collect_bars(stock_code: str) -> dict:
+        code = stock_code.strip()
+        if len(code) != 6 or not code.isdigit():
+            raise HTTPException(status_code=400, detail="invalid stock code")
+        with bars_lock:
+            if code in bars_running:
+                raise HTTPException(status_code=409, detail="bar collection already running")
+            bars_running.add(code)
+
+        def run() -> None:
+            try:
+                if not hasattr(quote_collector, "collect_deep"):
+                    raise RuntimeError("collector cannot fetch daily bars")
+                bars, notices = quote_collector.collect_deep(code)
+                store.save_deep(bars, notices, source=getattr(quote_collector, "source", "akshare"))
+                store.finish_deep(code)
+            except Exception as error:
+                store.enqueue_deep(code, reason="detail", priority=5)
+                store.finish_deep(code, error=str(error))
+            finally:
+                with bars_lock:
+                    bars_running.discard(code)
+
+        threading.Thread(target=run, daemon=True).start()
+        return {"stock_code": code, "collecting": True}
 
     @app.post("/api/v1/research/jobs")
     def create_research(request: ResearchRequest) -> dict:

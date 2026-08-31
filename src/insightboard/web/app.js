@@ -1,4 +1,4 @@
-let page = 1, total = 0, currentCode = null, currentJobId = null, currentRunId = null, currentTrackJobId = null, currentTrackRunId = null, profileStock = '';
+let page = 1, total = 0, currentCode = null, currentJobId = null, currentRunId = null, currentTrackJobId = null, currentTrackRunId = null, profileStock = '', currentBars = [], chartMode = 'line';
 const size = 50;
 const text = (value) => value === null || value === undefined ? '-' : value;
 const money = (value) => value === null || value === undefined ? '-' : `${(value / 100000000).toFixed(2)} 亿`;
@@ -6,7 +6,90 @@ const yuan = (value) => value === null || value === undefined ? '-' : `${Number(
 const api = (path, options) => fetch(`/api/v1${path}`, options).then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.detail || '请求失败'); return data; });
 function view(name) { ['market', 'detail', 'watchlist', 'paper', 'profile'].forEach((item) => document.querySelector(`#${item}-view`).hidden = item !== name); }
 async function load() { const q = document.querySelector('#search').value.trim(); const params = new URLSearchParams({ page, size, q, sort: 'turnover', order: 'desc' }); const data = await (await fetch(`/api/v1/quotes?${params}`)).json(); total = data.total; document.querySelector('#quotes').innerHTML = data.items.map((item) => `<tr data-code="${item.stock_code}"><td>${item.stock_code}</td><td>${item.name}</td><td>${text(item.market)}</td><td>${text(item.price)}</td><td class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</td><td>${money(item.turnover)}</td></tr>`).join('') || '<tr><td colspan="6">暂无行情。点击「采集行情」拉取延迟数据。</td></tr>'; document.querySelectorAll('#quotes tr[data-code]').forEach((row) => row.onclick = () => detail(row.dataset.code)); document.querySelector('#page').textContent = `第 ${page} 页，共 ${total} 条`; document.querySelector('#previous').disabled = page === 1; document.querySelector('#next').disabled = page * size >= total; }
-function chart(bars) { const canvas = document.querySelector('#chart'); const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); if (!bars.length) return; const values = bars.flatMap((bar) => [bar.high, bar.low]).filter((value) => value !== null); const min = Math.min(...values), max = Math.max(...values), width = canvas.width / bars.length; bars.forEach((bar, index) => { const y = (value) => canvas.height - 20 - ((value - min) / (max - min || 1)) * (canvas.height - 40); const up = bar.close >= bar.open; ctx.strokeStyle = up ? '#fb7185' : '#34d399'; ctx.fillStyle = ctx.strokeStyle; const x = index * width + width / 2; ctx.beginPath(); ctx.moveTo(x, y(bar.high)); ctx.lineTo(x, y(bar.low)); ctx.stroke(); const top = y(Math.max(bar.open, bar.close)); ctx.fillRect(x - Math.max(1, width * .3), top, Math.max(2, width * .6), Math.max(1, Math.abs(y(bar.open) - y(bar.close)))); }); }
+function chartScale(values) {
+  const numbers = values.filter((value) => value !== null && value !== undefined);
+  if (!numbers.length) return null;
+  const min = Math.min(...numbers), max = Math.max(...numbers);
+  return {
+    min, max,
+    y: (value) => canvasHeight() - 20 - ((value - min) / (max - min || 1)) * (canvasHeight() - 40),
+  };
+}
+function canvasHeight() { return document.querySelector('#chart').height; }
+function drawChart() {
+  const canvas = document.querySelector('#chart');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const bars = currentBars || [];
+  const status = document.querySelector('#chart-status');
+  if (!bars.length) {
+    if (status) status.textContent = '暂无日线。点击「拉取日线」后显示收盘折线。';
+    return;
+  }
+  if (status) status.textContent = `${chartMode === 'k' ? '日K' : '收盘折线'} · ${bars.length} 根`;
+  if (chartMode === 'k') {
+    const scale = chartScale(bars.flatMap((bar) => [bar.high, bar.low]));
+    if (!scale) return;
+    const width = canvas.width / bars.length;
+    bars.forEach((bar, index) => {
+      const up = bar.close >= bar.open;
+      ctx.strokeStyle = up ? '#fb7185' : '#34d399';
+      ctx.fillStyle = ctx.strokeStyle;
+      const x = index * width + width / 2;
+      ctx.beginPath();
+      ctx.moveTo(x, scale.y(bar.high));
+      ctx.lineTo(x, scale.y(bar.low));
+      ctx.stroke();
+      const top = scale.y(Math.max(bar.open, bar.close));
+      ctx.fillRect(x - Math.max(1, width * .3), top, Math.max(2, width * .6), Math.max(1, Math.abs(scale.y(bar.open) - scale.y(bar.close))));
+    });
+    return;
+  }
+  const closes = bars.map((bar) => bar.close).filter((value) => value !== null && value !== undefined);
+  const scale = chartScale(closes);
+  if (!scale) return;
+  const width = canvas.width / Math.max(closes.length - 1, 1);
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  closes.forEach((value, index) => {
+    const x = closes.length === 1 ? canvas.width / 2 : index * width;
+    const y = scale.y(value);
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+async function collectBars() {
+  if (!currentCode) return;
+  const status = document.querySelector('#chart-status');
+  status.textContent = '正在拉取日线...';
+  try {
+    await api(`/stocks/${currentCode}/bars/collect`, { method: 'POST' });
+  } catch (error) {
+    if (!String(error.message).includes('already')) {
+      status.textContent = error.message;
+      return;
+    }
+  }
+  const poll = async (attempt) => {
+    if (currentCode == null) return;
+    const data = await api(`/bars/${currentCode}`);
+    if (data.items.length) {
+      currentBars = data.items;
+      drawChart();
+      const notices = await api(`/notices/${currentCode}`).catch(() => ({ items: [] }));
+      document.querySelector('#notices').innerHTML = notices.items.map((notice) => `<li>${text(notice.published_at)} ${notice.url ? `<a href="${notice.url}" target="_blank">${notice.title}</a>` : notice.title}</li>`).join('') || document.querySelector('#notices').innerHTML;
+      return;
+    }
+    if (attempt >= 40) {
+      status.textContent = '日线仍为空，请稍后重试「拉取日线」。';
+      return;
+    }
+    setTimeout(() => poll(attempt + 1), 1000);
+  };
+  poll(0);
+}
 function renderResearch(data) {
   const names = {fundamental:'基本面', technical:'技术面', sentiment:'情绪', macro:'宏观', tracking:'追踪', decision:'决策'};
   const dimKeys = Object.keys(data.dimensions || {});
@@ -57,7 +140,7 @@ async function startTrack() { try { const data = await api('/research/jobs', { m
 async function sendFeedback() { if (!currentJobId || !currentRunId) { document.querySelector('#research-status').textContent = '暂无可反馈的研究结果'; return; } try { const data = await api(`/research/jobs/${currentJobId}/feedback`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt: document.querySelector('#feedback-prompt').value}) }); currentJobId = data.job_id; pollResearch(currentJobId); } catch (error) { document.querySelector('#research-status').textContent = error.message; } }
 async function sendTrackFeedback() { if (!currentTrackJobId || !currentTrackRunId) { document.querySelector('#track-status').textContent = '暂无可反馈的追踪结果'; return; } try { const data = await api(`/research/jobs/${currentTrackJobId}/feedback`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt: document.querySelector('#track-feedback-prompt').value}) }); currentTrackJobId = data.job_id; pollResearch(currentTrackJobId); } catch (error) { document.querySelector('#track-status').textContent = error.message; } }
 async function detail(code) { currentCode = code; currentJobId = null; currentRunId = null; currentTrackJobId = null; currentTrackRunId = null; view('detail'); const [quote, bars, notices, current, track] = await Promise.all([api(`/quotes/${code}`), api(`/bars/${code}`), api(`/notices/${code}`), api(`/research/stocks/${code}/current`).catch(() => null), api(`/research/stocks/${code}/track`).catch(() => null)]); const item = quote.item; document.querySelector('#detail').innerHTML = `<h2>${item.name} <small>${code}</small></h2><p class="price">${text(item.price)} <span class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</span></p><button id="watch">加入自选</button> <button id="open-profile">用户画像</button> <button id="open-paper">模拟账户</button>
-<section class="paper-box"><h3>模拟交易</h3><p class="notice">虚拟资金，按当前延迟价成交，持仓市值随行情涨跌。</p><input id="paper-qty" type="number" value="100" min="100" step="100"><input id="paper-reason" placeholder="选股理由（写入选股记忆，可选）"><button id="paper-buy">买入</button> <button id="paper-sell">卖出</button><p id="paper-trade-status"></p></section>`; document.querySelector('#watch').onclick = async () => { await api(`/watchlist/${code}`, { method: 'PUT' }); document.querySelector('#watch').textContent = '已加入自选'; }; document.querySelector('#open-profile').onclick = () => loadProfile(code); document.querySelector('#open-paper').onclick = () => loadPaper(); document.querySelector('#paper-buy').onclick = () => paperTrade(code, 'buy'); document.querySelector('#paper-sell').onclick = () => paperTrade(code, 'sell'); if (!bars.items.length && !notices.items.length) await api(`/stocks/${code}/refresh-request`, { method: 'POST' }); chart(bars.items); document.querySelector('#notices').innerHTML = notices.items.map((notice) => `<li>${text(notice.published_at)} ${notice.url ? `<a href="${notice.url}" target="_blank">${notice.title}</a>` : notice.title}</li>`).join('') || '<li>暂无公告，已加入后台采集队列。</li>'; document.querySelector('#research-status').textContent = current ? '已有研究结果' : ''; document.querySelector('#track-status').textContent = track ? '已有追踪结果' : ''; document.querySelector('#research-result').innerHTML = ''; document.querySelector('#track-result').innerHTML = ''; if (current) { renderResearch(current); currentRunId = current.run_id; currentJobId = current.job_id; } if (track) { renderTrack(track); } await loadHistory(code); }
+<section class="paper-box"><h3>模拟交易</h3><p class="notice">虚拟资金，按当前延迟价成交，持仓市值随行情涨跌。</p><input id="paper-qty" type="number" value="100" min="100" step="100"><input id="paper-reason" placeholder="选股理由（写入选股记忆，可选）"><button id="paper-buy">买入</button> <button id="paper-sell">卖出</button><p id="paper-trade-status"></p></section>`; document.querySelector('#watch').onclick = async () => { await api(`/watchlist/${code}`, { method: 'PUT' }); document.querySelector('#watch').textContent = '已加入自选'; }; document.querySelector('#open-profile').onclick = () => loadProfile(code); document.querySelector('#open-paper').onclick = () => loadPaper(); document.querySelector('#paper-buy').onclick = () => paperTrade(code, 'buy'); document.querySelector('#paper-sell').onclick = () => paperTrade(code, 'sell'); currentBars = bars.items || []; drawChart(); if (!currentBars.length) collectBars(); document.querySelector('#notices').innerHTML = notices.items.map((notice) => `<li>${text(notice.published_at)} ${notice.url ? `<a href="${notice.url}" target="_blank">${notice.title}</a>` : notice.title}</li>`).join('') || '<li>暂无公告。拉取日线时会一并尝试采集。</li>'; document.querySelector('#research-status').textContent = current ? '已有研究结果' : ''; document.querySelector('#track-status').textContent = track ? '已有追踪结果' : ''; document.querySelector('#research-result').innerHTML = ''; document.querySelector('#track-result').innerHTML = ''; if (current) { renderResearch(current); currentRunId = current.run_id; currentJobId = current.job_id; } if (track) { renderTrack(track); } await loadHistory(code); }
 function historyKind(item) {
   if (item.noop) return '未改变';
   if (item.kind === 'track_feedback') return '追踪反馈';
@@ -161,4 +244,4 @@ async function collectQuotes() {
   };
   setTimeout(poll, 800);
 }
-document.querySelector('#refresh').onclick = () => { page = 1; load(); }; document.querySelector('#collect').onclick = collectQuotes; document.querySelector('#collect-market').onclick = collectQuotes; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#previous').onclick = () => { page -= 1; load(); }; document.querySelector('#next').onclick = () => { page += 1; load(); }; document.querySelector('#research-start').onclick = startResearch; document.querySelector('#feedback-send').onclick = sendFeedback; document.querySelector('#track-start').onclick = startTrack; document.querySelector('#track-feedback-send').onclick = sendTrackFeedback; document.querySelectorAll('nav button').forEach((button) => button.onclick = () => { if (button.dataset.view === 'watchlist') loadWatchlist(); else if (button.dataset.view === 'profile') loadProfile(); else if (button.dataset.view === 'paper') loadPaper(); else view('market'); }); document.querySelector('.back').onclick = () => view('market'); loadStatus(); load();
+document.querySelector('#refresh').onclick = () => { page = 1; load(); }; document.querySelector('#collect').onclick = collectQuotes; document.querySelector('#collect-market').onclick = collectQuotes; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#previous').onclick = () => { page -= 1; load(); }; document.querySelector('#next').onclick = () => { page += 1; load(); }; document.querySelector('#research-start').onclick = startResearch; document.querySelector('#feedback-send').onclick = sendFeedback; document.querySelector('#track-start').onclick = startTrack; document.querySelector('#track-feedback-send').onclick = sendTrackFeedback; document.querySelector('#chart-mode-line').onclick = () => { chartMode = 'line'; drawChart(); }; document.querySelector('#chart-mode-k').onclick = () => { chartMode = 'k'; drawChart(); }; document.querySelector('#chart-collect').onclick = collectBars; document.querySelectorAll('nav button').forEach((button) => button.onclick = () => { if (button.dataset.view === 'watchlist') loadWatchlist(); else if (button.dataset.view === 'profile') loadProfile(); else if (button.dataset.view === 'paper') loadPaper(); else view('market'); }); document.querySelector('.back').onclick = () => view('market'); loadStatus(); load();
