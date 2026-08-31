@@ -12,7 +12,7 @@ from uuid import uuid4
 from .contracts import AgentState, LLMMessage, LLMToolCall, StatePatch, TaskStatus, utc_now
 from .state import StateConflictError, apply_patch_to_state, snapshot_private_memory
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 MIGRATION_1 = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -218,6 +218,18 @@ CREATE TABLE IF NOT EXISTS user_preference_versions (
 );
 """
 
+MIGRATION_3 = """
+CREATE TABLE IF NOT EXISTS user_profile_snapshots (
+    profile_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    model TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_profile_latest
+ON user_profile_snapshots(user_id, created_at DESC);
+"""
+
 EXPECTED_TABLES = frozenset(
     {
         "schema_migrations",
@@ -237,6 +249,7 @@ EXPECTED_TABLES = frozenset(
         "user_intents",
         "user_preferences",
         "user_preference_versions",
+        "user_profile_snapshots",
     }
 )
 
@@ -326,6 +339,9 @@ class SQLiteDatabase:
             if current_version < 2:
                 self._apply_migration(connection, 2, MIGRATION_2)
                 current_version = 2
+            if current_version < 3:
+                self._apply_migration(connection, 3, MIGRATION_3)
+                current_version = 3
         finally:
             connection.close()
 

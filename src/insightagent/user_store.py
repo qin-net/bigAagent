@@ -100,6 +100,22 @@ class UserStore:
             self._retire_preference_sync, user_id, preference_id
         )
 
+    async def save_generated_profile(
+        self, *, user_id: str, model: str, payload: dict
+    ) -> dict:
+        await self.database.initialize()
+        return await asyncio.to_thread(
+            self._save_generated_profile_sync, user_id, model, payload
+        )
+
+    async def latest_generated_profile(
+        self, *, user_id: str
+    ) -> Optional[dict]:
+        await self.database.initialize()
+        return await asyncio.to_thread(
+            self._latest_generated_profile_sync, user_id
+        )
+
     def _save_utterance_sync(self, row: UserUtterance) -> None:
         connection = self.database.connect()
         try:
@@ -300,6 +316,56 @@ class UserStore:
                 (now, preference_id, user_id),
             )
             return cursor.rowcount > 0
+        finally:
+            connection.close()
+
+    def _save_generated_profile_sync(
+        self, user_id: str, model: str, payload: dict
+    ) -> dict:
+        connection = self.database.connect()
+        profile_id = str(uuid4())
+        created_at = utc_now().isoformat()
+        stored = {
+            **payload,
+            "profile_id": profile_id,
+            "model": model,
+            "generated_at": created_at,
+        }
+        try:
+            connection.execute(
+                """
+                INSERT INTO user_profile_snapshots(
+                    profile_id, user_id, model, payload_json, created_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    profile_id,
+                    user_id,
+                    model,
+                    json.dumps(stored, ensure_ascii=False),
+                    created_at,
+                ),
+            )
+            return stored
+        finally:
+            connection.close()
+
+    def _latest_generated_profile_sync(
+        self, user_id: str
+    ) -> Optional[dict]:
+        connection = self.database.connect()
+        try:
+            row = connection.execute(
+                """
+                SELECT payload_json
+                FROM user_profile_snapshots
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (user_id,),
+            ).fetchone()
+            return json.loads(row["payload_json"]) if row else None
         finally:
             connection.close()
 

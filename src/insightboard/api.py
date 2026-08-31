@@ -8,7 +8,14 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 from .collector import AkshareQuoteCollector, collect_once
-from .research import agent_paths, load_projected_run, load_user_profile, retire_user_preference, write_prompt
+from .research import (
+    agent_paths,
+    generate_user_profile,
+    load_projected_run,
+    load_user_profile,
+    retire_user_preference,
+    write_prompt,
+)
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -234,6 +241,15 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
     @app.get("/api/v1/profile")
     async def user_profile(stock_code: str = "") -> dict:
         return await load_user_profile(stock_code=stock_code.strip() or None)
+
+    @app.post("/api/v1/profile/generate")
+    async def create_user_profile() -> dict:
+        try:
+            return await generate_user_profile(paper=store.paper_snapshot())
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error))
+        except RuntimeError as error:
+            raise HTTPException(status_code=503, detail=str(error))
 
     @app.delete("/api/v1/profile/preferences/{preference_id}")
     async def retire_preference(preference_id: str) -> dict:

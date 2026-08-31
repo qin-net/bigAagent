@@ -72,7 +72,7 @@ class DeepSeekChatAdapter:
         if request.response_format == "json":
             payload["response_format"] = {"type": "json_object"}
         if request.user_id:
-            payload["user_id"] = request.user_id
+            payload["user"] = request.user_id
 
         raw = await self.client.chat.completions.create(**payload)
         response = self._normalize(raw)

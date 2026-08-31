@@ -8,22 +8,147 @@
 </head>
 <body>
   <main>
-    <header><div><p class="eyebrow">INSIGHTBOARD / B2</p><h1>A 股延迟行情看板</h1></div><div class="header-actions"><button id="collect">采集行情</button><p id="status">正在读取数据状态...</p></div></header>
-    <nav><button data-view="market">市场</button><button data-view="watchlist">自选</button><button data-view="paper">模拟</button><button data-view="profile">画像</button></nav>
-    <section id="market-view"><section class="controls"><input id="search" placeholder="搜索股票代码或名称"><button id="refresh">查询</button><button id="collect-market">采集行情</button></section><section class="table-wrap"><table><thead><tr><th>代码</th><th>名称</th><th>市场</th><th>最新价</th><th>涨跌幅</th><th>成交额</th></tr></thead><tbody id="quotes"></tbody></table></section><footer><button id="previous">上一页</button><span id="page">第 1 页</span><button id="next">下一页</button></footer></section>
-    <section id="detail-view" hidden><button class="back">← 返回市场</button><div id="detail"></div><section id="research-panel"><h2>研究</h2><p class="notice">研究辅助，非投资建议。</p><section class="research-actions"><textarea id="research-prompt" placeholder="可说人话，例如：记住别只看便宜"></textarea><button id="research-start">开始研究</button><p id="research-status"></p></section><section class="research-report"><h3>当前报告</h3><div id="research-result"></div></section><section class="research-feedback"><h3>结果反馈</h3><textarea id="feedback-prompt" placeholder="例如：基本面再出一版，或：结束了我不看了"></textarea><button id="feedback-send">对本次结果反馈</button></section><section class="research-actions"><h3>追踪</h3><p class="notice">对照首次研究看当前快照，不改四维原报告。需先完成研究。不设定时心跳，由本页手动发起。</p><textarea id="track-prompt" placeholder="可选：追踪时记住的口径，或本轮关注点"></textarea><button id="track-start">开始追踪</button><p id="track-status"></p></section><section class="research-report"><h3>最近追踪</h3><div id="track-result"></div></section><section class="research-feedback"><h3>追踪反馈</h3><textarea id="track-feedback-prompt" placeholder="例如：技术面再看一眼，或：记住别只看一天涨跌"></textarea><button id="track-feedback-send">对本次追踪反馈</button></section><section id="research-history"></section></section><section id="chart-panel"><h2>行情图</h2><p class="notice">默认收盘折线。没有日线时点「拉取日线」，不必跑命令。</p><button id="chart-mode-line">折线</button> <button id="chart-mode-k">日K</button> <button id="chart-collect">拉取日线</button><p id="chart-status"></p><canvas id="chart" width="900" height="280"></canvas></section><h2>最新公告</h2><ul id="notices"></ul></section>
-    <section id="watchlist-view" hidden><h2>自选股</h2><div id="watchlist"></div></section>
+    <header>
+      <div class="brand">
+        <span class="brand-mark">IA</span>
+        <div>
+          <p class="eyebrow">INSIGHTBOARD</p>
+          <h1>A 股研究工作台</h1>
+          <p class="brand-subtitle">延迟行情 · 四维研究 · 持续追踪</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <p id="status">正在读取数据状态...</p>
+        <button id="collect">采集行情</button>
+      </div>
+    </header>
+
+    <nav aria-label="主导航">
+      <button data-view="market" class="active">市场</button>
+      <button data-view="watchlist">自选</button>
+      <button data-view="paper">模拟账户</button>
+      <button data-view="profile">用户画像</button>
+    </nav>
+
+    <section id="market-view">
+      <div class="page-heading">
+        <div><p class="section-kicker">MARKET</p><h2>市场行情</h2></div>
+        <p class="notice">全市场延迟行情，仅用于研究辅助</p>
+      </div>
+      <section class="controls">
+        <input id="search" placeholder="输入股票代码或名称">
+        <button id="refresh">查询</button>
+        <button id="collect-market" class="button-secondary">采集行情</button>
+      </section>
+      <section class="table-wrap">
+        <table><thead><tr><th>代码</th><th>名称</th><th>市场</th><th>最新价</th><th>涨跌幅</th><th>成交额</th></tr></thead><tbody id="quotes"></tbody></table>
+      </section>
+      <footer><button id="previous" class="button-quiet">上一页</button><span id="page">第 1 页</span><button id="next" class="button-quiet">下一页</button></footer>
+    </section>
+
+    <section id="detail-view" hidden>
+      <button class="back button-quiet">← 返回市场</button>
+      <section class="stock-hero"><div id="detail"></div></section>
+
+      <section id="research-panel">
+        <div class="page-heading">
+          <div><p class="section-kicker">DECISION WORKFLOW</p><h2>从研究到持续决策</h2></div>
+          <p class="notice">每一步都基于上一阶段的结果</p>
+        </div>
+        <div class="workflow-rail" aria-label="决策流程">
+          <div id="rail-research" class="workflow-node"><span>1</span><div><b>首次分析</b><small>建立研究基线</small></div></div>
+          <div id="rail-invest" class="workflow-node"><span>2</span><div><b>投资决策</b><small>决定是否投入</small></div></div>
+          <div id="rail-track" class="workflow-node"><span>3</span><div><b>持续追踪</b><small>手动复核策略</small></div></div>
+          <div id="rail-learn" class="workflow-node"><span>4</span><div><b>沉淀迭代</b><small>记忆与用户画像</small></div></div>
+        </div>
+
+        <section class="workflow-stage" id="stage-research">
+          <div class="stage-heading">
+            <span class="step">01</span>
+            <div><p class="section-kicker">BASELINE</p><h3>AI 首次分析</h3><p>四位专家完成基本面、技术面、情绪和宏观分析，形成后续追踪的基线。</p></div>
+            <span id="stage-research-state" class="stage-state">待分析</span>
+          </div>
+          <div class="stage-body stage-two-column">
+            <div class="research-actions"><h4>给本轮分析补充口径</h4><textarea id="research-prompt" placeholder="例如：记住别只看便宜，要核对经营现金流"></textarea><button id="research-start">开始首次分析</button><p id="research-status" class="operation-status"></p></div>
+            <div class="research-report"><h4>当前分析结论</h4><div id="research-result"><p class="empty-state">完成首次分析后，四维结论和决策会显示在这里。</p></div></div>
+          </div>
+          <div class="stage-feedback"><h4>对分析结果反馈</h4><textarea id="feedback-prompt" placeholder="例如：基本面证据不够，请再分析一版"></textarea><button id="feedback-send" class="button-secondary">提交并按需重跑</button></div>
+        </section>
+
+        <section class="workflow-stage is-locked" id="stage-invest">
+          <div class="stage-heading">
+            <span class="step">02</span>
+            <div><p class="section-kicker">ALLOCATION</p><h3>选择是否投资</h3><p>先阅读 AI 分析，再由用户决定是否投入以及投入数量；不投入则继续保留观察。</p></div>
+            <span id="stage-invest-state" class="stage-state">等待分析</span>
+          </div>
+          <div class="stage-body investment-layout">
+            <div id="investment-summary" class="investment-summary"><p class="empty-state">首次分析完成后可做投资决策。</p></div>
+            <div class="investment-form">
+              <h4>模拟投资数量</h4>
+              <div class="inline-form"><input id="paper-qty" type="number" value="100" min="100" step="100"><span>股</span></div>
+              <input id="paper-reason" placeholder="记录投资理由，将进入选股记忆">
+              <div class="button-row"><button id="paper-buy">确认投入</button><button id="paper-sell" class="button-secondary">减少持仓</button></div>
+              <p id="paper-trade-status" class="operation-status"></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="workflow-stage is-locked" id="stage-track">
+          <div class="stage-heading">
+            <span class="step">03</span>
+            <div><p class="section-kicker">FOLLOW-UP</p><h3>手动触发追踪</h3><p>在首次分析之后，由用户选择时间触发。追踪 Agent 对照基线判断维持、复核或证伪。</p></div>
+            <span id="stage-track-state" class="stage-state">等待基线</span>
+          </div>
+          <div class="stage-body stage-two-column">
+            <div class="research-actions"><h4>本轮追踪重点</h4><textarea id="track-prompt" placeholder="例如：对照基线检查量能和经营现金流"></textarea><button id="track-start">开始本轮追踪</button><p id="track-status" class="operation-status"></p></div>
+            <div class="research-report"><h4>最近追踪策略</h4><div id="track-result"><p class="empty-state">手动触发追踪后，下一步策略会显示在这里。</p></div></div>
+          </div>
+          <div class="stage-feedback"><h4>对追踪结果反馈</h4><textarea id="track-feedback-prompt" placeholder="例如：技术面再复核一次"></textarea><button id="track-feedback-send" class="button-secondary">提交并按需重跑</button></div>
+        </section>
+
+        <section class="workflow-stage" id="stage-learn">
+          <div class="stage-heading">
+            <span class="step">04</span>
+            <div><p class="section-kicker">LEARNING</p><h3>Agent 迭代与用户画像</h3><p>分析、反馈和追踪过程中自动积累专家私有记忆与用户偏好，不把用户原话当作研究证据。</p></div>
+            <span id="stage-learn-state" class="stage-state is-active">持续沉淀</span>
+          </div>
+          <div class="stage-body learning-layout">
+            <div id="learning-summary"><p class="empty-state">产生分析或追踪后，这里会汇总本标的的记忆沉淀。</p></div>
+            <button id="workflow-open-profile" class="button-secondary">查看完整用户画像</button>
+          </div>
+        </section>
+
+        <section id="research-history"></section>
+      </section>
+
+      <section id="chart-panel" class="content-card">
+        <div class="page-heading">
+          <div><p class="section-kicker">PRICE</p><h2>行情走势</h2></div>
+          <p id="chart-status"></p>
+        </div>
+        <div class="chart-toolbar"><button id="chart-mode-line">收盘折线</button><button id="chart-mode-k" class="button-quiet">日 K</button><button id="chart-collect" class="button-quiet">拉取日线</button></div>
+        <canvas id="chart" width="900" height="280"></canvas>
+      </section>
+
+      <section class="content-card"><div class="page-heading"><div><p class="section-kicker">DISCLOSURE</p><h2>最新公告</h2></div></div><ul id="notices"></ul></section>
+    </section>
+
+    <section id="watchlist-view" hidden>
+      <div class="page-heading"><div><p class="section-kicker">WATCHLIST</p><h2>自选股</h2></div><p class="notice">关注标的与最新延迟价格</p></div>
+      <div id="watchlist" class="content-card"></div>
+    </section>
+
     <section id="paper-view" hidden>
-      <h2>模拟投资</h2>
-      <p class="notice">虚拟资金，按看板延迟行情计价，盈亏随涨跌变动。非投资建议。</p>
+      <div class="page-heading"><div><p class="section-kicker">PAPER PORTFOLIO</p><h2>模拟投资</h2></div><p class="notice">虚拟资金，按延迟行情计价</p></div>
       <div id="paper"></div>
     </section>
+
     <section id="profile-view" hidden>
-      <h2>用户画像</h2>
-      <p class="notice">由已记住口径和行为事件聚合，不存原话。</p>
-      <div id="profile"></div>
+      <div class="page-heading"><div><p class="section-kicker">INVESTOR PERSONA</p><h2>我的投资者画像</h2></div><p class="notice">由模型基于选股策略与行为证据生成，不存原话</p></div>
+      <div id="profile" class="content-card"></div>
     </section>
-    <p class="notice">延迟行情，仅供研究辅助，不构成投资建议。</p>
+
+    <p class="legal">延迟行情，仅供研究辅助，不构成投资建议。</p>
   </main>
   <script src="/static/app.js"></script>
 </body>

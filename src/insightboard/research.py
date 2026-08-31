@@ -31,6 +31,7 @@ from insightagent.persistence import SQLiteDatabase, SQLiteStateStore
 from insightagent.research_store import ResearchStore
 from insightagent.state import snapshot_private_memory
 from insightagent.user_contracts import DIMS, NONE
+from insightagent.user_profile_agent import generate_investor_profile
 from insightagent.user_store import UserStore
 from insightagent.tracking_agent import (
     TrackFeedbackError,
@@ -252,7 +253,40 @@ async def load_user_profile(
     if stock_code:
         memories = [item for item in memories if item["stock_code"] == stock_code]
     profile["expert_memories"] = memories
+    profile["generated_profile"] = await store.latest_generated_profile(
+        user_id=user_id
+    )
     return profile
+
+
+async def generate_user_profile(
+    *,
+    paper: dict[str, Any],
+    user_id: str = "local",
+    db_path: Optional[str] = None,
+) -> dict[str, Any]:
+    agent_db_path, _, model = agent_paths()
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise RuntimeError("DEEPSEEK_API_KEY is not configured")
+    database = SQLiteDatabase(db_path or agent_db_path)
+    store = UserStore(database)
+    aggregate = await store.profile(user_id=user_id, stock_code=NONE)
+    llm = DeepSeekChatAdapter(
+        DeepSeekConfig(api_key=api_key, default_model=model)
+    )
+    narrative = await generate_investor_profile(
+        llm_adapter=llm,
+        model=model,
+        aggregate=aggregate,
+        paper=paper,
+        user_id=user_id,
+    )
+    return await store.save_generated_profile(
+        user_id=user_id,
+        model=model,
+        payload=narrative.model_dump(mode="json"),
+    )
 
 
 async def retire_user_preference(

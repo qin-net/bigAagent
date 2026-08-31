@@ -103,6 +103,21 @@ def test_api_exposes_health_and_quotes(tmp_path):
     assert "折线" in client.get("/").text
 
 
+def test_detail_workflow_follows_business_sequence(tmp_path):
+    html = TestClient(create_app(str(tmp_path / "board.db"))).get("/").text
+    steps = [
+        html.index('id="research-start"'),
+        html.index('id="paper-buy"'),
+        html.index('id="track-start"'),
+        html.index('id="workflow-open-profile"'),
+    ]
+    assert steps == sorted(steps)
+    assert "建立研究基线" in html
+    assert "决定是否投入" in html
+    assert "手动复核策略" in html
+    assert "记忆与用户画像" in html
+
+
 def test_quotes_collect_button_publishes_batch(tmp_path):
     import time
     db_path = str(tmp_path / "board.db")
@@ -488,6 +503,24 @@ async def test_profile_api_lists_and_retires_preference(tmp_path, monkeypatch):
     assert retired.status_code == 200
     assert client.get("/api/v1/profile").json()["preferences"] == []
     assert client.delete("/api/v1/profile/preferences/pref-board").status_code == 404
+
+
+def test_profile_generate_endpoint_returns_model_narrative(tmp_path, monkeypatch):
+    async def fake_generate(**_kwargs):
+        return {
+            "profile_id": "profile-1",
+            "persona_title": "现金流纪律型投资者",
+            "overview": "偏好用现金流验证估值。",
+        }
+
+    monkeypatch.setattr(
+        "insightboard.api.generate_user_profile", fake_generate
+    )
+    client = TestClient(create_app(str(tmp_path / "board.db")))
+    response = client.post("/api/v1/profile/generate")
+    assert response.status_code == 200
+    assert response.json()["persona_title"] == "现金流纪律型投资者"
+    assert "用户画像" in client.get("/").text
 
 
 def test_paper_account_marks_to_delayed_quotes_and_stores_pick_memory(tmp_path):
