@@ -49,6 +49,8 @@ class ScriptedAgentLLM:
         self.requests = []
 
     async def complete(self, request):
+        if self.phase == "done":
+            self.phase = "tool"
         self.requests.append(request)
         if self.phase == "tool":
             self.phase = "final"
@@ -496,6 +498,31 @@ async def test_unbound_number_fails_the_run(tmp_path):
     assert outcome.run.status == "failed"
     assert outcome.decision is None
     assert "EvidenceBindingError" in (outcome.error or "")
+
+
+@pytest.mark.asyncio
+async def test_unbound_number_retries_then_recovers(tmp_path):
+    class RecoveringFundamentalLLM(ScriptedAgentLLM):
+        def __init__(self) -> None:
+            super().__init__("fundamental", unbound=True)
+            self.final_passes = 0
+
+        async def complete(self, request):
+            if self.phase == "final":
+                self.final_passes += 1
+                self.unbound = self.final_passes == 1
+            return await super().complete(request)
+
+    fund_llm = RecoveringFundamentalLLM()
+    tech_llm, sent_llm = ScriptedAgentLLM("technical"), ScriptedAgentLLM("sentiment")
+    macro_llm = ScriptedAgentLLM("macro")
+    outcome = await _analyze(
+        tmp_path, "000858", fund_llm, tech_llm, sent_llm, macro_llm
+    )
+    assert outcome.run.status in {"success", "degraded"}
+    assert outcome.report is not None
+    assert outcome.report.summary != "证据绑定失败，改为弃权。"
+    assert fund_llm.final_passes >= 2
 
 
 @pytest.mark.asyncio

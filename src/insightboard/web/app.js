@@ -5,6 +5,38 @@ const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({'&':
 const money = (value) => value === null || value === undefined ? '-' : `${(value / 100000000).toFixed(2)} 亿`;
 const yuan = (value) => value === null || value === undefined ? '-' : `${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`;
 const api = (path, options) => fetch(`/api/v1${path}`, options).then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.detail || '请求失败'); return data; });
+const ZH = {
+  stance: { buy: '买入', hold: '持有', sell: '卖出', abstain: '暂不判断' },
+  rating: { buy: '买入', hold: '持有', sell: '卖出', abstain: '暂不判断' },
+  effect: { this_run: '仅影响本轮', remember: '已记住', rerun: '按反馈重跑', remember_rerun: '记住并重跑' },
+  track: { unchanged: '维持原判断', review: '需要复核', invalidate: '原判断失效' },
+  verdict: { accept: '采纳', discount: '打折采用', reject: '不采用', insufficient: '证据不足' },
+  reliability: { high: '高', medium: '中', low: '低', unusable: '不可用' },
+  urgency: { low: '不急', medium: '适中', high: '尽快再看' },
+  role: { fundamental: '基本面', technical: '技术面', sentiment: '情绪面', macro: '宏观', tracking: '追踪', decision: '综合决策' },
+  status: { success: '成功', failed: '失败', queued: '排队中', running: '进行中', unchanged: '未改结论', completed: '已完成', abstained: '暂不判断', degraded: '降级完成' },
+};
+const zh = (kind, value) => {
+  if (value == null || value === '' || value === 'none' || value === '-') return '';
+  const table = ZH[kind] || {};
+  const key = String(value);
+  return table[key] || table[key.toLowerCase()] || '';
+};
+const zhTime = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+const toneClass = (value) => {
+  const key = String(value || '').toLowerCase();
+  if (['buy', 'invalidate', 'reject'].includes(key)) return 'tone-strong';
+  if (['sell', 'unchanged', 'accept'].includes(key)) return 'tone-calm';
+  if (['hold', 'review', 'discount', 'abstain'].includes(key)) return 'tone-warn';
+  return '';
+};
+const bullets = (items) => (items || []).filter(Boolean).map((item) => `<li>${safe(item)}</li>`).join('');
+const chips = (items) => (items || []).filter(Boolean).map((item) => `<span class="result-chip">${safe(item)}</span>`).join('');
 function view(name) {
   ['market', 'detail', 'watchlist', 'paper', 'profile'].forEach((item) => {
     document.querySelector(`#${item}-view`).hidden = item !== name;
@@ -173,25 +205,44 @@ async function collectBars() {
   poll(0);
 }
 function renderResearch(data) {
-  const names = {fundamental:'基本面', technical:'技术面', sentiment:'情绪', macro:'宏观', tracking:'追踪', decision:'决策'};
-  const dimKeys = Object.keys(data.dimensions || {});
-  const memoryKeys = Object.keys(data.memories || {});
-  const keys = [...new Set([...dimKeys, ...memoryKeys])];
-  const dims = keys.map((name) => {
+  const decision = data.decision || {};
+  const rating = zh('rating', decision.rating);
+  const confidence = decision.confidence != null ? `${Math.round(decision.confidence * 100)}%` : '';
+  const intent = zh('effect', data.intent?.effect);
+  const reruns = (data.rerun_dimensions || []).map((item) => zh('role', item) || item).filter(Boolean);
+  const prefs = (data.preferences || []).map((item) => `<li><b>${zh('role', item.scope) || '口径'}</b> ${safe(item.statement)}</li>`).join('');
+  const dimCards = ['fundamental', 'technical', 'sentiment', 'macro'].map((name) => {
     const item = (data.dimensions || {})[name];
     const memory = (data.memories || {})[name];
-    const memoryLine = memory && memory.memory_summary
-      ? `<br><span class="research-memory">${memory.carried ? '沿用上次记忆' : '本维记忆'}：${memory.memory_summary}</span>`
-      : '';
-    const body = item ? `${item.stance} / ${item.score}分 — ${item.summary}` : '';
-    return `<p><b>${names[name] || name}</b>：${body}${memoryLine}</p>`;
+    const hasItem = Boolean(item && (item.summary || item.stance || item.score != null && item.score !== ''));
+    if (!hasItem && !memory?.memory_summary) return '';
+    const stance = zh('stance', item?.stance);
+    const score = !hasItem || item?.score == null || item?.score === '' ? '' : `${item.score} 分`;
+    const flags = [
+      item?.abstain ? '本维暂不判断' : '',
+      item?.degraded ? '数据不完整' : '',
+    ].filter(Boolean).map((flag) => `<span class="result-chip">${flag}</span>`).join('');
+    return `<article class="result-card dim-card">
+      <header><span>${zh('role', name)}</span>${stance ? `<em class="${toneClass(item.stance)}">${stance}</em>` : ''}</header>
+      ${score ? `<p class="result-score">${score}</p>` : ''}
+      ${item?.summary ? `<p class="result-body">${safe(item.summary)}</p>` : (hasItem ? '' : '')}
+      ${flags ? `<div class="result-chips">${flags}</div>` : ''}
+      ${memory?.memory_summary ? `<p class="result-note">${memory.carried ? '沿用上次记忆' : '本维记忆'}：${safe(memory.memory_summary)}</p>` : ''}
+    </article>`;
   }).join('');
-  const decision = data.decision ? `<p><b>决策</b>：${data.decision.rating}（信心 ${(data.decision.confidence * 100).toFixed(0)}%）— ${data.decision.advice_one_liner}</p>` : '';
-  const prefs = (data.preferences || []).map((item) => `${names[item.scope] || item.scope}：${item.statement}`).join('；');
-  const prefLine = prefs ? `<p class="research-memory"><b>已记住口径</b>：${prefs}</p>` : '';
-  const reruns = data.rerun_dimensions || [];
-  const lineage = `<p class="research-lineage">当前报告：${data.parent_run_id ? '反馈版' : '首次研究'} · ${text(data.created_at || '')}<br>编号：${text(data.short_id || data.run_id?.slice(0, 8))}${data.parent_run_id ? ` · 基于 ${data.parent_run_id.slice(0, 8)}` : ''}${reruns.length ? ` · 重跑：${reruns.join('、')}` : ''}</p>`;
-  document.querySelector('#research-result').innerHTML = `${lineage}<p><b>意图理解</b>：${data.intent?.effect || 'none'}</p>${prefLine}${dims}${decision}`;
+  const riskList = bullets(decision.risks);
+  document.querySelector('#research-result').innerHTML = `
+    <div class="result-stack">
+      <p class="result-meta">${data.parent_run_id ? '反馈修订版' : '首次分析'}${zhTime(data.created_at) ? ` · ${zhTime(data.created_at)}` : ''}${reruns.length ? ` · 重跑 ${reruns.join('、')}` : ''}${intent ? ` · ${intent}` : ''}</p>
+      ${decision.rating || decision.advice_one_liner ? `<article class="result-card verdict-card">
+        <header><span>综合建议</span>${rating ? `<em class="${toneClass(decision.rating)}">${rating}</em>` : ''}</header>
+        ${confidence ? `<p class="result-score">信心 ${confidence}</p>` : ''}
+        ${decision.advice_one_liner ? `<p class="result-lead">${safe(decision.advice_one_liner)}</p>` : ''}
+        ${riskList ? `<div class="result-block"><h5>需要留意</h5><ul>${riskList}</ul></div>` : ''}
+      </article>` : ''}
+      ${prefs ? `<article class="result-card"><header><span>已记住的口径</span></header><ul class="result-list">${prefs}</ul></article>` : ''}
+      ${dimCards ? `<div class="dim-grid">${dimCards}</div>` : ''}
+    </div>`;
   currentRunId = data.run_id;
   currentResearchData = data;
   api('/paper').then((paper) => applyWorkflowState(data, currentTrackData, paper)).catch(() => {});
@@ -199,16 +250,44 @@ function renderResearch(data) {
 function renderTrack(data) {
   const track = data.tracking || {};
   const user = track.user_output || {};
-  const evals = (track.expert_evaluations || []).map((item) => `${item.agent}：${item.verdict}/${item.reliability}${item.notes ? ` — ${item.notes}` : ''}`).join('；');
-  const changes = (user.key_changes || []).join('；');
-  const watch = (user.next_watch_items || []).join('；');
-  const memory = data.memories && data.memories.tracking && data.memories.tracking.memory_summary
-    ? `<p class="research-memory">${data.memories.tracking.carried ? '沿用上次记忆' : '本维记忆'}：${data.memories.tracking.memory_summary}</p>`
+  const statusKey = track.status || user.holding_advice;
+  const status = zh('track', statusKey);
+  const summary = user.summary || track.work_summary || '';
+  const changes = bullets(user.key_changes);
+  const watch = chips(user.next_watch_items);
+  const evals = (track.expert_evaluations || []).map((item) => {
+    const role = zh('role', item.agent) || '专家';
+    const verdict = zh('verdict', item.verdict);
+    const reliability = zh('reliability', item.reliability);
+    return `<article class="result-card eval-card">
+      <header><span>${role}</span>${verdict ? `<em class="${toneClass(item.verdict)}">${verdict}</em>` : ''}</header>
+      ${reliability ? `<p class="result-note">材料可信度：${reliability}</p>` : ''}
+      ${item.notes ? `<p class="result-body">${safe(item.notes)}</p>` : ''}
+    </article>`;
+  }).join('');
+  const next = track.next_check_suggestion || {};
+  const memory = data.memories?.tracking?.memory_summary
+    ? `<p class="result-note">${data.memories.tracking.carried ? '沿用上次记忆' : '追踪记忆'}：${safe(data.memories.tracking.memory_summary)}</p>`
     : '';
-  const next = track.next_check_suggestion && (track.next_check_suggestion.reason || track.next_check_suggestion.urgency)
-    ? `<p>下次关注：${text(track.next_check_suggestion.urgency)} — ${text(track.next_check_suggestion.reason)}</p>`
-    : '';
-  document.querySelector('#track-result').innerHTML = `<p class="research-lineage">追踪 · ${text(data.created_at || '')}<br>编号：${text(data.short_id || data.run_id?.slice(0, 8))}${data.parent_run_id ? ` · 基于 ${data.parent_run_id.slice(0, 8)}` : ''}</p><p><b>结论</b>：${text(track.status || user.holding_advice)} — ${text(user.summary || track.work_summary)}</p>${user.title ? `<p>${user.title}</p>` : ''}${track.thinking ? `<p><b>思考</b>：${track.thinking}</p>` : ''}${track.synthesis ? `<p><b>汇总</b>：${track.synthesis}</p>` : ''}${evals ? `<p><b>专家评测</b>：${evals}</p>` : ''}${changes ? `<p>关键变化：${changes}</p>` : ''}${watch ? `<p>继续盯：${watch}</p>` : ''}${next}${memory}`;
+  const deeper = [
+    track.thinking ? `<div class="result-block"><h5>本轮怎么判断的</h5><p>${safe(track.thinking)}</p></div>` : '',
+    track.synthesis && track.synthesis !== summary ? `<div class="result-block"><h5>综合看法</h5><p>${safe(track.synthesis)}</p></div>` : '',
+  ].join('');
+  document.querySelector('#track-result').innerHTML = `
+    <div class="result-stack">
+      <p class="result-meta">追踪复核${zhTime(data.created_at) ? ` · ${zhTime(data.created_at)}` : ''}</p>
+      <article class="result-card verdict-card">
+        <header><span>下一步策略</span>${status ? `<em class="${toneClass(statusKey)}">${status}</em>` : ''}</header>
+        ${user.title ? `<p class="result-lead">${safe(user.title)}</p>` : ''}
+        ${summary ? `<p class="result-body">${safe(summary)}</p>` : ''}
+        ${next.reason || zh('urgency', next.urgency) ? `<p class="result-note">下次关注：${[zh('urgency', next.urgency), next.reason ? safe(next.reason) : ''].filter(Boolean).join(' · ')}</p>` : ''}
+        ${memory}
+      </article>
+      ${changes ? `<article class="result-card"><header><span>相对基线的变化</span></header><ul class="result-list">${changes}</ul></article>` : ''}
+      ${watch ? `<article class="result-card"><header><span>继续盯紧</span></header><div class="result-chips">${watch}</div></article>` : ''}
+      ${evals ? `<div class="eval-grid">${evals}</div>` : ''}
+      ${deeper ? `<details class="result-details"><summary>查看判断过程</summary>${deeper}</details>` : ''}
+    </div>`;
   currentTrackRunId = data.run_id;
   currentTrackData = data;
   if (data.job_id) currentTrackJobId = data.job_id;
@@ -277,8 +356,8 @@ function historyKind(item) {
   if (item.kind === 'feedback') return '反馈版';
   return '首次研究';
 }
-async function loadHistory(code) { const data = await api(`/research/stocks/${code}/history`); document.querySelector('#research-history').innerHTML = `<h3>研究历史</h3>` + data.items.map((item) => `<p>${item.created_at} · ${historyKind(item)} · ${item.noop ? `基于 ${item.parent_run_id?.slice(0, 8) || '-'}` : `编号 ${item.run_id?.slice(0, 8) || '-'}`}：${item.status}${item.run_id ? ` <button class="history-view" data-run-id="${item.run_id}">查看此版本</button>` : ''}</p>`).join(''); document.querySelectorAll('.history-view').forEach((button) => button.addEventListener('click', () => loadRun(button.getAttribute('data-run-id')))); }
-async function loadRun(runId) { const data = await api(`/research/runs/${runId}`); if (data.mode === 'track_day' || data.tracking) { renderTrack(data); document.querySelector('#track-status').textContent = `已切换到历史追踪：${runId}`; document.querySelector('#track-result').scrollIntoView({behavior: 'smooth', block: 'start'}); return; } renderResearch(data); currentRunId = runId; if (data.job_id) currentJobId = data.job_id; document.querySelector('#research-status').textContent = `已切换到历史报告：${runId}`; document.querySelector('#research-result').scrollIntoView({behavior: 'smooth', block: 'start'}); }
+async function loadHistory(code) { const data = await api(`/research/stocks/${code}/history`); document.querySelector('#research-history').innerHTML = `<h3>研究历史</h3>` + data.items.map((item) => `<p>${zhTime(item.created_at) || '时间未知'} · ${historyKind(item)} · ${zh('status', item.status) || '已记录'}${item.run_id ? ` <button class="history-view" data-run-id="${item.run_id}">查看此版本</button>` : ''}</p>`).join(''); document.querySelectorAll('.history-view').forEach((button) => button.addEventListener('click', () => loadRun(button.getAttribute('data-run-id')))); }
+async function loadRun(runId) { const data = await api(`/research/runs/${runId}`); if (data.mode === 'track_day' || data.tracking) { renderTrack(data); document.querySelector('#track-status').textContent = '已切换到历史追踪'; document.querySelector('#track-result').scrollIntoView({behavior: 'smooth', block: 'start'}); return; } renderResearch(data); currentRunId = runId; if (data.job_id) currentJobId = data.job_id; document.querySelector('#research-status').textContent = '已切换到历史分析'; document.querySelector('#research-result').scrollIntoView({behavior: 'smooth', block: 'start'}); }
 async function loadWatchlist() { view('watchlist'); const data = await api('/watchlist'); document.querySelector('#watchlist').innerHTML = data.items.map((item) => `<p><button class="stock" data-code="${item.stock_code}">${item.stock_code} ${text(item.name)}</button> ${text(item.price)} <span class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</span></p>`).join('') || '<p>尚未加入自选股。</p>'; document.querySelectorAll('.stock').forEach((button) => button.onclick = () => detail(button.dataset.code)); }
 async function paperTrade(code, side) {
   const status = document.querySelector('#paper-trade-status');

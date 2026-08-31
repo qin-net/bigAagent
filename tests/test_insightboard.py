@@ -101,6 +101,10 @@ def test_api_exposes_health_and_quotes(tmp_path):
     assert client.get("/").status_code == 200
     assert "采集行情" in client.get("/").text
     assert "折线" in client.get("/").text
+    assert client.get("/style.css").status_code == 200
+    assert "font-family" in client.get("/style.css").text
+    assert client.get("/static/style.css").status_code == 200
+    assert client.get("/app.js").status_code == 200
 
 
 def test_detail_workflow_follows_business_sequence(tmp_path):
@@ -185,6 +189,12 @@ def test_collect_once_cli_reports_source_failure_without_traceback(tmp_path, mon
     assert "行情采集失败" in output
     assert "Traceback" not in output
     assert "上一批成功数据" in output
+
+
+def test_serve_embeds_research_worker_by_default():
+    parser = board_main.build_parser()
+    assert parser.parse_args(["serve"]).no_research_worker is False
+    assert parser.parse_args(["serve", "--no-research-worker"]).no_research_worker is True
 
 
 def test_tencent_mapping_normalizes_code_and_turnover_unit():

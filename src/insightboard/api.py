@@ -56,11 +56,31 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
     bars_running: set[str] = set()
     app = FastAPI(title="InsightBoard", version="0.1.0")
     static_dir = Path(__file__).with_name("web")
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    def _web_file(name: str, media_type: str) -> FileResponse:
+        return FileResponse(static_dir / name, media_type=media_type)
 
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(static_dir / "index.html")
+
+    @app.get("/style.css")
+    def style_css() -> FileResponse:
+        return _web_file("style.css", "text/css")
+
+    @app.get("/app.js")
+    def app_js() -> FileResponse:
+        return _web_file("app.js", "text/javascript")
+
+    @app.get("/static/style.css")
+    def static_style_css() -> FileResponse:
+        return _web_file("style.css", "text/css")
+
+    @app.get("/static/app.js")
+    def static_app_js() -> FileResponse:
+        return _web_file("app.js", "text/javascript")
+
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     @app.get("/api/v1/meta/health")
     def health() -> dict:

@@ -20,9 +20,14 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("collect-once", help="Collect one batch of delayed quotes")
     commands.add_parser("worker", help="Run 30-minute quote collection during A-share trading hours")
     commands.add_parser("research-worker", help="Run queued InsightAgent research jobs")
-    serve = commands.add_parser("serve", help="Run the local API and dashboard")
+    serve = commands.add_parser("serve", help="Run the local API, dashboard, and research jobs")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument(
+        "--no-research-worker",
+        action="store_true",
+        help="Only serve the dashboard; do not process queued analyze/track jobs",
+    )
     return parser
 
 
@@ -60,7 +65,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_research_worker(store)
     if args.command == "serve":
         from .api import create_app
+        import threading
         import uvicorn
+        if not args.no_research_worker:
+            threading.Thread(
+                target=_run_research_worker,
+                args=(BoardStore(args.db),),
+                daemon=True,
+                name="insightboard-research-worker",
+            ).start()
+            print("research worker started inside serve", flush=True)
         uvicorn.run(create_app(args.db), host=args.host, port=args.port)
         return 0
     return 1
