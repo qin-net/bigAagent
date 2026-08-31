@@ -73,7 +73,11 @@ from ..persistence import (
 from ..research_store import ResearchStore
 from ..retry import ExponentialBackoff
 from ..runtime import AgentInstance, InvalidModelOutputError, RuntimeConfig
-from ..state import StateConflictError
+from ..state import (
+    StateConflictError,
+    attach_prior_memory,
+    prior_session_memory,
+)
 from ..sentiment_agent import (
     SentimentToolContext,
     parse_sentiment_report,
@@ -311,6 +315,7 @@ async def analyze_stock(
         user_id=user_id, scope="decision", stock_code=code
     )
 
+    macro_fetch_error: Optional[Exception] = None
     try:
         snapshot = await fetch_retry.execute(
             fundamental_adapter.fetch_fundamental, code
@@ -1302,6 +1307,24 @@ def _decision_constraint(intent, prefs) -> str:
     return "；".join(parts)
 
 
+async def _prepare_session(
+    *,
+    database: SQLiteDatabase,
+    agent_name: str,
+    run: RunRecord,
+    stock_code: str,
+    user_query: str,
+) -> tuple[str, Optional[str], str]:
+    parent_id, memory = await prior_session_memory(
+        SQLiteStateStore(database),
+        agent_name=agent_name,
+        thesis_id=run.thesis_id,
+    )
+    session_id = str(uuid4())
+    run.session_ids[agent_name] = session_id
+    return session_id, parent_id, attach_prior_memory(user_query, memory)
+
+
 async def _run_fundamental_agent(
     *,
     snapshot: FundamentalSnapshot,
@@ -1315,8 +1338,13 @@ async def _run_fundamental_agent(
     runtime_config: Optional[RuntimeConfig] = None,
     return_raw: bool = False,
 ) -> tuple[Any, str]:
-    session_id = str(uuid4())
-    run.session_ids["fundamental"] = session_id
+    session_id, parent_id, user_query = await _prepare_session(
+        database=database,
+        agent_name="fundamental",
+        run=run,
+        stock_code=snapshot.stock_code,
+        user_query=user_query,
+    )
     agent = AgentInstance(
         name="fundamental",
         llm_adapter=llm_adapter,
@@ -1334,6 +1362,7 @@ async def _run_fundamental_agent(
         final = await agent.run(
             user_query,
             session_id=session_id,
+            parent_session_id=parent_id,
             business_context={
                 "stock_code": snapshot.stock_code,
                 "thesis_id": run.thesis_id,
@@ -1474,8 +1503,13 @@ async def _run_technical_agent(
     runtime_config: Optional[RuntimeConfig] = None,
     return_raw: bool = False,
 ) -> tuple[Any, str]:
-    session_id = str(uuid4())
-    run.session_ids["technical"] = session_id
+    session_id, parent_id, user_query = await _prepare_session(
+        database=database,
+        agent_name="technical",
+        run=run,
+        stock_code=str(tech_fields.get("stock_code") or run.stock_code),
+        user_query=user_query,
+    )
     indicator = IndicatorSnapshot(**tech_fields["indicator"])
     price = PriceSnapshot(**tech_fields["price"])
     kline = KlineSnapshot(**tech_fields["kline"])
@@ -1499,6 +1533,7 @@ async def _run_technical_agent(
         final = await agent.run(
             user_query,
             session_id=session_id,
+            parent_session_id=parent_id,
             business_context={
                 "stock_code": indicator.stock_code,
                 "thesis_id": run.thesis_id,
@@ -1533,10 +1568,15 @@ async def _run_sentiment_agent(
     runtime_config: Optional[RuntimeConfig] = None,
     return_raw: bool = False,
 ) -> tuple[Any, str]:
-    session_id = str(uuid4())
-    run.session_ids["sentiment"] = session_id
     events = EventSnapshot(**sent_fields["events"])
     holders = HolderChangeSnapshot(**sent_fields["holders"])
+    session_id, parent_id, user_query = await _prepare_session(
+        database=database,
+        agent_name="sentiment",
+        run=run,
+        stock_code=events.stock_code,
+        user_query=user_query,
+    )
     ctx = SentimentToolContext(events=events, holders=holders)
     agent = AgentInstance(
         name="sentiment",
@@ -1554,6 +1594,7 @@ async def _run_sentiment_agent(
         final = await agent.run(
             user_query,
             session_id=session_id,
+            parent_session_id=parent_id,
             business_context={
                 "stock_code": events.stock_code,
                 "thesis_id": run.thesis_id,
@@ -1589,8 +1630,13 @@ async def _run_macro_agent(
     runtime_config: Optional[RuntimeConfig] = None,
     return_raw: bool = False,
 ) -> tuple[Any, str]:
-    session_id = str(uuid4())
-    run.session_ids["macro"] = session_id
+    session_id, parent_id, user_query = await _prepare_session(
+        database=database,
+        agent_name="macro",
+        run=run,
+        stock_code=str(macro_fields["stock_code"]),
+        user_query=user_query,
+    )
     macro = MacroSnapshot(**macro_fields["macro"])
     ctx = MacroToolContext(
         macro=macro,
@@ -1612,6 +1658,7 @@ async def _run_macro_agent(
         final = await agent.run(
             user_query,
             session_id=session_id,
+            parent_session_id=parent_id,
             business_context={
                 "stock_code": macro_fields["stock_code"],
                 "thesis_id": run.thesis_id,

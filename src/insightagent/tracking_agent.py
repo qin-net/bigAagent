@@ -46,6 +46,7 @@ from .user_intent import (
 )
 from .user_store import UserStore
 from .schema_model import model_from_json_schema
+from .state import attach_prior_memory, prior_session_memory
 from .tracking import (
     MAX_SKILLS_PER_LOOP,
     TrackSnapshots,
@@ -1215,19 +1216,28 @@ async def track_thesis(
     )
     register_track_tools(agent, tool_context)
     token = bind_catalog(catalog)
-    user_query = _track_user_query(
+    track_parent_id, track_memory = await prior_session_memory(
+        SQLiteStateStore(database),
+        agent_name="tracking",
         thesis_id=track_run.thesis_id,
-        stock_code=track_run.stock_code,
-        baseline_run_id=baseline_run.run_id,
-        instruction=instruction,
-        intent=intent,
-        prefs_by_scope=prefs_by_scope,
-        must_call_dims=required,
+    )
+    user_query = attach_prior_memory(
+        _track_user_query(
+            thesis_id=track_run.thesis_id,
+            stock_code=track_run.stock_code,
+            baseline_run_id=baseline_run.run_id,
+            instruction=instruction,
+            intent=intent,
+            prefs_by_scope=prefs_by_scope,
+            must_call_dims=required,
+        ),
+        track_memory,
     )
     try:
         final = await agent.run(
             user_query,
             session_id=session_id,
+            parent_session_id=track_parent_id,
             business_context={
                 "task": "track",
                 "stock_code": track_run.stock_code,

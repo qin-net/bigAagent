@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from uuid import uuid4
 
-from .contracts import AgentState, LLMMessage, LLMToolCall, StatePatch, utc_now
-from .state import StateConflictError, apply_patch_to_state
+from .contracts import AgentState, LLMMessage, LLMToolCall, StatePatch, TaskStatus, utc_now
+from .state import StateConflictError, apply_patch_to_state, snapshot_private_memory
 
 SCHEMA_VERSION = 2
 
@@ -423,6 +423,16 @@ class SQLiteStateStore:
                     connection.execute("COMMIT")
                     return AgentState.model_validate_json(row["state_json"])
 
+            inherited: Dict[str, Any] = {}
+            if parent_session_id:
+                parent_row = connection.execute(
+                    "SELECT state_json FROM agent_states WHERE session_id = ?",
+                    (parent_session_id,),
+                ).fetchone()
+                if parent_row:
+                    parent = AgentState.model_validate_json(parent_row["state_json"])
+                    inherited = snapshot_private_memory(parent.private_memory)
+
             state = AgentState(
                 session_id=session_id
                 or AgentState(agent_name=agent_name).session_id,
@@ -431,6 +441,7 @@ class SQLiteStateStore:
                 stock_code=stock_code,
                 thesis_id=thesis_id,
                 business_context=business_context,
+                private_memory=inherited,
             )
             self._insert_new_state(connection, state)
             connection.execute("COMMIT")
@@ -560,6 +571,35 @@ class SQLiteStateStore:
                 AgentState.model_validate_json(row["state_json"])
                 for row in rows
             ]
+        finally:
+            connection.close()
+
+    async def latest_for_agent(
+        self, *, agent_name: str, thesis_id: str
+    ) -> Optional[AgentState]:
+        await self.database.initialize()
+        return await asyncio.to_thread(
+            self._latest_for_agent_sync, agent_name, thesis_id
+        )
+
+    def _latest_for_agent_sync(
+        self, agent_name: str, thesis_id: str
+    ) -> Optional[AgentState]:
+        if not thesis_id:
+            return None
+        connection = self.database.connect()
+        try:
+            row = connection.execute(
+                """
+                SELECT state_json FROM agent_states
+                WHERE agent_name = ? AND thesis_id = ? AND status = ?
+                ORDER BY updated_at DESC LIMIT 1
+                """,
+                (agent_name, thesis_id, TaskStatus.SUCCESS.value),
+            ).fetchone()
+            if not row:
+                return None
+            return AgentState.model_validate_json(row["state_json"])
         finally:
             connection.close()
 

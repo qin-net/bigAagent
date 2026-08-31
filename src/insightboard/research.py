@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from pathlib import Path
 from typing import Any, Optional
@@ -24,10 +25,18 @@ def remove_prompt(job_id: str) -> None:
     except FileNotFoundError:
         pass
 
-from insightagent.env import load_dotenv
+from insightagent.env import load_dotenv, resolve_path
 from insightagent.llm import DeepSeekChatAdapter, DeepSeekConfig
-from insightagent.persistence import SQLiteDatabase
+from insightagent.persistence import SQLiteDatabase, SQLiteStateStore
 from insightagent.research_store import ResearchStore
+from insightagent.state import snapshot_private_memory
+from insightagent.user_contracts import DIMS, NONE
+from insightagent.user_store import UserStore
+from insightagent.tracking_agent import (
+    TrackFeedbackError,
+    feedback_on_track,
+    track_thesis,
+)
 from insightagent.workflows.initial_research import (
     FeedbackError,
     analyze_stock,
@@ -67,8 +76,8 @@ class BoardTechnicalAdapter:
 def agent_paths() -> tuple[str, str, str]:
     load_dotenv()
     return (
-        os.environ.get("INSIGHTAGENT_DB_PATH", "data/insightagent.db"),
-        os.environ.get("INSIGHTAGENT_ARTIFACT_ROOT", "data/artifacts"),
+        resolve_path(os.environ.get("INSIGHTAGENT_DB_PATH", ""), default_relative="data/insightagent.db"),
+        resolve_path(os.environ.get("INSIGHTAGENT_ARTIFACT_ROOT", ""), default_relative="data/artifacts"),
         os.environ.get("INSIGHTAGENT_MODEL", "deepseek-v4-flash"),
     )
 
@@ -95,14 +104,115 @@ def project_run(bundle: dict[str, Any], *, run_id: Optional[str] = None) -> dict
         "short_id": (run_identifier or "")[:8],
         "created_at": run.get("created_at"),
         "stock_code": run.get("stock_code"),
+        "mode": run.get("mode") or "research",
         "status": bundle.get("status") or run.get("status"),
         "parent_run_id": parent_run_id,
         "rerun_dimensions": rerun_dimensions,
         "intent": {key: intent.get(key) for key in ("effect", "fundamental", "technical", "sentiment", "macro", "decision", "tracking") if key in intent},
         "dimensions": dimensions,
         "decision": ({key: decision.get(key) for key in ("rating", "confidence", "value_score", "timing_score", "advice_one_liner", "risks", "falsifiers", "disagreements", "dimensions_used", "dimensions_missing")} if decision else None),
+        "tracking": None,
         "disclaimer": "研究辅助，非投资建议",
+        "memories": {},
+        "preferences": [],
     }
+
+
+def project_tracking(deliverable: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not deliverable:
+        return None
+    user = deliverable.get("user_output") or {}
+    return {
+        "status": deliverable.get("status"),
+        "work_summary": deliverable.get("work_summary") or "",
+        "thinking": deliverable.get("thinking") or "",
+        "synthesis": deliverable.get("synthesis") or "",
+        "expert_evaluations": list(deliverable.get("expert_evaluations") or []),
+        "triggers_hit": list(deliverable.get("triggers_hit") or []),
+        "user_output": {
+            key: user.get(key)
+            for key in ("title", "summary", "holding_advice", "key_changes", "next_watch_items")
+        },
+        "next_check_suggestion": deliverable.get("next_check_suggestion") or {},
+    }
+
+
+async def _memories_for_run(database: SQLiteDatabase, session_ids: dict[str, Any]) -> dict[str, Any]:
+    store = SQLiteStateStore(database)
+    memories: dict[str, Any] = {}
+    for role in ("fundamental", "technical", "sentiment", "macro", "tracking"):
+        session_id = session_ids.get(role)
+        if not session_id:
+            continue
+        try:
+            state = await store.get(session_id)
+        except KeyError:
+            continue
+        payload = snapshot_private_memory(state.private_memory)
+        if not payload:
+            continue
+        payload["carried"] = bool(state.parent_session_id)
+        memories[role] = payload
+    return memories
+
+
+def _latest_expert_memories_sync(database: SQLiteDatabase) -> list[dict[str, Any]]:
+    connection = database.connect()
+    try:
+        rows = connection.execute(
+            """
+            SELECT session_id, agent_name, stock_code, parent_session_id, state_json, updated_at
+            FROM agent_states
+            WHERE status = 'SUCCESS'
+              AND agent_name IN ('fundamental', 'technical', 'sentiment', 'macro', 'tracking')
+            ORDER BY updated_at DESC
+            """
+        ).fetchall()
+    except Exception:
+        return []
+    finally:
+        connection.close()
+    seen: set[tuple[str, str]] = set()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        key = (row["agent_name"], row["stock_code"] or "")
+        if key in seen:
+            continue
+        try:
+            payload = json.loads(row["state_json"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        memory = snapshot_private_memory(payload.get("private_memory") or {})
+        if not memory.get("memory_summary"):
+            continue
+        seen.add(key)
+        items.append(
+            {
+                "agent_name": row["agent_name"],
+                "stock_code": row["stock_code"] or "",
+                "memory_summary": memory["memory_summary"],
+                "carried": bool(row["parent_session_id"]),
+                "updated_at": row["updated_at"],
+            }
+        )
+    return items
+
+
+async def _latest_expert_memories(database: SQLiteDatabase) -> list[dict[str, Any]]:
+    await database.initialize()
+    return await asyncio.to_thread(_latest_expert_memories_sync, database)
+
+
+async def _preferences_for_stock(database: SQLiteDatabase, stock_code: str) -> list[dict[str, str]]:
+    user_store = UserStore(database)
+    items: list[dict[str, str]] = []
+    for scope in DIMS:
+        rows = await user_store.active_preferences(
+            user_id="local", scope=scope, stock_code=stock_code
+        )
+        for row in rows:
+            items.append({"scope": scope, "statement": row.statement})
+    return items
 
 
 async def load_projected_run(run_id: str, db_path: Optional[str] = None) -> Optional[dict[str, Any]]:
@@ -117,7 +227,44 @@ async def load_projected_run(run_id: str, db_path: Optional[str] = None) -> Opti
     if intent:
         projected["intent"] = {key: intent[key] for key in ("effect", "fundamental", "technical", "sentiment", "macro", "decision", "tracking")}
         projected["intent_created_at"] = intent.get("created_at")
+    session_ids = (bundle.get("run") or {}).get("session_ids") or {}
+    projected["memories"] = await _memories_for_run(database, session_ids)
+    stock_code = projected.get("stock_code") or ""
+    if stock_code:
+        projected["preferences"] = await _preferences_for_stock(database, stock_code)
+    if projected.get("mode") == "track_day":
+        timeline = await store.timeline_for_run(run_id)
+        projected["tracking"] = project_tracking((timeline or {}).get("deliverable"))
     return projected
+
+
+async def load_user_profile(
+    *,
+    user_id: str = "local",
+    stock_code: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> dict[str, Any]:
+    agent_db_path, _, _ = agent_paths()
+    database = SQLiteDatabase(db_path or agent_db_path)
+    store = UserStore(database)
+    profile = await store.profile(user_id=user_id, stock_code=stock_code or NONE)
+    memories = await _latest_expert_memories(database)
+    if stock_code:
+        memories = [item for item in memories if item["stock_code"] == stock_code]
+    profile["expert_memories"] = memories
+    return profile
+
+
+async def retire_user_preference(
+    preference_id: str,
+    *,
+    user_id: str = "local",
+    db_path: Optional[str] = None,
+) -> bool:
+    agent_db_path, _, _ = agent_paths()
+    database = SQLiteDatabase(db_path or agent_db_path)
+    store = UserStore(database)
+    return await store.retire_preference(user_id=user_id, preference_id=preference_id)
 
 
 async def execute_job(job: dict[str, Any], board_store: Any = None) -> dict[str, Any]:
@@ -129,7 +276,38 @@ async def execute_job(job: dict[str, Any], board_store: Any = None) -> dict[str,
     await database.initialize()
     llm = DeepSeekChatAdapter(DeepSeekConfig(api_key=api_key, default_model=model))
     prompt = job.get("prompt") or "none"
-    if job["kind"] == "analyze":
+    kind = job["kind"]
+    if kind == "track":
+        result = await track_thesis(
+            "{}-initial".format(job["stock_code"]),
+            database=database,
+            llm_adapter=llm,
+            artifact_root=artifact_root,
+            fixture=False,
+            model=model,
+            thinking_enabled=True,
+            user_prompt=prompt,
+            user_id=job.get("user_id", "local"),
+        )
+        return {"run_id": result.run_id, "noop": False, "rerun_dimensions": []}
+    if kind == "track_feedback":
+        result = await feedback_on_track(
+            job.get("parent_run_id") or "",
+            database=database,
+            llm_adapter=llm,
+            artifact_root=artifact_root,
+            user_prompt=prompt,
+            model=model,
+            thinking_enabled=True,
+            fixture=False,
+            user_id=job.get("user_id", "local"),
+        )
+        if result.error:
+            raise TrackFeedbackError(result.error)
+        if result.track_result is None:
+            return {"run_id": None, "noop": True, "rerun_dimensions": [], "message": "未重跑追踪"}
+        return {"run_id": result.track_result.run_id, "noop": False, "rerun_dimensions": []}
+    if kind == "analyze":
         outcome = await analyze_stock(
             job["stock_code"], database=database, llm_adapter=llm,
             artifact_root=artifact_root, fixture=False, model=model,

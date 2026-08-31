@@ -5,6 +5,18 @@ from pathlib import Path
 from typing import Iterable
 
 
+def repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def resolve_path(value: str, *, default_relative: str) -> str:
+    raw = (value or "").strip() or default_relative
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = repo_root() / path
+    return str(path.resolve())
+
+
 def load_dotenv() -> None:
     """Load gitignored `.env` into os.environ without overriding existing keys."""
     for path in _dotenv_candidates():

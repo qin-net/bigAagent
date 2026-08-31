@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "stock_code": "601318",
+  "company_name": "中国平安",
+  "as_of": "2026-06-30T00:00:00+00:00",
+  "price": 55.85,
+  "pe": 8.6,
+  "pb": 0.9,
+  "pe_percentile_5y": 32.0,
+  "pb_percentile_5y": 30.0,
+  "roe": 12.4,
+  "roe_stable": true,
+  "revenue_yoy": 4.2,
+  "profit_yoy": 5.1,
+  "gross_margin": null,
+  "debt_ratio": 88.6,
+  "current_ratio": null,
+  "operating_cf": 96.0,
+  "net_profit": 82.0,
+  "goodwill": 1.1,
+  "non_recurring_profit_ratio": 2.4
+}

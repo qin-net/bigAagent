@@ -161,7 +161,7 @@ class BoardStore:
     ) -> dict:
         if len(stock_code) != 6 or not stock_code.isdigit():
             raise ValueError("invalid stock code")
-        if kind not in {"analyze", "feedback"}:
+        if kind not in {"analyze", "feedback", "track", "track_feedback"}:
             raise ValueError("invalid research job kind")
         now = utc_now()
         with self._connection() as connection:
@@ -244,7 +244,15 @@ class BoardStore:
     def current_research(self, stock_code: str) -> Optional[dict]:
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT job_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE stock_code=? AND status IN ('success','unchanged') AND run_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1",
+                "SELECT job_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE stock_code=? AND kind IN ('analyze','feedback') AND status IN ('success','unchanged') AND run_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1",
+                (stock_code,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def current_track(self, stock_code: str) -> Optional[dict]:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT job_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE stock_code=? AND kind IN ('track','track_feedback') AND status IN ('success','unchanged') AND run_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1",
                 (stock_code,),
             ).fetchone()
         return dict(row) if row else None
@@ -421,3 +429,229 @@ class BoardStore:
     def remove_watch(self, stock_code: str) -> None:
         with self._connection() as connection:
             connection.execute("DELETE FROM watchlist WHERE user_id='local' AND stock_code=?", (stock_code,))
+
+    def initialize_paper(self, *, user_id: str = "local", initial_cash: float = 1_000_000.0) -> None:
+        with self._connection() as connection:
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS paper_account (
+                    user_id TEXT PRIMARY KEY,
+                    cash REAL NOT NULL,
+                    initial_cash REAL NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS paper_position (
+                    user_id TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    avg_cost REAL NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, stock_code)
+                );
+                CREATE TABLE IF NOT EXISTS paper_fill (
+                    fill_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    side TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    price REAL NOT NULL,
+                    amount REAL NOT NULL,
+                    cash_after REAL NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS pick_memory (
+                    memory_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    statement TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS pick_memory_user_status
+                    ON pick_memory(user_id, status, updated_at DESC);
+                """
+            )
+            now = utc_now()
+            connection.execute(
+                "INSERT OR IGNORE INTO paper_account(user_id, cash, initial_cash, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
+                (user_id, initial_cash, initial_cash, now, now),
+            )
+
+    def paper_snapshot(self, *, user_id: str = "local") -> dict:
+        self.initialize_paper(user_id=user_id)
+        with self._connection() as connection:
+            account = dict(connection.execute("SELECT * FROM paper_account WHERE user_id=?", (user_id,)).fetchone())
+            positions = [dict(row) for row in connection.execute(
+                "SELECT * FROM paper_position WHERE user_id=? AND quantity > 0 ORDER BY stock_code",
+                (user_id,),
+            )]
+            fills = [dict(row) for row in connection.execute(
+                "SELECT * FROM paper_fill WHERE user_id=? ORDER BY created_at DESC LIMIT 20",
+                (user_id,),
+            )]
+            picks = [dict(row) for row in connection.execute(
+                "SELECT * FROM pick_memory WHERE user_id=? AND status='active' ORDER BY updated_at DESC",
+                (user_id,),
+            )]
+        marked = []
+        market_value = 0.0
+        for position in positions:
+            quote = self._current_quote(position["stock_code"])
+            price = quote.get("price") if quote else None
+            last = float(price) if price is not None else float(position["avg_cost"])
+            value = last * position["quantity"]
+            cost = float(position["avg_cost"]) * position["quantity"]
+            market_value += value
+            marked.append({
+                **position,
+                "name": (quote or {}).get("name"),
+                "last_price": last,
+                "change_pct": (quote or {}).get("change_pct"),
+                "market_value": round(value, 2),
+                "unrealized": round(value - cost, 2),
+            })
+        cash = float(account["cash"])
+        initial = float(account["initial_cash"])
+        equity = cash + market_value
+        return {
+            "cash": round(cash, 2),
+            "initial_cash": round(initial, 2),
+            "market_value": round(market_value, 2),
+            "equity": round(equity, 2),
+            "pnl": round(equity - initial, 2),
+            "pnl_pct": round((equity - initial) / initial, 6) if initial else 0.0,
+            "positions": marked,
+            "fills": fills,
+            "picks": picks,
+            "disclaimer": "虚拟资金模拟，延迟行情计价，非投资建议",
+        }
+
+    def paper_trade(
+        self,
+        stock_code: str,
+        *,
+        side: str,
+        quantity: int,
+        reason: str = "",
+        user_id: str = "local",
+    ) -> dict:
+        if len(stock_code) != 6 or not stock_code.isdigit():
+            raise ValueError("invalid stock code")
+        if side not in {"buy", "sell"}:
+            raise ValueError("invalid side")
+        if quantity <= 0 or quantity % 100 != 0:
+            raise ValueError("quantity must be a positive multiple of 100")
+        self.initialize_paper(user_id=user_id)
+        quote = self._current_quote(stock_code)
+        if not quote or quote.get("price") is None:
+            raise ValueError("no delayed price for this stock")
+        price = float(quote["price"])
+        amount = round(price * quantity, 2)
+        now = utc_now()
+        statement = _pick_statement(reason)
+        with self._connection() as connection:
+            account = dict(connection.execute("SELECT * FROM paper_account WHERE user_id=?", (user_id,)).fetchone())
+            cash = float(account["cash"])
+            held = connection.execute(
+                "SELECT quantity, avg_cost FROM paper_position WHERE user_id=? AND stock_code=?",
+                (user_id, stock_code),
+            ).fetchone()
+            held_qty = int(held["quantity"]) if held else 0
+            avg_cost = float(held["avg_cost"]) if held else 0.0
+            if side == "buy":
+                if cash + 1e-9 < amount:
+                    raise ValueError("insufficient virtual cash")
+                cash = round(cash - amount, 2)
+                new_qty = held_qty + quantity
+                avg_cost = round(((avg_cost * held_qty) + amount) / new_qty, 4)
+            else:
+                if held_qty < quantity:
+                    raise ValueError("insufficient position")
+                cash = round(cash + amount, 2)
+                new_qty = held_qty - quantity
+            connection.execute(
+                "UPDATE paper_account SET cash=?, updated_at=? WHERE user_id=?",
+                (cash, now, user_id),
+            )
+            if new_qty == 0:
+                connection.execute(
+                    "DELETE FROM paper_position WHERE user_id=? AND stock_code=?",
+                    (user_id, stock_code),
+                )
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO paper_position(user_id, stock_code, quantity, avg_cost, updated_at)
+                    VALUES(?, ?, ?, ?, ?)
+                    ON CONFLICT(user_id, stock_code) DO UPDATE SET
+                        quantity=excluded.quantity, avg_cost=excluded.avg_cost, updated_at=excluded.updated_at
+                    """,
+                    (user_id, stock_code, new_qty, avg_cost, now),
+                )
+            fill_id = uuid.uuid4().hex
+            connection.execute(
+                """
+                INSERT INTO paper_fill(fill_id, user_id, stock_code, side, quantity, price, amount, cash_after, created_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (fill_id, user_id, stock_code, side, quantity, price, amount, cash, now),
+            )
+            if statement:
+                self._upsert_pick(connection, user_id=user_id, stock_code=stock_code, statement=statement, now=now)
+        return self.paper_snapshot(user_id=user_id)
+
+    def save_pick_memory(self, *, stock_code: str, statement: str, user_id: str = "local") -> dict:
+        code = stock_code.strip() or "none"
+        if code != "none" and (len(code) != 6 or not code.isdigit()):
+            raise ValueError("invalid stock code")
+        text = _pick_statement(statement)
+        if not text:
+            raise ValueError("pick statement is empty")
+        self.initialize_paper(user_id=user_id)
+        now = utc_now()
+        with self._connection() as connection:
+            self._upsert_pick(connection, user_id=user_id, stock_code=code, statement=text, now=now)
+        return {"stock_code": code, "statement": text, "status": "active"}
+
+    def retire_pick_memory(self, memory_id: str, *, user_id: str = "local") -> bool:
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE pick_memory SET status='retired', updated_at=? WHERE memory_id=? AND user_id=? AND status='active'",
+                (utc_now(), memory_id, user_id),
+            )
+            return cursor.rowcount > 0
+
+    def _current_quote(self, stock_code: str) -> Optional[dict]:
+        page = self.quote_page(page=1, size=1, q=stock_code, sort="stock_code", order="asc")
+        for item in page["items"]:
+            if item["stock_code"] == stock_code:
+                return item
+        return None
+
+    def _upsert_pick(self, connection: sqlite3.Connection, *, user_id: str, stock_code: str, statement: str, now: str) -> None:
+        for row in connection.execute(
+            "SELECT memory_id, statement FROM pick_memory WHERE user_id=? AND stock_code=? AND status='active'",
+            (user_id, stock_code),
+        ):
+            if row["statement"] == statement:
+                connection.execute(
+                    "UPDATE pick_memory SET status='retired', updated_at=? WHERE memory_id=?",
+                    (now, row["memory_id"]),
+                )
+        connection.execute(
+            """
+            INSERT INTO pick_memory(memory_id, user_id, stock_code, statement, status, created_at, updated_at)
+            VALUES(?, ?, ?, ?, 'active', ?, ?)
+            """,
+            (uuid.uuid4().hex, user_id, stock_code, statement, now, now),
+        )
+
+
+def _pick_statement(raw: str) -> str:
+    text = " ".join((raw or "").split())
+    if not text or text.lower() == "none":
+        return ""
+    return text[:200]
+

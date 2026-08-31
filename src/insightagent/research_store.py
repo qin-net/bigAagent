@@ -207,6 +207,31 @@ class ResearchStore:
         finally:
             connection.close()
 
+    async def timeline_for_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        await self.database.initialize()
+        return await asyncio.to_thread(self._timeline_for_run_sync, run_id)
+
+    def _timeline_for_run_sync(self, run_id: str) -> Optional[Dict[str, Any]]:
+        connection = self.database.connect()
+        try:
+            row = connection.execute(
+                """
+                SELECT timeline_id, run_id, payload_json, created_at
+                FROM tracking_timeline WHERE run_id = ?
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (run_id,),
+            ).fetchone()
+            if not row:
+                return None
+            payload = json.loads(row["payload_json"])
+            payload["timeline_id"] = row["timeline_id"]
+            payload["run_id"] = row["run_id"]
+            payload["created_at"] = row["created_at"]
+            return payload
+        finally:
+            connection.close()
+
     async def latest_track_run(self, thesis_id: str) -> Optional[Dict[str, Any]]:
         await self.database.initialize()
         return await asyncio.to_thread(self._latest_track_run_sync, thesis_id)

@@ -1,9 +1,25 @@
 from __future__ import annotations
 
+import json
 import asyncio
-from typing import Any, Dict, Iterable, Optional, Protocol
+from typing import Any, Dict, Iterable, Optional, Protocol, Tuple
 
-from .contracts import AgentState, StatePatch, utc_now
+from .contracts import AgentState, StatePatch, TaskStatus, utc_now
+
+
+PRIVATE_MEMORY_KEYS = (
+    "memory_summary",
+    "active_hypotheses",
+    "key_evidence_refs",
+    "open_questions",
+    "falsifiers_watched",
+    "prior_output_refs",
+    "lessons",
+    "pending_tasks",
+)
+MAX_MEMORY_SUMMARY = 200
+MAX_MEMORY_LIST = 8
+MAX_MEMORY_ITEM = 80
 
 
 class StateConflictError(RuntimeError):
@@ -32,6 +48,11 @@ class StateStore(Protocol):
         ...
 
     async def history(self, session_id: str) -> list[AgentState]:
+        ...
+
+    async def latest_for_agent(
+        self, *, agent_name: str, thesis_id: str
+    ) -> Optional[AgentState]:
         ...
 
 
@@ -71,6 +92,9 @@ class InMemoryStateStore:
                 stock_code=stock_code,
                 thesis_id=thesis_id,
                 business_context=business_context or {},
+                private_memory=_inherited_memory(
+                    self._states, parent_session_id
+                ),
             )
             self._states[state.session_id] = state.model_copy(deep=True)
             self._history[state.session_id] = [state.model_copy(deep=True)]
@@ -141,6 +165,22 @@ class InMemoryStateStore:
                 state.model_copy(deep=True)
                 for state in self._history.get(session_id, [])
             ]
+
+    async def latest_for_agent(
+        self, *, agent_name: str, thesis_id: str
+    ) -> Optional[AgentState]:
+        async with self._lock:
+            matches = [
+                state
+                for state in self._states.values()
+                if state.agent_name == agent_name
+                and state.thesis_id == thesis_id
+                and state.status == TaskStatus.SUCCESS
+            ]
+            if not matches:
+                return None
+            matches.sort(key=lambda item: item.updated_at, reverse=True)
+            return matches[0].model_copy(deep=True)
 
     def _validate_path(self, path: str) -> None:
         root = path.split(".", 1)[0]
@@ -264,3 +304,63 @@ def apply_patch_to_state(
     data["version"] = current.version + 1
     data["updated_at"] = utc_now()
     return AgentState.model_validate(data)
+
+
+def snapshot_private_memory(memory: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not memory:
+        return {}
+    out: Dict[str, Any] = {}
+    for key in PRIVATE_MEMORY_KEYS:
+        value = memory.get(key)
+        if value is None or value == "" or value == []:
+            continue
+        if isinstance(value, str):
+            text = value.strip()[:MAX_MEMORY_SUMMARY]
+            if text:
+                out[key] = text
+        elif isinstance(value, list):
+            items = [
+                str(item).strip()[:MAX_MEMORY_ITEM]
+                for item in value[:MAX_MEMORY_LIST]
+                if str(item).strip()
+            ]
+            if items:
+                out[key] = items
+    return out
+
+
+def attach_prior_memory(user_query: str, memory: Dict[str, Any]) -> str:
+    if not memory:
+        return user_query
+    try:
+        payload = json.loads(user_query)
+    except json.JSONDecodeError:
+        return user_query
+    if not isinstance(payload, dict):
+        return user_query
+    payload["prior_memory"] = memory
+    return json.dumps(payload, ensure_ascii=False)
+
+
+async def prior_session_memory(
+    store: StateStore, *, agent_name: str, thesis_id: str
+) -> Tuple[Optional[str], Dict[str, Any]]:
+    if not thesis_id:
+        return None, {}
+    parent = await store.latest_for_agent(
+        agent_name=agent_name, thesis_id=thesis_id
+    )
+    if parent is None:
+        return None, {}
+    return parent.session_id, snapshot_private_memory(parent.private_memory)
+
+
+def _inherited_memory(
+    states: Dict[str, AgentState], parent_session_id: Optional[str]
+) -> Dict[str, Any]:
+    if not parent_session_id:
+        return {}
+    parent = states.get(parent_session_id)
+    if parent is None:
+        return {}
+    return snapshot_private_memory(parent.private_memory)

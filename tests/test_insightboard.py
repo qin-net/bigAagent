@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
+import pytest
 
 from insightboard.api import create_app
 from insightboard.collector import AkshareQuoteCollector, collect_once
@@ -13,13 +14,13 @@ from insightboard.store import BoardStore
 from insightboard import __main__ as board_main
 
 
-def quote(code: str, *, name: str = "测试公司", turnover: float = 100.0) -> QuoteInput:
+def quote(code: str, *, name: str = "测试公司", turnover: float = 100.0, price: float = 10.0) -> QuoteInput:
     return QuoteInput(
         stock_code=code,
         name=name,
         industry="测试行业",
         market="sz",
-        price=10.0,
+        price=price,
         change_pct=1.2,
         turnover=turnover,
     )
@@ -93,6 +94,27 @@ def test_api_exposes_health_and_quotes(tmp_path):
     assert response.status_code == 200
     assert response.json()["items"][0]["stock_code"] == "000001"
     assert client.get("/").status_code == 200
+    assert "采集行情" in client.get("/").text
+
+
+def test_quotes_collect_button_publishes_batch(tmp_path):
+    import time
+    db_path = str(tmp_path / "board.db")
+    BoardStore(db_path).initialize()
+    client = TestClient(create_app(db_path, collector=FakeCollector([quote("000002", name="乙公司")])))
+    started = client.post("/api/v1/quotes/collect")
+    assert started.status_code == 200
+    assert started.json()["collecting"] is True
+    payload = {}
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        payload = client.get("/api/v1/meta/ingest").json()
+        if not payload.get("collecting") and payload.get("stock_count"):
+            break
+        time.sleep(0.05)
+    assert payload["stock_count"] == 1
+    assert client.get("/api/v1/quotes").json()["items"][0]["stock_code"] == "000002"
+    assert client.post("/api/v1/quotes/collect").status_code in {200, 409}
 
 
 def test_old_batch_is_stale(tmp_path):
@@ -160,6 +182,183 @@ def test_deep_queue_bars_notices_and_watchlist(tmp_path):
     assert store.watchlist() == []
 
 
+@pytest.mark.asyncio
+async def test_projected_run_exposes_carried_memory_and_preferences(tmp_path, monkeypatch):
+    from insightagent.business_contracts import RunRecord
+    from insightagent.contracts import TaskStatus, utc_now
+    from insightagent.persistence import SQLiteDatabase, SQLiteStateStore
+    from insightagent.research_store import ResearchStore
+    from insightagent.user_contracts import UserPreference
+    from insightagent.user_store import UserStore
+    from insightboard.research import load_projected_run
+
+    agent_db = str(tmp_path / "insightagent.db")
+    monkeypatch.setenv("INSIGHTAGENT_DB_PATH", agent_db)
+    database = SQLiteDatabase(agent_db)
+    await database.initialize()
+    states = SQLiteStateStore(database)
+    parent = await states.load_or_create(
+        agent_name="fundamental",
+        thesis_id="000001-initial",
+        stock_code="000001",
+    )
+    parent.private_memory = {"memory_summary": "盯经营现金流证伪"}
+    parent.status = TaskStatus.SUCCESS
+    parent = await states.save(parent, expected_version=parent.version)
+    child = await states.load_or_create(
+        agent_name="fundamental",
+        thesis_id="000001-initial",
+        stock_code="000001",
+        parent_session_id=parent.session_id,
+    )
+    child.status = TaskStatus.SUCCESS
+    await states.save(child, expected_version=child.version)
+    now = utc_now().isoformat()
+    await UserStore(database).save_preference(
+        UserPreference(
+            preference_id="pref-1",
+            user_id="local",
+            status="active",
+            current_version="1",
+            kind="constraint",
+            scope="fundamental",
+            stock_code="000001",
+            trigger="盯经营现金流",
+            title="盯经营现金流",
+            statement="估值必须对照经营现金流",
+            source="user_feedback",
+            source_utterance_id="u1",
+            source_run_id="run-board-1",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    run = RunRecord(
+        run_id="run-board-1",
+        stock_code="000001",
+        thesis_id="000001-initial",
+        status="success",
+        session_ids={"fundamental": child.session_id},
+    )
+    await ResearchStore(database).save_run(run)
+    projected = await load_projected_run(run.run_id, db_path=agent_db)
+    assert projected["memories"]["fundamental"]["memory_summary"] == "盯经营现金流证伪"
+    assert projected["memories"]["fundamental"]["carried"] is True
+    assert projected["preferences"][0]["statement"] == "估值必须对照经营现金流"
+
+
+@pytest.mark.asyncio
+async def test_research_api_returns_memory_on_current_run(tmp_path, monkeypatch):
+    from insightagent.business_contracts import RunRecord
+    from insightagent.contracts import TaskStatus
+    from insightagent.persistence import SQLiteDatabase, SQLiteStateStore
+    from insightagent.research_store import ResearchStore
+
+    agent_db = str(tmp_path / "insightagent.db")
+    monkeypatch.setenv("INSIGHTAGENT_DB_PATH", agent_db)
+    database = SQLiteDatabase(agent_db)
+    await database.initialize()
+    states = SQLiteStateStore(database)
+    state = await states.load_or_create(
+        agent_name="fundamental",
+        thesis_id="000001-initial",
+        stock_code="000001",
+    )
+    state.private_memory = {"memory_summary": "盯经营现金流证伪"}
+    state.status = TaskStatus.SUCCESS
+    await states.save(state, expected_version=state.version)
+    run = RunRecord(
+        run_id="run-api-1",
+        stock_code="000001",
+        thesis_id="000001-initial",
+        status="success",
+        session_ids={"fundamental": state.session_id},
+    )
+    await ResearchStore(database).save_run(run)
+    board_db = str(tmp_path / "board.db")
+    store = BoardStore(board_db)
+    store.initialize()
+    store.initialize_research()
+    store.replace_quotes([quote("000001")], source="fixture")
+    job = store.create_research_job("000001")
+    store.finish_research(job["job_id"], run_id="run-api-1")
+    client = TestClient(create_app(board_db))
+    payload = client.get("/api/v1/research/stocks/000001/current").json()
+    assert payload["memories"]["fundamental"]["memory_summary"] == "盯经营现金流证伪"
+    html = client.get("/").text
+    assert "research-start" in html
+    assert "track-start" in html
+
+
+@pytest.mark.asyncio
+async def test_track_api_projects_deliverable(tmp_path, monkeypatch):
+    from insightagent.business_contracts import RunRecord
+    from insightagent.persistence import SQLiteDatabase
+    from insightagent.research_store import ResearchStore
+
+    agent_db = str(tmp_path / "insightagent.db")
+    monkeypatch.setenv("INSIGHTAGENT_DB_PATH", agent_db)
+    database = SQLiteDatabase(agent_db)
+    await database.initialize()
+    store = ResearchStore(database)
+    run = RunRecord(
+        run_id="track-api-1",
+        stock_code="000001",
+        thesis_id="000001-initial",
+        mode="track_day",
+        status="success",
+        session_ids={"tracking": "sess-track"},
+    )
+    await store.save_run(run)
+    await store.save_timeline(
+        "000001-initial",
+        {
+            "schema_version": "1",
+            "mode": "track_day",
+            "deliverable": {
+                "status": "review",
+                "work_summary": "估值带上移，维持观察",
+                "thinking": "对比基线价格",
+                "synthesis": "不改持有，但要复核技术面",
+                "expert_evaluations": [
+                    {
+                        "agent": "technical",
+                        "reliability": "medium",
+                        "verdict": "discount",
+                        "gaps": [],
+                        "notes": "量能不足",
+                    }
+                ],
+                "evidence_refs": [],
+                "triggers_hit": ["price_move"],
+                "agent_skill_calls": [],
+                "decision_required": False,
+                "user_output": {
+                    "title": "本次跟踪更新",
+                    "summary": "需要复核技术面",
+                    "holding_advice": "review",
+                    "key_changes": ["价格偏离基线"],
+                    "next_watch_items": ["成交量"],
+                },
+                "next_check_suggestion": {"urgency": "medium", "reason": "等放量"},
+            },
+        },
+        run_id="track-api-1",
+    )
+    board_db = str(tmp_path / "board.db")
+    board = BoardStore(board_db)
+    board.initialize()
+    board.initialize_research()
+    job = board.create_research_job("000001", kind="track")
+    board.finish_research(job["job_id"], run_id="track-api-1")
+    client = TestClient(create_app(board_db))
+    payload = client.get("/api/v1/research/stocks/000001/track").json()
+    assert payload["mode"] == "track_day"
+    assert payload["tracking"]["status"] == "review"
+    assert payload["tracking"]["user_output"]["summary"] == "需要复核技术面"
+    assert client.get("/api/v1/research/stocks/000001/current").status_code == 404
+
+
 def test_b1_api_enqueues_and_reads_local_data(tmp_path):
     db_path = str(tmp_path / "board.db")
     store = BoardStore(db_path)
@@ -172,3 +371,131 @@ def test_b1_api_enqueues_and_reads_local_data(tmp_path):
     assert client.get("/api/v1/watchlist").json()["items"][0]["stock_code"] == "000001"
     assert client.get("/api/v1/bars/000001").json()["items"] == []
     assert client.get("/api/v1/notices/000001").json()["items"] == []
+    assert client.get("/api/v1/paper").json()["initial_cash"] == 1000000
+    assert "模拟" in client.get("/").text
+
+
+@pytest.mark.asyncio
+async def test_profile_api_lists_and_retires_preference(tmp_path, monkeypatch):
+    from insightagent.contracts import TaskStatus, utc_now
+    from insightagent.persistence import SQLiteDatabase, SQLiteStateStore
+    from insightagent.user_contracts import UserIntent, UserPreference, UserUtterance
+    from insightagent.user_store import UserStore
+
+    agent_db = str(tmp_path / "insightagent.db")
+    monkeypatch.setenv("INSIGHTAGENT_DB_PATH", agent_db)
+    database = SQLiteDatabase(agent_db)
+    await database.initialize()
+    states = SQLiteStateStore(database)
+    state = await states.load_or_create(
+        agent_name="fundamental",
+        thesis_id="000001-initial",
+        stock_code="000001",
+    )
+    state.private_memory = {"memory_summary": "盯经营现金流证伪"}
+    state.status = TaskStatus.SUCCESS
+    await states.save(state, expected_version=state.version)
+    store = UserStore(database)
+    now = utc_now().isoformat()
+    await store.save_utterance(
+        UserUtterance(
+            utterance_id="u1",
+            user_id="local",
+            moment="pre_run",
+            effect="remember",
+            tags=json.dumps(["fundamental", "remember"]),
+            intent_id="i1",
+            stock_code="000001",
+            thesis_id="000001-initial",
+            run_id="r1",
+            created_at=now,
+        )
+    )
+    await store.save_intent(
+        UserIntent(
+            intent_id="i1",
+            utterance_id="u1",
+            effect="remember",
+            tags=json.dumps(["fundamental", "remember"]),
+            fundamental="盯经营现金流",
+            technical="none",
+            sentiment="none",
+            macro="none",
+            decision="none",
+            tracking="none",
+            not_evidence="none",
+            created_at=now,
+        )
+    )
+    await store.save_preference(
+        UserPreference(
+            preference_id="pref-board",
+            user_id="local",
+            status="active",
+            current_version="1",
+            kind="constraint",
+            scope="fundamental",
+            stock_code="000001",
+            trigger="盯经营现金流",
+            title="盯经营现金流",
+            statement="估值必须对照经营现金流",
+            source="user_feedback",
+            source_utterance_id="u1",
+            source_run_id="r1",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    client = TestClient(create_app(str(tmp_path / "board.db")))
+    payload = client.get("/api/v1/profile").json()
+    assert payload["utterance_count"] == 1
+    assert payload["preferences"][0]["preference_id"] == "pref-board"
+    assert payload["expert_memories"][0]["memory_summary"] == "盯经营现金流证伪"
+    assert "画像" in client.get("/").text
+    retired = client.delete("/api/v1/profile/preferences/pref-board")
+    assert retired.status_code == 200
+    assert client.get("/api/v1/profile").json()["preferences"] == []
+    assert client.delete("/api/v1/profile/preferences/pref-board").status_code == 404
+
+
+def test_paper_account_marks_to_delayed_quotes_and_stores_pick_memory(tmp_path):
+    db_path = str(tmp_path / "board.db")
+    store = BoardStore(db_path)
+    store.initialize()
+    store.initialize_paper()
+    store.replace_quotes([quote("000001", price=10.0)], source="fixture")
+    start = store.paper_snapshot()
+    assert start["cash"] == 1_000_000
+    assert start["equity"] == 1_000_000
+    after_buy = store.paper_trade("000001", side="buy", quantity=100, reason="现金流质量")
+    assert after_buy["cash"] == 999_000
+    assert after_buy["positions"][0]["quantity"] == 100
+    assert after_buy["picks"][0]["statement"] == "现金流质量"
+    store.replace_quotes([quote("000001", price=12.0)], source="fixture")
+    marked = store.paper_snapshot()
+    assert marked["market_value"] == 1_200
+    assert marked["equity"] == 1_000_200
+    assert marked["pnl"] == 200
+    sold = store.paper_trade("000001", side="sell", quantity=100)
+    assert sold["positions"] == []
+    assert sold["cash"] == 1_000_200
+    assert sold["equity"] == 1_000_200
+
+
+def test_paper_api_buy_and_pick(tmp_path):
+    db_path = str(tmp_path / "board.db")
+    store = BoardStore(db_path)
+    store.initialize()
+    store.replace_quotes([quote("000001")], source="fixture")
+    client = TestClient(create_app(db_path))
+    bought = client.post("/api/v1/paper/trades", json={"stock_code": "000001", "side": "buy", "quantity": 100, "reason": "低估值"}).json()
+    assert bought["positions"][0]["quantity"] == 100
+    assert bought["picks"][0]["statement"] == "低估值"
+    saved = client.post("/api/v1/paper/picks", json={"stock_code": "none", "statement": "不买看不懂的生意"}).json()
+    assert saved["stock_code"] == "none"
+    picks = client.get("/api/v1/paper").json()["picks"]
+    assert any(item["statement"] == "不买看不懂的生意" for item in picks)
+    memory_id = next(item["memory_id"] for item in picks if item["statement"] == "低估值")
+    assert client.delete(f"/api/v1/paper/picks/{memory_id}").status_code == 200
+    assert client.post("/api/v1/paper/trades", json={"stock_code": "000001", "side": "buy", "quantity": 50}).status_code == 400
+

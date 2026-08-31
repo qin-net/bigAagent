@@ -90,6 +90,16 @@ class UserStore:
             self._active_preferences_sync, user_id, scope, stock_code
         )
 
+    async def profile(self, *, user_id: str, stock_code: str = NONE) -> dict:
+        await self.database.initialize()
+        return await asyncio.to_thread(self._profile_sync, user_id, stock_code)
+
+    async def retire_preference(self, *, user_id: str, preference_id: str) -> bool:
+        await self.database.initialize()
+        return await asyncio.to_thread(
+            self._retire_preference_sync, user_id, preference_id
+        )
+
     def _save_utterance_sync(self, row: UserUtterance) -> None:
         connection = self.database.connect()
         try:
@@ -276,3 +286,154 @@ class UserStore:
             ]
         finally:
             connection.close()
+
+    def _retire_preference_sync(self, user_id: str, preference_id: str) -> bool:
+        connection = self.database.connect()
+        now = utc_now().isoformat()
+        try:
+            cursor = connection.execute(
+                """
+                UPDATE user_preferences
+                SET status = 'retired', updated_at = ?
+                WHERE preference_id = ? AND user_id = ? AND status = 'active'
+                """,
+                (now, preference_id, user_id),
+            )
+            return cursor.rowcount > 0
+        finally:
+            connection.close()
+
+    def _profile_sync(self, user_id: str, stock_code: str) -> dict:
+        connection = self.database.connect()
+        try:
+            effects = {
+                row["effect"]: row["n"]
+                for row in connection.execute(
+                    "SELECT effect, COUNT(*) AS n FROM user_utterances WHERE user_id=? GROUP BY effect",
+                    (user_id,),
+                )
+            }
+            moments = {
+                row["moment"]: row["n"]
+                for row in connection.execute(
+                    "SELECT moment, COUNT(*) AS n FROM user_utterances WHERE user_id=? GROUP BY moment",
+                    (user_id,),
+                )
+            }
+            tags: dict[str, int] = {}
+            for row in connection.execute(
+                "SELECT tags FROM user_utterances WHERE user_id=?",
+                (user_id,),
+            ):
+                try:
+                    items = json.loads(row["tags"])
+                except json.JSONDecodeError:
+                    items = []
+                if not isinstance(items, list):
+                    items = [items]
+                for tag in items:
+                    if not tag or tag == NONE:
+                        continue
+                    tags[str(tag)] = tags.get(str(tag), 0) + 1
+            dim_counts = {dim: 0 for dim in DIMS}
+            for row in connection.execute(
+                """
+                SELECT i.fundamental, i.technical, i.sentiment, i.macro, i.decision, i.tracking
+                FROM user_intents AS i
+                JOIN user_utterances AS u ON u.intent_id = i.intent_id
+                WHERE u.user_id = ?
+                """,
+                (user_id,),
+            ):
+                for dim in DIMS:
+                    if row[dim] and row[dim] != NONE:
+                        dim_counts[dim] += 1
+            stocks = [
+                {"stock_code": row["stock_code"], "count": row["n"]}
+                for row in connection.execute(
+                    """
+                    SELECT stock_code, COUNT(*) AS n FROM user_utterances
+                    WHERE user_id=? GROUP BY stock_code
+                    ORDER BY n DESC, stock_code ASC LIMIT 8
+                    """,
+                    (user_id,),
+                )
+            ]
+            pref_rows = connection.execute(
+                """
+                SELECT p.preference_id, v.payload_json
+                FROM user_preferences AS p
+                JOIN user_preference_versions AS v
+                  ON v.preference_id = p.preference_id
+                 AND v.version = p.current_version
+                WHERE p.user_id = ? AND p.status = 'active'
+                ORDER BY p.updated_at DESC
+                """,
+                (user_id,),
+            ).fetchall()
+            preferences = []
+            scope_counts: dict[str, int] = {}
+            for row in pref_rows:
+                item = UserPreference.model_validate(json.loads(row["payload_json"]))
+                if stock_code != NONE and item.stock_code not in {stock_code, NONE}:
+                    continue
+                preferences.append(
+                    {
+                        "preference_id": item.preference_id,
+                        "scope": item.scope,
+                        "stock_code": item.stock_code,
+                        "kind": item.kind,
+                        "statement": item.statement,
+                        "updated_at": item.updated_at,
+                    }
+                )
+                scope_counts[item.scope] = scope_counts.get(item.scope, 0) + 1
+            utterance_count = sum(effects.values())
+            return {
+                "user_id": user_id,
+                "utterance_count": utterance_count,
+                "effects": effects,
+                "moments": moments,
+                "tags": tags,
+                "dims": dim_counts,
+                "stocks": stocks,
+                "preferences": preferences,
+                "highlights": _profile_highlights(
+                    effects, tags, dim_counts, scope_counts, utterance_count
+                ),
+            }
+        finally:
+            connection.close()
+
+
+def _profile_highlights(
+    effects: dict,
+    tags: dict,
+    dim_counts: dict,
+    scope_counts: dict,
+    utterance_count: int,
+) -> list[str]:
+    names = {
+        "fundamental": "基本面",
+        "technical": "技术面",
+        "sentiment": "情绪",
+        "macro": "宏观",
+        "decision": "决策",
+        "tracking": "追踪",
+    }
+    lines: list[str] = []
+    remember = effects.get("remember", 0) + effects.get("remember_rerun", 0)
+    if utterance_count and remember / utterance_count >= 0.3:
+        lines.append("常 #remember")
+    if scope_counts:
+        top_scope = max(scope_counts, key=lambda key: (scope_counts[key], key))
+        lines.append("常约束" + names.get(top_scope, top_scope))
+    tagged = {key: value for key, value in tags.items() if key in names}
+    if tagged:
+        top_tag = max(tagged, key=lambda key: (tagged[key], key))
+        lines.append("常点名" + names[top_tag])
+    elif any(dim_counts.values()):
+        top_dim = max(dim_counts, key=lambda key: (dim_counts[key], key))
+        if dim_counts[top_dim]:
+            lines.append("常写" + names[top_dim] + "槽")
+    return lines[:4]

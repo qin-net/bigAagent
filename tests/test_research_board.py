@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from insightboard.store import BoardStore
 from fastapi.testclient import TestClient
 from insightboard.api import create_app
@@ -55,3 +56,57 @@ def test_research_job_rejects_invalid_code(tmp_path):
         assert "invalid" in str(error)
     else:
         raise AssertionError("invalid code should fail")
+
+
+def test_track_job_does_not_replace_current_research(tmp_path):
+    store = BoardStore(str(tmp_path / "board.db"))
+    store.initialize()
+    store.initialize_research()
+    research = store.create_research_job("000858")
+    store.claim_research()
+    store.finish_research(research["job_id"], run_id="run-research")
+    track = store.create_research_job("000858", kind="track")
+    store.claim_research()
+    store.finish_research(track["job_id"], run_id="run-track")
+    assert store.current_research("000858")["run_id"] == "run-research"
+    assert store.current_track("000858")["run_id"] == "run-track"
+    assert {item["kind"] for item in store.research_history("000858")} == {"analyze", "track"}
+
+
+def test_api_creates_track_job(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    client = TestClient(create_app(str(tmp_path / "board.db")))
+    payload = client.post(
+        "/api/v1/research/jobs",
+        json={"stock_code": "000858", "kind": "track", "prompt": "none"},
+    ).json()
+    assert payload["kind"] == "track"
+    assert payload["status"] == "queued"
+    html = client.get("/").text
+    assert "track-start" in html
+
+
+@pytest.mark.asyncio
+async def test_execute_track_job_calls_track_thesis(tmp_path, monkeypatch):
+    from insightboard.research import execute_job
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("INSIGHTAGENT_DB_PATH", str(tmp_path / "insightagent.db"))
+    called = {}
+
+    class Result:
+        run_id = "track-run-1"
+
+    async def fake_track(thesis_id, **kwargs):
+        called["thesis_id"] = thesis_id
+        called["fixture"] = kwargs.get("fixture")
+        called["prompt"] = kwargs.get("user_prompt")
+        return Result()
+
+    monkeypatch.setattr("insightboard.research.track_thesis", fake_track)
+    out = await execute_job(
+        {"kind": "track", "stock_code": "000858", "prompt": "none", "user_id": "local"}
+    )
+    assert called["thesis_id"] == "000858-initial"
+    assert called["fixture"] is False
+    assert out["run_id"] == "track-run-1"

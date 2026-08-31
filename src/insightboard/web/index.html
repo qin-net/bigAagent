@@ -8,11 +8,21 @@
 </head>
 <body>
   <main>
-    <header><div><p class="eyebrow">INSIGHTBOARD / B2</p><h1>A 股延迟行情看板</h1></div><p id="status">正在读取数据状态...</p></header>
-    <nav><button data-view="market">市场</button><button data-view="watchlist">自选</button></nav>
-    <section id="market-view"><section class="controls"><input id="search" placeholder="搜索股票代码或名称"><button id="refresh">查询</button></section><section class="table-wrap"><table><thead><tr><th>代码</th><th>名称</th><th>市场</th><th>最新价</th><th>涨跌幅</th><th>成交额</th></tr></thead><tbody id="quotes"></tbody></table></section><footer><button id="previous">上一页</button><span id="page">第 1 页</span><button id="next">下一页</button></footer></section>
-    <section id="detail-view" hidden><button class="back">← 返回市场</button><div id="detail"></div><section id="research-panel"><h2>研究</h2><p class="notice">研究辅助，非投资建议。</p><section class="research-actions"><textarea id="research-prompt" placeholder="可说人话，例如：记住别只看便宜"></textarea><button id="research-start">开始研究</button><p id="research-status"></p></section><section class="research-report"><h3>当前报告</h3><div id="research-result"></div></section><section class="research-feedback"><h3>结果反馈</h3><textarea id="feedback-prompt" placeholder="例如：基本面再出一版，或：结束了我不看了"></textarea><button id="feedback-send">对本次结果反馈</button></section><section id="research-history"></section></section><h2>日 K 线</h2><canvas id="chart" width="900" height="280"></canvas><h2>最新公告</h2><ul id="notices"></ul></section>
+    <header><div><p class="eyebrow">INSIGHTBOARD / B2</p><h1>A 股延迟行情看板</h1></div><div class="header-actions"><button id="collect">采集行情</button><p id="status">正在读取数据状态...</p></div></header>
+    <nav><button data-view="market">市场</button><button data-view="watchlist">自选</button><button data-view="paper">模拟</button><button data-view="profile">画像</button></nav>
+    <section id="market-view"><section class="controls"><input id="search" placeholder="搜索股票代码或名称"><button id="refresh">查询</button><button id="collect-market">采集行情</button></section><section class="table-wrap"><table><thead><tr><th>代码</th><th>名称</th><th>市场</th><th>最新价</th><th>涨跌幅</th><th>成交额</th></tr></thead><tbody id="quotes"></tbody></table></section><footer><button id="previous">上一页</button><span id="page">第 1 页</span><button id="next">下一页</button></footer></section>
+    <section id="detail-view" hidden><button class="back">← 返回市场</button><div id="detail"></div><section id="research-panel"><h2>研究</h2><p class="notice">研究辅助，非投资建议。</p><section class="research-actions"><textarea id="research-prompt" placeholder="可说人话，例如：记住别只看便宜"></textarea><button id="research-start">开始研究</button><p id="research-status"></p></section><section class="research-report"><h3>当前报告</h3><div id="research-result"></div></section><section class="research-feedback"><h3>结果反馈</h3><textarea id="feedback-prompt" placeholder="例如：基本面再出一版，或：结束了我不看了"></textarea><button id="feedback-send">对本次结果反馈</button></section><section class="research-actions"><h3>追踪</h3><p class="notice">对照首次研究看当前快照，不改四维原报告。需先完成研究。不设定时心跳，由本页手动发起。</p><textarea id="track-prompt" placeholder="可选：追踪时记住的口径，或本轮关注点"></textarea><button id="track-start">开始追踪</button><p id="track-status"></p></section><section class="research-report"><h3>最近追踪</h3><div id="track-result"></div></section><section class="research-feedback"><h3>追踪反馈</h3><textarea id="track-feedback-prompt" placeholder="例如：技术面再看一眼，或：记住别只看一天涨跌"></textarea><button id="track-feedback-send">对本次追踪反馈</button></section><section id="research-history"></section></section><h2>日 K 线</h2><canvas id="chart" width="900" height="280"></canvas><h2>最新公告</h2><ul id="notices"></ul></section>
     <section id="watchlist-view" hidden><h2>自选股</h2><div id="watchlist"></div></section>
+    <section id="paper-view" hidden>
+      <h2>模拟投资</h2>
+      <p class="notice">虚拟资金，按看板延迟行情计价，盈亏随涨跌变动。非投资建议。</p>
+      <div id="paper"></div>
+    </section>
+    <section id="profile-view" hidden>
+      <h2>用户画像</h2>
+      <p class="notice">由已记住口径和行为事件聚合，不存原话。</p>
+      <div id="profile"></div>
+    </section>
     <p class="notice">延迟行情，仅供研究辅助，不构成投资建议。</p>
   </main>
   <script src="/static/app.js"></script>

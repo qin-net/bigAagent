@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "stock_code": "300308",
+  "company_name": "中际旭创",
+  "as_of": "2026-06-30T00:00:00+00:00",
+  "price": 858.35,
+  "pe": 42.0,
+  "pb": 12.8,
+  "pe_percentile_5y": 78.0,
+  "pb_percentile_5y": 81.0,
+  "roe": 22.5,
+  "roe_stable": false,
+  "revenue_yoy": 48.0,
+  "profit_yoy": 62.0,
+  "gross_margin": 33.5,
+  "debt_ratio": 41.2,
+  "current_ratio": 2.1,
+  "operating_cf": 18.0,
+  "net_profit": 32.0,
+  "goodwill": 2.6,
+  "non_recurring_profit_ratio": 4.8
+}

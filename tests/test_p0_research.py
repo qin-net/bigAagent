@@ -38,11 +38,13 @@ class ScriptedAgentLLM:
         abstain: bool = False,
         unbound: bool = False,
         omit_relevance: bool = False,
+        memory_summary: str = "",
     ) -> None:
         self.role = role
         self.abstain = abstain
         self.unbound = unbound
         self.omit_relevance = omit_relevance
+        self.memory_summary = memory_summary
         self.phase = "tool"
         self.requests = []
 
@@ -80,7 +82,11 @@ class ScriptedAgentLLM:
             "output": {"report": report},
             "reflection": {"what_worked": ["used snapshot tool"]},
             "state_patch": {
-                "set": {},
+                "set": (
+                    {"private_memory.memory_summary": self.memory_summary}
+                    if self.memory_summary
+                    else {}
+                ),
                 "append": {},
                 "remove": {},
             },
