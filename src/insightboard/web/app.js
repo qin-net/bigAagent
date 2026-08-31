@@ -38,7 +38,7 @@ const toneClass = (value) => {
 const bullets = (items) => (items || []).filter(Boolean).map((item) => `<li>${safe(item)}</li>`).join('');
 const chips = (items) => (items || []).filter(Boolean).map((item) => `<span class="result-chip">${safe(item)}</span>`).join('');
 function view(name) {
-  ['market', 'detail', 'watchlist', 'paper', 'profile'].forEach((item) => {
+  ['market', 'detail', 'watchlist', 'paper', 'profile', 'experts'].forEach((item) => {
     document.querySelector(`#${item}-view`).hidden = item !== name;
   });
   document.querySelectorAll('nav button').forEach((button) => {
@@ -97,7 +97,8 @@ function renderLearningState(research, track) {
     ...preferences.map((item) => `${names[item.scope] || item.scope}口径`),
     ...(trackMemory?.memory_summary && !memories.some(([name]) => name === 'tracking') ? ['追踪记忆'] : []),
   ];
-  box.innerHTML = `<p><b>本标的已沉淀</b>：${memories.length} 份专家记忆，${preferences.length} 条用户口径${track ? '，并已完成追踪复核' : ''}。</p><p class="notice">后续分析会继续携带有效私有记忆；完整偏好可在用户画像中管理。</p><div class="learning-pills">${pills.map((item) => `<span class="learning-pill">${item}</span>`).join('')}</div>`;
+  box.innerHTML = `<p><b>本标的已沉淀</b>：${memories.length} 份专家记忆，${preferences.length} 条用户口径${track ? '，并已完成追踪复核' : ''}。</p><p class="notice">后续分析会继续携带有效私有记忆。<button class="button-quiet" id="open-experts-from-learn">打开专家工作台</button></p><div class="learning-pills">${pills.map((item) => `<span class="learning-pill">${item}</span>`).join('')}</div>`;
+  box.querySelector('#open-experts-from-learn').onclick = loadExperts;
 }
 
 function applyWorkflowState(research, track, paper) {
@@ -423,6 +424,122 @@ async function loadProfile(stock) {
   }
 }
 
+function renderMemoryList(title, items) {
+  const rows = (items || []).filter(Boolean);
+  if (!rows.length) return '';
+  return `<div class="expert-list"><h5>${title}</h5><ul>${rows.map((item) => `<li>${safe(item)}</li>`).join('')}</ul></div>`;
+}
+
+function uniqueTexts(items) {
+  const seen = new Set();
+  const rows = [];
+  (items || []).forEach((item) => {
+    const text = String(item || '').trim();
+    if (!text || seen.has(text)) return;
+    seen.add(text);
+    rows.push(text);
+  });
+  return rows;
+}
+
+function stripTaskLabel(text) {
+  return String(text || '')
+    .replace(/^[^：:]{1,16}[：:]\s*/, '')
+    .replace(/[（(]第[^)）]+[)）]\s*$/, '')
+    .trim() || String(text || '').trim();
+}
+
+function mergeExpertExperience(memories) {
+  const rows = memories || [];
+  const pick = (key) => uniqueTexts(rows.flatMap((item) => item[key] || []));
+  const summaries = uniqueTexts(rows.map((item) => stripTaskLabel(item.memory_summary || '')).filter(Boolean));
+  const lessons = pick('lessons');
+  return {
+    digest: lessons.length ? lessons.join('；') : summaries.join('；'),
+    lessons,
+    hypotheses: pick('active_hypotheses'),
+    falsifiers: pick('falsifiers_watched'),
+    questions: pick('open_questions'),
+    tasks: pick('pending_tasks'),
+  };
+}
+
+function renderExpertMemory(item) {
+  const stock = item.stock_code ? safe(item.stock_code) : '未绑定标的';
+  const carried = item.carried ? '已迭代' : '首轮沉淀';
+  const updated = zhTime(item.updated_at);
+  return `<article class="expert-memory">
+    <div class="expert-memory-head"><b>${stock}</b><span>${carried}</span>${updated ? `<span>${updated}</span>` : ''}</div>
+    ${item.memory_summary ? `<p>${safe(item.memory_summary)}</p>` : ''}
+    ${renderMemoryList('经验教训', item.lessons)}
+    ${renderMemoryList('当前假设', item.active_hypotheses)}
+    ${renderMemoryList('证伪条件', item.falsifiers_watched)}
+    ${renderMemoryList('未决问题', item.open_questions)}
+    ${renderMemoryList('待办', item.pending_tasks)}
+  </article>`;
+}
+
+function renderGroupedPreferences(preferences) {
+  const kinds = { constraint: '约束', preference: '偏好', anti_pattern: '避免再犯' };
+  const groups = [
+    { id: 'fundamental', title: '基本面专家' },
+    { id: 'technical', title: '技术面专家' },
+    { id: 'sentiment', title: '情绪面专家' },
+    { id: 'macro', title: '宏观专家' },
+  ];
+  const extra = [
+    { id: 'decision', title: '综合决策' },
+    { id: 'tracking', title: '追踪专家' },
+  ];
+  if (!(preferences || []).length) {
+    return '<p class="notice">还没有记住的决策偏好。分析或追踪时选择「记住」，会按维度归到对应专家。</p>';
+  }
+  const renderGroup = (group) => {
+    const rows = (preferences || []).filter((item) => item.scope === group.id);
+    const body = rows.length
+      ? rows.map((item) => `<div class="profile-pref"><div><span>${kinds[item.kind] || '口径'}</span><span>${item.stock_code === 'none' ? '全局' : safe(item.stock_code)}</span><p>${safe(item.statement)}</p></div></div>`).join('')
+      : '<p class="notice">暂无该专家口径</p>';
+    return `<div class="pref-expert-group"><h4>${group.title}</h4>${body}</div>`;
+  };
+  const extras = extra.filter((group) => (preferences || []).some((item) => item.scope === group.id));
+  return `<div class="pref-expert-grid">${groups.map(renderGroup).join('')}</div>${extras.length ? `<div class="pref-expert-extra">${extras.map(renderGroup).join('')}</div>` : ''}`;
+}
+
+function renderExperts(data) {
+  const prefs = renderGroupedPreferences(data.preferences || []);
+  const cards = (data.experts || []).map((expert) => {
+    const memories = expert.memories || [];
+    const merged = mergeExpertExperience(memories);
+    const digest = merged.digest || expert.duty;
+    const rounds = memories.length
+      ? `<details class="expert-rounds"><summary>分次分析记录<span>${memories.length} 条</span></summary>${memories.map(renderExpertMemory).join('')}</details>`
+      : '<p class="notice">还没有分次分析记录。</p>';
+    return `<article class="expert-card result-card">
+      <header><p class="result-kicker">跨任务经验</p><h3>${safe(expert.title)}</h3></header>
+      <p class="expert-duty">${safe(expert.duty)}</p>
+      <div class="result-chips"><span class="result-chip">覆盖 ${expert.stock_count || 0} 只标的</span><span class="result-chip">${expert.iterated ? '已跨轮继承' : '尚未跨轮'}</span></div>
+      <h4>经验总结</h4>
+      <p class="expert-digest">${safe(digest)}</p>
+      ${renderMemoryList('惯用假设', merged.hypotheses)}
+      ${renderMemoryList('惯用证伪', merged.falsifiers)}
+      ${renderMemoryList('未决问题', merged.questions)}
+      ${rounds}
+    </article>`;
+  }).join('');
+  return `<section class="content-card expert-pref-panel"><p class="section-kicker">DECISION PREFERENCE</p><h3>决策偏好</h3><p class="notice">按四位专家归类；综合决策与追踪口径单独列出。</p>${prefs}</section><div class="expert-grid">${cards}</div>`;
+}
+
+async function loadExperts() {
+  view('experts');
+  const box = document.querySelector('#experts');
+  box.innerHTML = '<p class="notice">正在读取专家状态…</p>';
+  try {
+    box.innerHTML = renderExperts(await api('/experts'));
+  } catch (error) {
+    box.innerHTML = `<p class="notice">专家状态读取失败：${error.message}</p>`;
+  }
+}
+
 async function generateProfile() {
   const button = document.querySelector('#profile-generate');
   button.disabled = true;
@@ -476,4 +593,4 @@ async function collectQuotes() {
   };
   setTimeout(poll, 800);
 }
-document.querySelector('#refresh').onclick = () => { page = 1; load(); }; document.querySelector('#collect').onclick = collectQuotes; document.querySelector('#collect-market').onclick = collectQuotes; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#previous').onclick = () => { page -= 1; load(); }; document.querySelector('#next').onclick = () => { page += 1; load(); }; document.querySelector('#research-start').onclick = startResearch; document.querySelector('#feedback-send').onclick = sendFeedback; document.querySelector('#track-start').onclick = startTrack; document.querySelector('#track-feedback-send').onclick = sendTrackFeedback; document.querySelector('#chart-mode-line').onclick = () => { chartMode = 'line'; drawChart(); }; document.querySelector('#chart-mode-k').onclick = () => { chartMode = 'k'; drawChart(); }; document.querySelector('#chart-collect').onclick = collectBars; document.querySelectorAll('nav button').forEach((button) => button.onclick = () => { if (button.dataset.view === 'watchlist') loadWatchlist(); else if (button.dataset.view === 'profile') loadProfile(); else if (button.dataset.view === 'paper') loadPaper(); else view('market'); }); document.querySelector('.back').onclick = () => view('market'); loadStatus(); load();
+document.querySelector('#refresh').onclick = () => { page = 1; load(); }; document.querySelector('#collect').onclick = collectQuotes; document.querySelector('#collect-market').onclick = collectQuotes; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#previous').onclick = () => { page -= 1; load(); }; document.querySelector('#next').onclick = () => { page += 1; load(); }; document.querySelector('#research-start').onclick = startResearch; document.querySelector('#feedback-send').onclick = sendFeedback; document.querySelector('#track-start').onclick = startTrack; document.querySelector('#track-feedback-send').onclick = sendTrackFeedback; document.querySelector('#chart-mode-line').onclick = () => { chartMode = 'line'; drawChart(); }; document.querySelector('#chart-mode-k').onclick = () => { chartMode = 'k'; drawChart(); }; document.querySelector('#chart-collect').onclick = collectBars; document.querySelectorAll('nav button').forEach((button) => button.onclick = () => { if (button.dataset.view === 'watchlist') loadWatchlist(); else if (button.dataset.view === 'profile') loadProfile(); else if (button.dataset.view === 'paper') loadPaper(); else if (button.dataset.view === 'experts') loadExperts(); else view('market'); }); document.querySelector('.back').onclick = () => view('market'); loadStatus(); load();

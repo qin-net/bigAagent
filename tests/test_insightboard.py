@@ -515,6 +515,63 @@ async def test_profile_api_lists_and_retires_preference(tmp_path, monkeypatch):
     assert client.delete("/api/v1/profile/preferences/pref-board").status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_experts_desk_lists_portrait_preference_and_experience(tmp_path, monkeypatch):
+    from insightagent.contracts import TaskStatus, utc_now
+    from insightagent.persistence import SQLiteDatabase, SQLiteStateStore
+    from insightagent.user_contracts import UserPreference
+    from insightagent.user_store import UserStore
+
+    agent_db = str(tmp_path / "insightagent.db")
+    monkeypatch.setenv("INSIGHTAGENT_DB_PATH", agent_db)
+    database = SQLiteDatabase(agent_db)
+    await database.initialize()
+    states = SQLiteStateStore(database)
+    state = await states.load_or_create(
+        agent_name="fundamental",
+        thesis_id="000001-initial",
+        stock_code="000001",
+    )
+    state.private_memory = {
+        "memory_summary": "盯经营现金流证伪",
+        "lessons": ["毛利率扩张要对照经营现金流"],
+        "active_hypotheses": ["估值修复依赖盈利兑现"],
+        "falsifiers_watched": ["经营现金流连续两季转负"],
+    }
+    state.status = TaskStatus.SUCCESS
+    await states.save(state, expected_version=state.version)
+    now = utc_now().isoformat()
+    await UserStore(database).save_preference(
+        UserPreference(
+            preference_id="pref-experts",
+            user_id="local",
+            status="active",
+            current_version="1",
+            kind="constraint",
+            scope="decision",
+            stock_code="none",
+            trigger="决策偏好",
+            title="决策偏好",
+            statement="没有现金流证据不重仓",
+            source="user_feedback",
+            source_utterance_id="u-exp",
+            source_run_id="r-exp",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    client = TestClient(create_app(str(tmp_path / "board.db")))
+    payload = client.get("/api/v1/experts").json()
+    fundamental = next(item for item in payload["experts"] if item["agent_name"] == "fundamental")
+    assert fundamental["title"] == "基本面专家"
+    assert fundamental["portrait"] == "盯经营现金流证伪"
+    assert fundamental["memories"][0]["lessons"] == ["毛利率扩张要对照经营现金流"]
+    assert payload["preferences"][0]["statement"] == "没有现金流证据不重仓"
+    html = client.get("/").text
+    assert "专家工作台" in html
+    assert 'id="experts-view"' in html
+
+
 def test_profile_generate_endpoint_returns_model_narrative(tmp_path, monkeypatch):
     async def fake_generate(**_kwargs):
         return {

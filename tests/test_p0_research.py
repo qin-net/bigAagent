@@ -1,6 +1,7 @@
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -30,6 +31,20 @@ from insightagent.workflows.initial_research import analyze_stock, format_cli_te
 FIXTURES = default_fixtures_dir()
 
 
+def _memory_state_patch(memory: dict) -> dict:
+    sets: dict = {}
+    appends: dict = {}
+    for key, value in (memory or {}).items():
+        path = "private_memory.{}".format(key)
+        if isinstance(value, list):
+            items = [str(item).strip() for item in value if str(item).strip()]
+            if items:
+                appends[path] = items
+        elif value not in (None, ""):
+            sets[path] = value
+    return {"set": sets, "append": appends, "remove": {}}
+
+
 class ScriptedAgentLLM:
     def __init__(
         self,
@@ -39,12 +54,16 @@ class ScriptedAgentLLM:
         unbound: bool = False,
         omit_relevance: bool = False,
         memory_summary: str = "",
+        memory: Optional[dict] = None,
     ) -> None:
         self.role = role
         self.abstain = abstain
         self.unbound = unbound
         self.omit_relevance = omit_relevance
-        self.memory_summary = memory_summary
+        self.memory = dict(memory or {})
+        if memory_summary:
+            self.memory["memory_summary"] = memory_summary
+        self.memory_summary = self.memory.get("memory_summary") or memory_summary
         self.phase = "tool"
         self.requests = []
 
@@ -83,15 +102,7 @@ class ScriptedAgentLLM:
             "status": "abstained" if report["abstain"] else "completed",
             "output": {"report": report},
             "reflection": {"what_worked": ["used snapshot tool"]},
-            "state_patch": {
-                "set": (
-                    {"private_memory.memory_summary": self.memory_summary}
-                    if self.memory_summary
-                    else {}
-                ),
-                "append": {},
-                "remove": {},
-            },
+            "state_patch": _memory_state_patch(self.memory),
         }
         self.phase = "done"
         return LLMResponse(

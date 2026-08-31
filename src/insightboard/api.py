@@ -11,6 +11,7 @@ from .collector import AkshareQuoteCollector, collect_once
 from .research import (
     agent_paths,
     generate_user_profile,
+    load_experts_desk,
     load_projected_run,
     load_user_profile,
     retire_user_preference,
@@ -261,6 +262,10 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
     @app.get("/api/v1/profile")
     async def user_profile(stock_code: str = "") -> dict:
         return await load_user_profile(stock_code=stock_code.strip() or None)
+
+    @app.get("/api/v1/experts")
+    async def experts_desk() -> dict:
+        return await load_experts_desk()
 
     @app.post("/api/v1/profile/generate")
     async def create_user_profile() -> dict:

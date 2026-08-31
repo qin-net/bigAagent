@@ -185,16 +185,16 @@ def _latest_expert_memories_sync(database: SQLiteDatabase) -> list[dict[str, Any
         except json.JSONDecodeError:
             continue
         memory = snapshot_private_memory(payload.get("private_memory") or {})
-        if not memory.get("memory_summary"):
+        if not memory:
             continue
         seen.add(key)
         items.append(
             {
                 "agent_name": row["agent_name"],
                 "stock_code": row["stock_code"] or "",
-                "memory_summary": memory["memory_summary"],
                 "carried": bool(row["parent_session_id"]),
                 "updated_at": row["updated_at"],
+                **memory,
             }
         )
     return items
@@ -258,6 +258,49 @@ async def load_user_profile(
         user_id=user_id
     )
     return profile
+
+
+EXPERT_ROLES = (
+    ("fundamental", "基本面专家", "看盈利质量、现金流和估值是否对得上。"),
+    ("technical", "技术面专家", "看趋势、位置和交易节奏，不替代基本面。"),
+    ("sentiment", "情绪面专家", "看资金与舆论温度，避免把情绪当事实。"),
+    ("macro", "宏观专家", "看政策与宏观环境对行业和标的的约束。"),
+    ("tracking", "追踪专家", "对照原判断看后续是否被证伪或需要复核。"),
+)
+
+
+async def load_experts_desk(
+    *,
+    user_id: str = "local",
+    db_path: Optional[str] = None,
+) -> dict[str, Any]:
+    agent_db_path, _, _, _ = agent_paths()
+    database = SQLiteDatabase(db_path or agent_db_path)
+    store = UserStore(database)
+    profile = await store.profile(user_id=user_id, stock_code=NONE)
+    memories = await _latest_expert_memories(database)
+    grouped: dict[str, list[dict[str, Any]]] = {role: [] for role, _, _ in EXPERT_ROLES}
+    for item in memories:
+        grouped.setdefault(item["agent_name"], []).append(item)
+    experts = []
+    for role, title, duty in EXPERT_ROLES:
+        rows = grouped.get(role) or []
+        portrait = next(
+            (item.get("memory_summary") for item in rows if item.get("memory_summary")),
+            "",
+        )
+        experts.append(
+            {
+                "agent_name": role,
+                "title": title,
+                "duty": duty,
+                "portrait": portrait,
+                "stock_count": len({item["stock_code"] for item in rows if item.get("stock_code")}),
+                "iterated": any(item.get("carried") for item in rows),
+                "memories": rows,
+            }
+        )
+    return {"experts": experts, "preferences": profile.get("preferences") or []}
 
 
 async def generate_user_profile(
