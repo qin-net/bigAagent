@@ -120,6 +120,8 @@ def test_detail_workflow_follows_business_sequence(tmp_path):
     assert "决定是否投入" in html
     assert "手动复核策略" in html
     assert "记忆与用户画像" in html
+    assert "私人投研模拟器" in html
+    assert "进入工作台" in html
 
 
 def test_quotes_collect_button_publishes_batch(tmp_path):

@@ -37,7 +37,23 @@ const toneClass = (value) => {
 };
 const bullets = (items) => (items || []).filter(Boolean).map((item) => `<li>${safe(item)}</li>`).join('');
 const chips = (items) => (items || []).filter(Boolean).map((item) => `<span class="result-chip">${safe(item)}</span>`).join('');
+function showCover() {
+  document.body.classList.add('cover-open');
+  document.querySelectorAll('nav button').forEach((button) => {
+    button.classList.toggle('active', button.dataset.view === 'cover');
+  });
+}
+
+function enterWorkbench() {
+  document.body.classList.remove('cover-open');
+}
+
 function view(name) {
+  if (name === 'cover') {
+    showCover();
+    return;
+  }
+  enterWorkbench();
   ['market', 'detail', 'watchlist', 'paper', 'profile', 'experts'].forEach((item) => {
     document.querySelector(`#${item}-view`).hidden = item !== name;
   });
@@ -593,4 +609,5 @@ async function collectQuotes() {
   };
   setTimeout(poll, 800);
 }
-document.querySelector('#refresh').onclick = () => { page = 1; load(); }; document.querySelector('#collect').onclick = collectQuotes; document.querySelector('#collect-market').onclick = collectQuotes; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#previous').onclick = () => { page -= 1; load(); }; document.querySelector('#next').onclick = () => { page += 1; load(); }; document.querySelector('#research-start').onclick = startResearch; document.querySelector('#feedback-send').onclick = sendFeedback; document.querySelector('#track-start').onclick = startTrack; document.querySelector('#track-feedback-send').onclick = sendTrackFeedback; document.querySelector('#chart-mode-line').onclick = () => { chartMode = 'line'; drawChart(); }; document.querySelector('#chart-mode-k').onclick = () => { chartMode = 'k'; drawChart(); }; document.querySelector('#chart-collect').onclick = collectBars; document.querySelectorAll('nav button').forEach((button) => button.onclick = () => { if (button.dataset.view === 'watchlist') loadWatchlist(); else if (button.dataset.view === 'profile') loadProfile(); else if (button.dataset.view === 'paper') loadPaper(); else if (button.dataset.view === 'experts') loadExperts(); else view('market'); }); document.querySelector('.back').onclick = () => view('market'); loadStatus(); load();
+document.querySelector('#refresh').onclick = () => { page = 1; load(); }; document.querySelector('#collect').onclick = collectQuotes; document.querySelector('#collect-market').onclick = collectQuotes; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#previous').onclick = () => { page -= 1; load(); }; document.querySelector('#next').onclick = () => { page += 1; load(); }; document.querySelector('#research-start').onclick = startResearch; document.querySelector('#feedback-send').onclick = sendFeedback; document.querySelector('#track-start').onclick = startTrack; document.querySelector('#track-feedback-send').onclick = sendTrackFeedback; document.querySelector('#chart-mode-line').onclick = () => { chartMode = 'line'; drawChart(); }; document.querySelector('#chart-mode-k').onclick = () => { chartMode = 'k'; drawChart(); }; document.querySelector('#chart-collect').onclick = collectBars; document.querySelector('#cover-enter').onclick = () => { enterWorkbench(); view('market'); };
+document.querySelectorAll('nav button').forEach((button) => button.onclick = () => { if (button.dataset.view === 'watchlist') loadWatchlist(); else if (button.dataset.view === 'profile') loadProfile(); else if (button.dataset.view === 'paper') loadPaper(); else if (button.dataset.view === 'experts') loadExperts(); else if (button.dataset.view === 'cover') showCover(); else view('market'); }); document.querySelector('.back').onclick = () => view('market'); loadStatus(); load();

@@ -6,7 +6,31 @@
   <title>InsightBoard</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>
+<body class="cover-open">
+  <section id="cover" class="cover" aria-label="项目封面">
+    <div class="cover-inner">
+      <p class="cover-kicker">INSIGHTAGENT · PERSONAL DESK</p>
+      <h1 class="cover-title">私人投研模拟器</h1>
+      <p class="cover-lead">五位专家分权交卷，虚拟资金随行情记账。把研究、决策、追踪和纪律留在同一条链路上，学费停在模拟盘。</p>
+      <ol class="cover-flow">
+        <li><b>分析</b><span>四维并行，主张须对上快照</span></li>
+        <li><b>投入</b><span>延迟价成交，持仓随涨跌</span></li>
+        <li><b>追踪</b><span>对照原判断，可维持或复评</span></li>
+        <li><b>沉淀</b><span>口径过闸门，专家只继承自己的记忆</span></li>
+      </ol>
+      <div class="cover-agents">
+        <article><small>01</small><b>基本面</b><p>现金流与估值是否对得上</p></article>
+        <article><small>02</small><b>技术面</b><p>趋势、位置与量价节奏</p></article>
+        <article><small>03</small><b>情绪</b><p>公告与持仓，不当标题当事实</p></article>
+        <article><small>04</small><b>宏观</b><p>环境约束，不给个股定价</p></article>
+        <article><small>05</small><b>追踪</b><p>值班对照原判断，点名复评</p></article>
+      </div>
+      <div class="cover-actions">
+        <button id="cover-enter" type="button">进入工作台</button>
+        <p>延迟行情 · 研究辅助 · 非投资建议</p>
+      </div>
+    </div>
+  </section>
   <main>
     <header>
       <div class="brand">
@@ -24,6 +48,7 @@
     </header>
 
     <nav aria-label="主导航">
+      <button data-view="cover">封面</button>
       <button data-view="market" class="active">市场</button>
       <button data-view="watchlist">自选</button>
       <button data-view="paper">模拟账户</button>
