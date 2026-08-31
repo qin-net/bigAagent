@@ -10,9 +10,14 @@ build/
 *.egg-info/
 .env
 .DS_Store
-data/
+data/*
+!data/kb.db
+!data/kb/
+data/kb/*
+!data/kb/kb_batch_manifest.json
 data/kb/incoming/
 *.db
+!data/kb.db
 *.db-wal
 *.db-shm
 opencode.json

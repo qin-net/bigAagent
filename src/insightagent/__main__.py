@@ -28,6 +28,9 @@ from .workflows.initial_research import (
 DEFAULT_DB_PATH = os.environ.get(
     "INSIGHTAGENT_DB_PATH", "data/insightagent.db"
 )
+DEFAULT_KB_PATH = os.environ.get(
+    "INSIGHTAGENT_KB_PATH", "data/kb.db"
+)
 DEFAULT_ARTIFACT_ROOT = os.environ.get(
     "INSIGHTAGENT_ARTIFACT_ROOT", "data/artifacts"
 )
@@ -105,7 +108,12 @@ def build_parser() -> argparse.ArgumentParser:
     pdf2md.add_argument("--force", action="store_true")
     pdf2md.add_argument("--json", action="store_true", dest="as_json")
     kb = commands.add_parser("kb", help="Methodology catalog")
-    kb.add_argument("--path", default=DEFAULT_DB_PATH)
+    kb.add_argument("--path", default=DEFAULT_KB_PATH)
+    kb.add_argument(
+        "--research-path",
+        default=DEFAULT_DB_PATH,
+        help="Research log database (sessions); distill writes here, cards go to --path",
+    )
     kb_commands = kb.add_subparsers(dest="kb_command", required=True)
     kb_commands.add_parser("seed", help="Insert built-in approved cards if empty")
     imported = kb_commands.add_parser("import", help="Import a candidate from markdown")
@@ -198,9 +206,6 @@ async def _run(args: argparse.Namespace) -> int:
     database = SQLiteDatabase(args.path)
     if args.db_command == "init":
         await database.initialize()
-        from .methodology import MethodologyCatalog
-
-        MethodologyCatalog(database).ensure_seeded()
         status = await database.status()
         print(
             json.dumps(
@@ -230,9 +235,8 @@ async def _run_kb(args: argparse.Namespace) -> int:
     from .methodology import MethodologyCatalog
     from .tracking_agent import distill_chapter
 
-    database = SQLiteDatabase(args.path)
-    await database.initialize()
-    catalog = MethodologyCatalog(database)
+    catalog_db = SQLiteDatabase(args.path)
+    catalog = MethodologyCatalog(catalog_db)
     catalog.ensure_seeded()
     command = args.kb_command
     if command == "seed":
@@ -288,7 +292,8 @@ async def _run_kb(args: argparse.Namespace) -> int:
         result = await distill_chapter(
             args.markdown,
             scope=args.scope,
-            database=database,
+            database=SQLiteDatabase(args.research_path),
+            kb_database=catalog_db,
             llm_adapter=build_llm(args.model),
             model=args.model,
             thinking_enabled=not args.no_thinking,

@@ -74,10 +74,11 @@ class BoardTechnicalAdapter:
         return {"indicator": indicator.model_dump(mode="json"), "kline": kline.model_dump(mode="json"), "price": price.model_dump(mode="json")}
 
 
-def agent_paths() -> tuple[str, str, str]:
+def agent_paths() -> tuple[str, str, str, str]:
     load_dotenv()
     return (
         resolve_path(os.environ.get("INSIGHTAGENT_DB_PATH", ""), default_relative="data/insightagent.db"),
+        resolve_path(os.environ.get("INSIGHTAGENT_KB_PATH", ""), default_relative="data/kb.db"),
         resolve_path(os.environ.get("INSIGHTAGENT_ARTIFACT_ROOT", ""), default_relative="data/artifacts"),
         os.environ.get("INSIGHTAGENT_MODEL", "deepseek-v4-flash"),
     )
@@ -217,7 +218,7 @@ async def _preferences_for_stock(database: SQLiteDatabase, stock_code: str) -> l
 
 
 async def load_projected_run(run_id: str, db_path: Optional[str] = None) -> Optional[dict[str, Any]]:
-    agent_db_path, _, _ = agent_paths()
+    agent_db_path, _, _, _ = agent_paths()
     database = SQLiteDatabase(db_path or agent_db_path)
     store = ResearchStore(database)
     bundle = await store.get_run(run_id)
@@ -245,7 +246,7 @@ async def load_user_profile(
     stock_code: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> dict[str, Any]:
-    agent_db_path, _, _ = agent_paths()
+    agent_db_path, _, _, _ = agent_paths()
     database = SQLiteDatabase(db_path or agent_db_path)
     store = UserStore(database)
     profile = await store.profile(user_id=user_id, stock_code=stock_code or NONE)
@@ -265,7 +266,7 @@ async def generate_user_profile(
     user_id: str = "local",
     db_path: Optional[str] = None,
 ) -> dict[str, Any]:
-    agent_db_path, _, model = agent_paths()
+    agent_db_path, _, _, model = agent_paths()
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         raise RuntimeError("DEEPSEEK_API_KEY is not configured")
@@ -295,14 +296,14 @@ async def retire_user_preference(
     user_id: str = "local",
     db_path: Optional[str] = None,
 ) -> bool:
-    agent_db_path, _, _ = agent_paths()
+    agent_db_path, _, _, _ = agent_paths()
     database = SQLiteDatabase(db_path or agent_db_path)
     store = UserStore(database)
     return await store.retire_preference(user_id=user_id, preference_id=preference_id)
 
 
 async def execute_job(job: dict[str, Any], board_store: Any = None) -> dict[str, Any]:
-    agent_db_path, artifact_root, model = agent_paths()
+    agent_db_path, _kb_path, artifact_root, model = agent_paths()
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         raise RuntimeError("DEEPSEEK_API_KEY is not configured")

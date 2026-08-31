@@ -25,6 +25,7 @@ from .methodology import (
     read_whitelisted_markdown,
     record_search,
     reset_catalog,
+    split_kb_database,
 )
 from .persistence import (
     FileArtifactStore,
@@ -411,11 +412,12 @@ async def distill_chapter(
     thinking_enabled: bool = False,
     roots: Optional[Sequence[Path]] = None,
     instruction: Optional[str] = None,
+    kb_database: Optional[SQLiteDatabase] = None,
 ) -> DistillResult:
     if scope not in {"fundamental", "technical", "sentiment", "macro"}:
         raise ValueError("unsupported distill scope")
     await database.initialize()
-    catalog = MethodologyCatalog(database)
+    catalog = MethodologyCatalog(kb_database or split_kb_database(database))
     catalog.ensure_seeded()
     path = Path(markdown_path)
     used_roots = list(roots or DEFAULT_MARKDOWN_ROOTS)
@@ -1101,7 +1103,7 @@ async def track_thesis(
     if not packed.get("decisions"):
         raise ValueError("baseline run has no decision")
     decision = packed["decisions"][0]
-    catalog = MethodologyCatalog(database)
+    catalog = MethodologyCatalog(split_kb_database(database))
     catalog.ensure_seeded()
 
     refs = baseline_run.snapshot_refs or {}

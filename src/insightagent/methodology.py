@@ -20,6 +20,7 @@ from .kb_contract import (
     migrate_payload,
     tokenize_query,
 )
+from .env import repo_root, resolve_path
 from .persistence import SQLiteDatabase
 
 TEXT_MAX = 200
@@ -241,6 +242,63 @@ METHODOLOGY_ENTRIES = SEED_ENTRIES
 _catalog: ContextVar[Optional["MethodologyCatalog"]] = ContextVar(
     "methodology_catalog", default=None
 )
+
+METHODOLOGY_DDL = """
+CREATE TABLE IF NOT EXISTS methodology_entries (
+    entry_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    current_version INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    scope_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS methodology_versions (
+    entry_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(entry_id, version),
+    FOREIGN KEY(entry_id) REFERENCES methodology_entries(entry_id)
+);
+"""
+
+DEFAULT_KB_RELATIVE = "data/kb.db"
+DEFAULT_RESEARCH_RELATIVE = "data/insightagent.db"
+DEFAULT_KB_ENTRIES_DIR = repo_root() / "doc" / "kb-entries"
+
+
+def default_kb_path() -> str:
+    import os
+
+    return resolve_path(
+        os.environ.get("INSIGHTAGENT_KB_PATH", ""),
+        default_relative=DEFAULT_KB_RELATIVE,
+    )
+
+
+def default_research_db_path() -> str:
+    import os
+
+    return resolve_path(
+        os.environ.get("INSIGHTAGENT_DB_PATH", ""),
+        default_relative=DEFAULT_RESEARCH_RELATIVE,
+    )
+
+
+def split_kb_database(research: SQLiteDatabase) -> SQLiteDatabase:
+    """Use data/kb.db when the research DB is the repo default; tests keep one file."""
+    import os
+
+    env = os.environ.get("INSIGHTAGENT_KB_PATH", "").strip()
+    if env:
+        path = Path(resolve_path(env, default_relative=DEFAULT_KB_RELATIVE)).resolve()
+        if path == research.path.resolve():
+            return research
+        return SQLiteDatabase(str(path))
+    if research.path.resolve() == Path(default_research_db_path()).resolve():
+        return SQLiteDatabase(default_kb_path())
+    return research
 
 
 def bind_catalog(catalog: "MethodologyCatalog"):
@@ -568,7 +626,15 @@ def read_whitelisted_markdown(path: str, roots: Sequence[Path]) -> str:
 class MethodologyCatalog:
     database: SQLiteDatabase
 
+    def ensure_schema(self) -> None:
+        connection = self.database.connect()
+        try:
+            connection.executescript(METHODOLOGY_DDL)
+        finally:
+            connection.close()
+
     def ensure_seeded(self) -> None:
+        self.ensure_schema()
         connection = self.database.connect()
         try:
             row = connection.execute(
@@ -580,6 +646,32 @@ class MethodologyCatalog:
                 self._upsert_sync(connection, dict(entry), status="approved")
         finally:
             connection.close()
+
+    def import_json_tree(
+        self, root: Path, *, connection=None
+    ) -> int:
+        if not root.is_dir():
+            return 0
+        own = connection is None
+        db = connection or self.database.connect()
+        count = 0
+        try:
+            for path in sorted(root.glob("**/*.json")):
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                payload = dict(raw.get("payload") or raw)
+                status = str(
+                    raw.get("status") or payload.get("status") or "approved"
+                )
+                if "id" not in payload and raw.get("entry_id"):
+                    payload["id"] = raw["entry_id"]
+                if "title" not in payload and raw.get("title"):
+                    payload["title"] = raw["title"]
+                self._upsert_sync(db, payload, status=status)
+                count += 1
+        finally:
+            if own:
+                db.close()
+        return count
 
     def search(
         self,

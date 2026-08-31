@@ -62,6 +62,7 @@ from ..methodology import (
     bind_catalog,
     drop_unretrieved_kb,
     reset_catalog,
+    split_kb_database,
 )
 from ..persistence import (
     FileArtifactStore,
@@ -109,6 +110,7 @@ from ..technicals import apply_computed_technical_semantics, apply_technical_rul
 
 STOCK_CODE_RE = re.compile(r"^\d{6}$")
 UnboundPolicy = Literal["fail", "abstain"]
+EVIDENCE_BIND_RETRIES = 2
 
 
 class FeedbackError(ValueError):
@@ -435,7 +437,7 @@ async def analyze_stock(
                 show_intent_echo=show_intent_echo,
             )
 
-        fundamental_future = _run_fundamental_agent(
+        fundamental_future = _bind_fundamental_with_retries(
             snapshot=snapshot,
             run=run,
             database=database,
@@ -451,6 +453,8 @@ async def analyze_stock(
                 intent=intent,
                 preference_statements=[item.statement for item in fund_prefs],
             ),
+            unbound_policy=unbound_policy,
+            audit=audit,
         )
         technical_future = _run_technical_agent(
             tech_fields=tech_fields,
@@ -485,7 +489,7 @@ async def analyze_stock(
             ),
         )
         macro_future = (
-            _run_macro_agent(
+            _bind_macro_with_retries(
                 macro_fields=macro_fields,
                 run=run,
                 database=database,
@@ -502,6 +506,8 @@ async def analyze_stock(
                         item.statement for item in macro_prefs
                     ],
                 ),
+                unbound_policy=unbound_policy,
+                audit=audit,
             )
             if macro_fetch_error is None
             else _immediate_macro_abstention()
@@ -633,23 +639,6 @@ async def analyze_stock(
             run_id=run.run_id,
             session_id=run.session_ids.get("macro"),
         )
-
-        try:
-            bind_report_evidence(fundamental_report, snapshot)
-        except EvidenceBindingError as error:
-            if unbound_policy == "abstain":
-                fundamental_report = _abstain_for_unbound(snapshot, error)
-            else:
-                raise
-        try:
-            bind_macro_report_evidence(
-                macro_report, MacroSnapshot(**macro_fields["macro"])
-            )
-        except EvidenceBindingError as error:
-            if unbound_policy == "abstain":
-                macro_report = _abstain_macro("证据绑定失败，改为弃权。")
-            else:
-                raise
 
         decision = build_multi_factor_decision(
             fundamental_report,
@@ -857,7 +846,7 @@ async def feedback_on_run(
                     run_id=target_run.run_id,
                 )
             else:
-                report, _ = await _run_fundamental_agent(
+                report, _ = await _bind_fundamental_with_retries(
                     snapshot=snapshot,
                     run=target_run,
                     database=database,
@@ -868,14 +857,9 @@ async def feedback_on_run(
                     user_query=_feedback_query(
                         target_run, snapshot, intent, prefs["fundamental"], "fundamental"
                     ),
+                    unbound_policy=unbound_policy,
+                    audit=audit,
                 )
-                try:
-                    bind_report_evidence(report, snapshot)
-                except EvidenceBindingError as error:
-                    if unbound_policy == "abstain":
-                        report = _abstain_for_unbound(snapshot, error)
-                    else:
-                        raise
                 reports["fundamental"] = report
                 await audit.append(
                     "agent_completed",
@@ -1177,7 +1161,7 @@ async def _rerun_or_abstain_macro(
         )
         return report
     try:
-        report, _ = await _run_macro_agent(
+        report, _ = await _bind_macro_with_retries(
             macro_fields=macro_fields,
             run=run,
             database=database,
@@ -1185,16 +1169,9 @@ async def _rerun_or_abstain_macro(
             model=model,
             thinking_enabled=thinking,
             user_query=query,
+            unbound_policy=unbound_policy,
+            audit=audit,
         )
-        try:
-            bind_macro_report_evidence(
-                report, MacroSnapshot(**macro_fields["macro"])
-            )
-        except EvidenceBindingError:
-            if unbound_policy == "abstain":
-                report = _abstain_macro("证据绑定失败，改为弃权。")
-            else:
-                raise
         await audit.append(
             "agent_completed",
             {
@@ -1291,7 +1268,7 @@ async def _prepare_intent(
 
 
 def _activate_catalog(database: SQLiteDatabase):
-    catalog = MethodologyCatalog(database)
+    catalog = MethodologyCatalog(split_kb_database(database))
     catalog.ensure_seeded()
     return bind_catalog(catalog)
 
@@ -1323,6 +1300,139 @@ async def _prepare_session(
     session_id = str(uuid4())
     run.session_ids[agent_name] = session_id
     return session_id, parent_id, attach_prior_memory(user_query, memory)
+
+
+def _evidence_retry_query(
+    base: str, error: EvidenceBindingError, *, role: str
+) -> str:
+    if error.numbers:
+        detail = "未绑定数字（必须从本轮快照或规则原文逐字抄录，禁止四舍五入）：{}".format(
+            ", ".join(str(item) for item in error.numbers)
+        )
+    elif role == "fundamental":
+        detail = (
+            "缺 citations，或快照含 cashflow_lag / value_trap_risk "
+            "却未引用对应 rule。"
+        )
+    else:
+        detail = "缺 citations，或利率数字未从宏观快照原文抄录。"
+    return (
+        "{}\n\n[证据绑定失败，必须从头重做本维报告。"
+        "只使用工具返回的数字和本轮检索到的知识库 id。{}]"
+    ).format(base, detail)
+
+
+async def _bind_fundamental_with_retries(
+    *,
+    snapshot: FundamentalSnapshot,
+    run: RunRecord,
+    database: SQLiteDatabase,
+    artifacts: FileArtifactStore,
+    llm_adapter: LLMAdapter,
+    model: str,
+    thinking_enabled: bool,
+    user_query: str,
+    unbound_policy: UnboundPolicy,
+    audit: SQLiteAuditLog,
+) -> tuple[Report, str]:
+    query = user_query
+    last_error: Optional[EvidenceBindingError] = None
+    session_id = ""
+    report: Optional[Report] = None
+    for attempt in range(1 + EVIDENCE_BIND_RETRIES):
+        report, session_id = await _run_fundamental_agent(
+            snapshot=snapshot,
+            run=run,
+            database=database,
+            artifacts=artifacts,
+            llm_adapter=llm_adapter,
+            model=model,
+            thinking_enabled=thinking_enabled,
+            user_query=query,
+        )
+        try:
+            bind_report_evidence(report, snapshot)
+            if attempt:
+                await audit.append(
+                    "evidence_bind_recovered",
+                    {"agent": "fundamental", "attempt": attempt},
+                    run_id=run.run_id,
+                    session_id=session_id,
+                )
+            return report, session_id
+        except EvidenceBindingError as error:
+            last_error = error
+            await audit.append(
+                "evidence_bind_retry",
+                {
+                    "agent": "fundamental",
+                    "attempt": attempt,
+                    "numbers": list(error.numbers),
+                    "message": str(error),
+                },
+                run_id=run.run_id,
+                session_id=session_id,
+            )
+            query = _evidence_retry_query(user_query, error, role="fundamental")
+    if unbound_policy == "abstain":
+        return _abstain_for_unbound(snapshot, last_error), session_id
+    raise last_error
+
+
+async def _bind_macro_with_retries(
+    *,
+    macro_fields: Dict[str, Any],
+    run: RunRecord,
+    database: SQLiteDatabase,
+    llm_adapter: LLMAdapter,
+    model: str,
+    thinking_enabled: bool,
+    user_query: str,
+    unbound_policy: UnboundPolicy,
+    audit: SQLiteAuditLog,
+) -> tuple[Report, str]:
+    query = user_query
+    last_error: Optional[EvidenceBindingError] = None
+    session_id = ""
+    report: Optional[Report] = None
+    snapshot = MacroSnapshot(**macro_fields["macro"])
+    for attempt in range(1 + EVIDENCE_BIND_RETRIES):
+        report, session_id = await _run_macro_agent(
+            macro_fields=macro_fields,
+            run=run,
+            database=database,
+            llm_adapter=llm_adapter,
+            model=model,
+            thinking_enabled=thinking_enabled,
+            user_query=query,
+        )
+        try:
+            bind_macro_report_evidence(report, snapshot)
+            if attempt:
+                await audit.append(
+                    "evidence_bind_recovered",
+                    {"agent": "macro", "attempt": attempt},
+                    run_id=run.run_id,
+                    session_id=session_id,
+                )
+            return report, session_id
+        except EvidenceBindingError as error:
+            last_error = error
+            await audit.append(
+                "evidence_bind_retry",
+                {
+                    "agent": "macro",
+                    "attempt": attempt,
+                    "numbers": list(error.numbers),
+                    "message": str(error),
+                },
+                run_id=run.run_id,
+                session_id=session_id,
+            )
+            query = _evidence_retry_query(user_query, error, role="macro")
+    if unbound_policy == "abstain":
+        return _abstain_macro("证据绑定失败，改为弃权。"), session_id
+    raise last_error
 
 
 async def _run_fundamental_agent(
