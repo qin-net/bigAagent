@@ -82,16 +82,31 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _run_research_worker(store: BoardStore) -> int:
     import time
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+
     store.initialize_research()
-    store.recover_research()
+    store.recover_research(older_than_minutes=8)
+    timeout_seconds = 8 * 60
     while True:
+        store.recover_research(older_than_minutes=8)
         item = store.claim_research()
         if item:
             try:
                 prompt_file = spool_path(item["job_id"])
                 item["prompt"] = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else "none"
-                result = execute_job_sync(item, store)
-                store.finish_research(item["job_id"], run_id=result.get("run_id"), noop=result.get("noop", False), rerun_dimensions=result.get("rerun_dimensions", []))
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(execute_job_sync, item, store)
+                    try:
+                        result = future.result(timeout=timeout_seconds)
+                    except FutureTimeout:
+                        store.finish_research(item["job_id"], error="研究超时，请再点一次分析或追踪")
+                    else:
+                        store.finish_research(
+                            item["job_id"],
+                            run_id=result.get("run_id"),
+                            noop=result.get("noop", False),
+                            rerun_dimensions=result.get("rerun_dimensions", []),
+                        )
             except Exception as error:
                 store.finish_research(item["job_id"], error="{}: {}".format(type(error).__name__, error))
             finally:

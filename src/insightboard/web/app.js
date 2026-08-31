@@ -4,7 +4,30 @@ const text = (value) => value === null || value === undefined ? '-' : value;
 const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const money = (value) => value === null || value === undefined ? '-' : `${(value / 100000000).toFixed(2)} 亿`;
 const yuan = (value) => value === null || value === undefined ? '-' : `${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`;
-const api = (path, options) => fetch(`/api/v1${path}`, options).then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.detail || '请求失败'); return data; });
+const api = (path, options) => fetch(`/api/v1${path}`, options).then(async (response) => {
+  const data = await response.json();
+  if (!response.ok) {
+    const detail = data.detail;
+    let message = '请求失败';
+    let jobId = '';
+    if (typeof detail === 'string') message = detail;
+    else if (detail && typeof detail === 'object') {
+      message = detail.message || detail.detail || '请求失败';
+      jobId = detail.job_id || '';
+    }
+    const error = new Error(explainError(message));
+    if (jobId) error.jobId = jobId;
+    throw error;
+  }
+  return data;
+});
+const explainError = (message) => {
+  const text = String(message || '');
+  if (/not configured|DEEPSEEK|模型密钥/i.test(text)) return '未配置模型密钥，无法开始分析或追踪';
+  if (/RetryExhausted|retry attempts/i.test(text)) return '模型接口连续失败，请稍后重试';
+  if (/\[object Object\]/.test(text)) return '该标的已有任务进行中';
+  return text || '请求失败';
+};
 const ZH = {
   stance: { buy: '买入', hold: '持有', sell: '卖出', abstain: '暂不判断' },
   rating: { buy: '买入', hold: '持有', sell: '卖出', abstain: '暂不判断' },
@@ -316,9 +339,9 @@ function jobLabels(kind) {
     ? { queued: '追踪排队', running: '追踪中', success: '追踪完成', unchanged: '未重跑追踪', failed: '追踪失败' }
     : { queued: '排队中', running: '研究中', success: '研究完成', unchanged: '未改变结论，旧报告未改', failed: '失败' };
 }
-async function pollResearch(jobId) { try { const job = await api(`/research/jobs/${jobId}`); const labels = jobLabels(job.kind); const trackish = String(job.kind || '').startsWith('track'); const statusEl = document.querySelector(trackish ? '#track-status' : '#research-status'); const failed = job.status === 'failed' ? `${labels.failed}：${job.error || '未知错误'}` : ''; statusEl.textContent = failed || labels[job.status] || job.status; if (job.status === 'success') { if (job.run_id) { const data = await api(`/research/runs/${job.run_id}`); if (trackish) { renderTrack(data); currentTrackJobId = job.job_id || jobId; } else { renderResearch(data); currentJobId = job.job_id || jobId; } } await loadHistory(currentCode); return; } if (job.status === 'unchanged') { if (trackish) { const current = await api(`/research/stocks/${currentCode}/track`).catch(() => null); if (current) { currentTrackJobId = current.job_id; renderTrack(current); } } else { const current = await api(`/research/stocks/${currentCode}/current`); currentJobId = current.job_id; renderResearch(current); } await loadHistory(currentCode); return; } if (job.status !== 'failed') setTimeout(() => pollResearch(jobId), 2500); } catch (error) { document.querySelector('#research-status').textContent = error.message; } }
-async function startResearch() { try { setStage('research', 'research', { state: 'current', label: '分析中' }); const data = await api('/research/jobs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({stock_code: currentCode, kind: 'analyze', prompt: document.querySelector('#research-prompt').value || 'none'}) }); currentJobId = data.job_id; pollResearch(currentJobId); } catch (error) { document.querySelector('#research-status').textContent = error.message; } }
-async function startTrack() { try { setStage('track', 'track', { state: 'current', label: '追踪中' }); const data = await api('/research/jobs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({stock_code: currentCode, kind: 'track', prompt: document.querySelector('#track-prompt').value || 'none'}) }); currentTrackJobId = data.job_id; pollResearch(currentTrackJobId); } catch (error) { document.querySelector('#track-status').textContent = error.message; } }
+async function pollResearch(jobId) { try { const job = await api(`/research/jobs/${jobId}`); const labels = jobLabels(job.kind); const trackish = String(job.kind || '').startsWith('track'); const statusEl = document.querySelector(trackish ? '#track-status' : '#research-status'); const failed = job.status === 'failed' ? `${labels.failed}：${explainError(job.error || '未知错误')}` : ''; statusEl.textContent = failed || labels[job.status] || job.status; if (job.status === 'success') { if (job.run_id) { const data = await api(`/research/runs/${job.run_id}`); if (trackish) { renderTrack(data); currentTrackJobId = job.job_id || jobId; } else { renderResearch(data); currentJobId = job.job_id || jobId; } } await loadHistory(currentCode); return; } if (job.status === 'unchanged') { if (trackish) { const current = await api(`/research/stocks/${currentCode}/track`).catch(() => null); if (current) { currentTrackJobId = current.job_id; renderTrack(current); } } else { const current = await api(`/research/stocks/${currentCode}/current`); currentJobId = current.job_id; renderResearch(current); } await loadHistory(currentCode); return; } if (job.status !== 'failed') setTimeout(() => pollResearch(jobId), 2500); } catch (error) { const trackish = jobId === currentTrackJobId; document.querySelector(trackish ? '#track-status' : '#research-status').textContent = explainError(error.message); } }
+async function startResearch() { try { if (!currentCode) { document.querySelector('#research-status').textContent = '请先打开一只股票'; return; } setStage('research', 'research', { state: 'current', label: '分析中' }); const data = await api('/research/jobs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({stock_code: currentCode, kind: 'analyze', prompt: document.querySelector('#research-prompt').value || 'none'}) }); currentJobId = data.job_id; pollResearch(currentJobId); } catch (error) { if (error.jobId) { currentJobId = error.jobId; document.querySelector('#research-status').textContent = error.message; pollResearch(error.jobId); return; } document.querySelector('#research-status').textContent = error.message; } }
+async function startTrack() { try { if (!currentCode) { document.querySelector('#track-status').textContent = '请先打开一只股票'; return; } setStage('track', 'track', { state: 'current', label: '追踪中' }); const data = await api('/research/jobs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({stock_code: currentCode, kind: 'track', prompt: document.querySelector('#track-prompt').value || 'none'}) }); currentTrackJobId = data.job_id; pollResearch(currentTrackJobId); } catch (error) { if (error.jobId) { currentTrackJobId = error.jobId; document.querySelector('#track-status').textContent = error.message; pollResearch(error.jobId); return; } document.querySelector('#track-status').textContent = error.message; } }
 async function sendFeedback() { if (!currentJobId || !currentRunId) { document.querySelector('#research-status').textContent = '暂无可反馈的研究结果'; return; } try { const data = await api(`/research/jobs/${currentJobId}/feedback`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt: document.querySelector('#feedback-prompt').value}) }); currentJobId = data.job_id; pollResearch(currentJobId); } catch (error) { document.querySelector('#research-status').textContent = error.message; } }
 async function sendTrackFeedback() { if (!currentTrackJobId || !currentTrackRunId) { document.querySelector('#track-status').textContent = '暂无可反馈的追踪结果'; return; } try { const data = await api(`/research/jobs/${currentTrackJobId}/feedback`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt: document.querySelector('#track-feedback-prompt').value}) }); currentTrackJobId = data.job_id; pollResearch(currentTrackJobId); } catch (error) { document.querySelector('#track-status').textContent = error.message; } }
 async function detail(code) {

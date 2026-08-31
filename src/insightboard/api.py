@@ -20,6 +20,8 @@ from .research import (
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from insightagent.env import load_dotenv
+
 from .store import BoardStore
 
 
@@ -46,6 +48,7 @@ class PickMemoryRequest(BaseModel):
 
 
 def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
+    load_dotenv()
     store = BoardStore(db_path)
     store.initialize()
     store.initialize_research()
@@ -174,7 +177,7 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
             agent_paths()
             import os
             if not os.environ.get("DEEPSEEK_API_KEY"):
-                raise HTTPException(status_code=503, detail="research is not configured")
+                raise HTTPException(status_code=503, detail="未配置模型密钥，无法开始分析或追踪")
             job = store.create_research_job(
                 request.stock_code.strip(), kind=request.kind, prompt=request.prompt,
             )
@@ -185,7 +188,13 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error))
         if job.get("existing"):
-            raise HTTPException(status_code=409, detail={"job_id": job["job_id"]})
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "该标的已有任务进行中",
+                    "job_id": job["job_id"],
+                },
+            )
         return {key: job[key] for key in ("job_id", "stock_code", "kind", "status", "created_at")}
 
     @app.post("/api/v1/research/jobs/{job_id}/feedback")
@@ -207,7 +216,13 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error))
         if created.get("existing"):
-            raise HTTPException(status_code=409, detail={"job_id": created["job_id"]})
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "该标的已有任务进行中",
+                    "job_id": created["job_id"],
+                },
+            )
         return {key: created[key] for key in ("job_id", "stock_code", "kind", "status", "created_at")}
 
     @app.get("/api/v1/research/jobs/{job_id}")

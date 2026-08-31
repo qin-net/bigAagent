@@ -82,6 +82,12 @@ def test_api_creates_track_job(tmp_path, monkeypatch):
     ).json()
     assert payload["kind"] == "track"
     assert payload["status"] == "queued"
+    again = client.post(
+        "/api/v1/research/jobs",
+        json={"stock_code": "000858", "kind": "track", "prompt": "none"},
+    )
+    assert again.status_code == 409
+    assert again.json()["detail"]["job_id"] == payload["job_id"]
     html = client.get("/").text
     assert "track-start" in html
 
