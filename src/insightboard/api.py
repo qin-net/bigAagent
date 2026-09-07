@@ -58,7 +58,7 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
     collect_state = {"running": False}
     bars_lock = threading.Lock()
     bars_running: set[str] = set()
-    app = FastAPI(title="InsightBoard", version="0.1.0")
+    app = FastAPI(title="bigAagent", version="0.1.0")
     static_dir = Path(__file__).with_name("web")
 
     def _web_file(name: str, media_type: str) -> FileResponse:

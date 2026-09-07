@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "insightagent"
 version = "0.1.0"
-description = "A lightweight, isolated agent runtime for InsightAgent"
+description = "bigAagent: a lightweight A-share research desk with isolated agents"
 requires-python = ">=3.9"
 dependencies = [
   "openai",
