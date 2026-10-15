@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 from uuid import uuid4
 
 from .contracts import LLMMessage, LLMRequest, utc_now

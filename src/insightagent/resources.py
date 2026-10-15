@@ -207,7 +207,16 @@ class CallOrchestrator:
         self.registry = registry
         self.retry_policies = {"default": ExponentialBackoff()}
         self.retry_policies.update(retry_policies or {})
-        self._semaphore = asyncio.Semaphore(max_parallel_calls)
+        # Created lazily: on Python 3.9 asyncio.Semaphore binds the current
+        # event loop at construction time, so building it in __init__ breaks
+        # whenever the orchestrator is constructed outside a running loop.
+        self._max_parallel_calls = max_parallel_calls
+        self._semaphore: Optional[asyncio.Semaphore] = None
+
+    def _parallel_gate(self) -> asyncio.Semaphore:
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(self._max_parallel_calls)
+        return self._semaphore
 
     async def dispatch_calls(
         self, calls: list[ResourceCall]
@@ -260,7 +269,7 @@ class CallOrchestrator:
             async def operation() -> Any:
                 nonlocal attempts
                 attempts += 1
-                async with self._semaphore:
+                async with self._parallel_gate():
                     return await asyncio.wait_for(
                         resource.invoke(
                             call.arguments,

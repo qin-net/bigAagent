@@ -1158,145 +1158,158 @@ async def track_thesis(
         run_id=track_run.run_id,
     )
 
-    from .workflows.initial_research import _prepare_intent
+    try:
+        from .workflows.initial_research import _prepare_intent
 
-    extract_llm = extract_llm_adapter or llm_adapter
-    intent, show_intent_echo = await _prepare_intent(
-        user_prompt=user_prompt,
-        user_id=user_id,
-        run=track_run,
-        code=track_run.stock_code,
-        llm_adapter=extract_llm,
-        model=model,
-        user_store=user_store,
-        audit=audit,
-        moment="pre_run",
-    )
-    prior = await store.latest_track_run(track_run.thesis_id)
-    if prior is not None:
-        pending = await user_store.intent_for_run_moment(
-            run_id=prior["run"]["run_id"],
-            moment="post_track",
-            effect="this_run",
+        extract_llm = extract_llm_adapter or llm_adapter
+        intent, show_intent_echo = await _prepare_intent(
+            user_prompt=user_prompt,
+            user_id=user_id,
+            run=track_run,
+            code=track_run.stock_code,
+            llm_adapter=extract_llm,
+            model=model,
+            user_store=user_store,
+            audit=audit,
+            moment="pre_run",
         )
-        if pending is not None:
-            intent = overlay_none_slots(intent, pending)
-    if overlay_intent is not None:
-        intent = overlay_none_slots(intent, overlay_intent)
+        prior = await store.latest_track_run(track_run.thesis_id)
+        if prior is not None:
+            pending = await user_store.intent_for_run_moment(
+                run_id=prior["run"]["run_id"],
+                moment="post_track",
+                effect="this_run",
+            )
+            if pending is not None:
+                intent = overlay_none_slots(intent, pending)
+        if overlay_intent is not None:
+            intent = overlay_none_slots(intent, overlay_intent)
 
-    prefs_by_scope = await _load_prefs_by_scope(
-        user_store, user_id=user_id, stock_code=track_run.stock_code
-    )
-    required = list(must_call_dims or [])
+        prefs_by_scope = await _load_prefs_by_scope(
+            user_store, user_id=user_id, stock_code=track_run.stock_code
+        )
+        required = list(must_call_dims or [])
 
-    tool_context = TrackToolContext(
-        catalog=catalog,
-        tracking_context=tracking_context.model_dump(mode="json"),
-        prescreen=prescreen_payload,
-        current=current_snaps,
-        track_run=track_run,
-        database=database,
-        artifacts=artifacts,
-        llm_adapter=llm_adapter,
-        expert_adapters=expert_adapters or {},
-        model=model,
-        thinking_enabled=thinking_enabled,
-        intent=intent,
-        prefs_by_scope=prefs_by_scope,
-        must_call_dims=required,
-    )
-    agent = AgentInstance(
-        name="tracking",
-        llm_adapter=llm_adapter,
-        config=tracking_runtime_config(
+        tool_context = TrackToolContext(
+            catalog=catalog,
+            tracking_context=tracking_context.model_dump(mode="json"),
+            prescreen=prescreen_payload,
+            current=current_snaps,
+            track_run=track_run,
+            database=database,
+            artifacts=artifacts,
+            llm_adapter=llm_adapter,
+            expert_adapters=expert_adapters or {},
             model=model,
             thinking_enabled=thinking_enabled,
-            final_output_model=TrackingDeliverable,
-        ),
-        state_store=SQLiteStateStore(database),
-        context_archive=SQLiteContextArchive(database),
-    )
-    register_track_tools(agent, tool_context)
-    token = bind_catalog(catalog)
-    track_parent_id, track_memory = await prior_session_memory(
-        SQLiteStateStore(database),
-        agent_name="tracking",
-        thesis_id=track_run.thesis_id,
-    )
-    user_query = attach_prior_memory(
-        _track_user_query(
-            thesis_id=track_run.thesis_id,
-            stock_code=track_run.stock_code,
-            baseline_run_id=baseline_run.run_id,
-            instruction=instruction,
             intent=intent,
             prefs_by_scope=prefs_by_scope,
             must_call_dims=required,
-        ),
-        track_memory,
-    )
-    try:
-        final = await agent.run(
-            user_query,
-            session_id=session_id,
-            parent_session_id=track_parent_id,
-            business_context={
-                "task": "track",
-                "stock_code": track_run.stock_code,
-                "thesis_id": track_run.thesis_id,
-                "run_id": track_run.run_id,
-            },
         )
-    finally:
-        reset_catalog(token)
+        agent = AgentInstance(
+            name="tracking",
+            llm_adapter=llm_adapter,
+            config=tracking_runtime_config(
+                model=model,
+                thinking_enabled=thinking_enabled,
+                final_output_model=TrackingDeliverable,
+            ),
+            state_store=SQLiteStateStore(database),
+            context_archive=SQLiteContextArchive(database),
+        )
+        register_track_tools(agent, tool_context)
+        token = bind_catalog(catalog)
+        track_parent_id, track_memory = await prior_session_memory(
+            SQLiteStateStore(database),
+            agent_name="tracking",
+            thesis_id=track_run.thesis_id,
+        )
+        user_query = attach_prior_memory(
+            _track_user_query(
+                thesis_id=track_run.thesis_id,
+                stock_code=track_run.stock_code,
+                baseline_run_id=baseline_run.run_id,
+                instruction=instruction,
+                intent=intent,
+                prefs_by_scope=prefs_by_scope,
+                must_call_dims=required,
+            ),
+            track_memory,
+        )
+        try:
+            final = await agent.run(
+                user_query,
+                session_id=session_id,
+                parent_session_id=track_parent_id,
+                business_context={
+                    "task": "track",
+                    "stock_code": track_run.stock_code,
+                    "thesis_id": track_run.thesis_id,
+                    "run_id": track_run.run_id,
+                },
+            )
+        finally:
+            reset_catalog(token)
 
-    raw = final.output if isinstance(final.output, dict) else {}
-    deliverable = finalize_deliverable(
-        raw,
-        prescreen_payload=prescreen_payload,
-        skill_calls=tool_context.skill_calls,
-    )
-    dumped = deliverable.model_dump(mode="json")
-    for item in tool_context.skill_calls:
-        await audit.append(
-            "agent_dispatched",
-            {
-                "trigger_reason": item.get("reason"),
-                "target_agent": item.get("agent"),
-                "question": item.get("question"),
-                "status": item.get("status"),
-            },
+        raw = final.output if isinstance(final.output, dict) else {}
+        deliverable = finalize_deliverable(
+            raw,
+            prescreen_payload=prescreen_payload,
+            skill_calls=tool_context.skill_calls,
+        )
+        dumped = deliverable.model_dump(mode="json")
+        for item in tool_context.skill_calls:
+            await audit.append(
+                "agent_dispatched",
+                {
+                    "trigger_reason": item.get("reason"),
+                    "target_agent": item.get("agent"),
+                    "question": item.get("question"),
+                    "status": item.get("status"),
+                },
+                run_id=track_run.run_id,
+                session_id=session_id,
+            )
+        timeline_payload = {
+            "schema_version": "1",
+            "mode": "track_day",
+            "stock_code": track_run.stock_code,
+            "thesis_id": track_run.thesis_id,
+            "advice": deliverable.status,
+            "triggers_hit": deliverable.triggers_hit,
+            "suggested_agent": prescreen_payload.get("suggested_agent"),
+            "triggers": prescreen_payload.get("triggers") or [],
+            "dispatches": [item.get("agent") for item in tool_context.skill_calls],
+            "deliverable": dumped,
+        }
+        await store.save_timeline(
+            track_run.thesis_id, timeline_payload, run_id=track_run.run_id
+        )
+        track_run.status = "success"
+        track_run.updated_at = utc_now()
+        await store.save_run(track_run)
+        return TrackResult(
+            thesis_id=track_run.thesis_id,
             run_id=track_run.run_id,
             session_id=session_id,
+            deliverable=dumped,
+            prescreen=prescreen_payload,
+            skill_calls=list(tool_context.skill_calls),
+            intent=intent,
+            show_intent_echo=show_intent_echo,
         )
-    timeline_payload = {
-        "schema_version": "1",
-        "mode": "track_day",
-        "stock_code": track_run.stock_code,
-        "thesis_id": track_run.thesis_id,
-        "advice": deliverable.status,
-        "triggers_hit": deliverable.triggers_hit,
-        "suggested_agent": prescreen_payload.get("suggested_agent"),
-        "triggers": prescreen_payload.get("triggers") or [],
-        "dispatches": [item.get("agent") for item in tool_context.skill_calls],
-        "deliverable": dumped,
-    }
-    await store.save_timeline(
-        track_run.thesis_id, timeline_payload, run_id=track_run.run_id
-    )
-    track_run.status = "success"
-    track_run.updated_at = utc_now()
-    await store.save_run(track_run)
-    return TrackResult(
-        thesis_id=track_run.thesis_id,
-        run_id=track_run.run_id,
-        session_id=session_id,
-        deliverable=dumped,
-        prescreen=prescreen_payload,
-        skill_calls=list(tool_context.skill_calls),
-        intent=intent,
-        show_intent_echo=show_intent_echo,
-    )
+    except Exception as error:
+        # Without this, any failure left the run stuck at status="running",
+        # which blocks the whole feedback chain for this thesis.
+        track_run.status = "failed"
+        track_run.updated_at = utc_now()
+        await store.save_run(track_run)
+        await audit.append(
+            "run_failed",
+            {"type": type(error).__name__, "message": str(error)},
+            run_id=track_run.run_id,
+        )
+        raise
 
 
 class TrackFeedbackError(ValueError):

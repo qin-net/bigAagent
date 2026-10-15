@@ -1,6 +1,11 @@
-"""Live first-research for current paper picks. No tracking — leave that for tomorrow."""
+"""Live first-research for current paper picks. No tracking — leave that for tomorrow.
+
+Pass --reset-tracks to wipe ALL track jobs, timelines, and track runs first
+(destructive; off by default).
+"""
 from __future__ import annotations
 
+import argparse
 import asyncio
 import os
 import sqlite3
@@ -38,11 +43,21 @@ def clear_demo_tracks() -> None:
 
 
 async def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--reset-tracks",
+        action="store_true",
+        help="DESTRUCTIVE: delete all track jobs, tracking timelines, and track runs before running",
+    )
+    args = parser.parse_args()
     load_dotenv()
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         raise SystemExit("DEEPSEEK_API_KEY missing")
-    clear_demo_tracks()
+    if args.reset_tracks:
+        clear_demo_tracks()
+    else:
+        print("skipping track cleanup (pass --reset-tracks to wipe track history)")
     board = BoardStore(BOARD_DB)
     board.initialize()
     board.initialize_research()

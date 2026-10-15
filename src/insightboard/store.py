@@ -24,8 +24,11 @@ class BoardStore:
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(str(self.path))
+        connection = sqlite3.connect(str(self.path), timeout=5.0)
         connection.row_factory = sqlite3.Row
+        # foreign_keys is per-connection, not persistent like WAL; without this
+        # the REFERENCES clauses in the schema never actually enforce anything.
+        connection.execute("PRAGMA foreign_keys=ON")
         try:
             yield connection
             connection.commit()
@@ -101,7 +104,7 @@ class BoardStore:
                 CREATE TABLE IF NOT EXISTS notice_headline (
                     stock_code TEXT NOT NULL,
                     title TEXT NOT NULL,
-                    published_at TEXT,
+                    published_at TEXT NOT NULL DEFAULT '',
                     url TEXT,
                     source TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
@@ -128,6 +131,44 @@ class BoardStore:
             connection.execute(
                 "INSERT OR IGNORE INTO schema_meta(key, value) VALUES('version', '1')"
             )
+            self._repair_notice_headline(connection)
+
+    @staticmethod
+    def _repair_notice_headline(connection: sqlite3.Connection) -> None:
+        """Rebuild notice_headline if published_at is still nullable.
+
+        A nullable primary-key column breaks dedup in SQLite: NULLs never equal
+        each other, so INSERT OR REPLACE kept stacking duplicates of any notice
+        without a publish date.
+        """
+        info = {row["name"]: row for row in connection.execute("PRAGMA table_info(notice_headline)")}
+        published = info.get("published_at")
+        if published is None or published["notnull"]:
+            return
+        # initialize() may already have an implicit transaction open; close it
+        # before taking the write lock for the rebuild.
+        connection.commit()
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE notice_headline_new (
+                stock_code TEXT NOT NULL,
+                title TEXT NOT NULL,
+                published_at TEXT NOT NULL DEFAULT '',
+                url TEXT,
+                source TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (stock_code, title, published_at)
+            )
+            """
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO notice_headline_new(stock_code, title, published_at, url, source, updated_at) "
+            "SELECT stock_code, title, COALESCE(published_at, ''), url, source, updated_at "
+            "FROM notice_headline ORDER BY updated_at DESC"
+        )
+        connection.execute("DROP TABLE notice_headline")
+        connection.execute("ALTER TABLE notice_headline_new RENAME TO notice_headline")
 
     def initialize_research(self) -> None:
         with self._connection() as connection:
@@ -387,11 +428,17 @@ class BoardStore:
     def claim_deep(self) -> Optional[dict]:
         now = utc_now()
         with self._connection() as connection:
+            # BEGIN IMMEDIATE: without the write lock, two workers can SELECT the
+            # same pending row before either UPDATE lands (same reason as claim_research).
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT * FROM deep_fetch_queue WHERE status IN ('pending','retry') AND available_at<=? ORDER BY priority ASC, updated_at ASC LIMIT 1", (now,)).fetchone()
             if not row:
                 return None
             connection.execute("UPDATE deep_fetch_queue SET status='running', attempts=attempts+1, updated_at=? WHERE stock_code=?", (now, row["stock_code"]))
-            return dict(row)
+            claimed = dict(row)
+            claimed["status"] = "running"
+            claimed["attempts"] = int(row["attempts"]) + 1
+            return claimed
 
     def finish_deep(self, stock_code: str, *, error: Optional[str] = None) -> None:
         now = utc_now()
@@ -405,7 +452,7 @@ class BoardStore:
         now = utc_now()
         with self._connection() as connection:
             connection.executemany("INSERT OR REPLACE INTO bar_daily(stock_code, trade_date, open, high, low, close, volume, turnover, source, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [(b.stock_code, b.trade_date, b.open, b.high, b.low, b.close, b.volume, b.turnover, source, now) for b in bars[-250:]])
-            connection.executemany("INSERT OR REPLACE INTO notice_headline(stock_code, title, published_at, url, source, updated_at) VALUES(?, ?, ?, ?, ?, ?)", [(n.stock_code, n.title, n.published_at, n.url, n.source, now) for n in notices[:30]])
+            connection.executemany("INSERT OR REPLACE INTO notice_headline(stock_code, title, published_at, url, source, updated_at) VALUES(?, ?, ?, ?, ?, ?)", [(n.stock_code, n.title, n.published_at or "", n.url, n.source, now) for n in notices[:30]])
 
     def bars(self, stock_code: str, limit: int = 120) -> list[dict]:
         with self._connection() as connection:
@@ -552,6 +599,9 @@ class BoardStore:
         now = utc_now()
         statement = _pick_statement(reason)
         with self._connection() as connection:
+            # BEGIN IMMEDIATE: the cash/position read must happen inside the write
+            # transaction, or two concurrent orders both see the same balance.
+            connection.execute("BEGIN IMMEDIATE")
             account = dict(connection.execute("SELECT * FROM paper_account WHERE user_id=?", (user_id,)).fetchone())
             cash = float(account["cash"])
             held = connection.execute(

@@ -8,26 +8,26 @@ version = "0.1.0"
 description = "bigAagent: a lightweight A-share research desk with isolated agents"
 requires-python = ">=3.9"
 dependencies = [
-  "openai",
-  "pydantic>=2",
+  "openai>=2,<3",
+  "pydantic>=2,<3",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest",
-  "pytest-asyncio",
+  "pytest>=8,<9",
+  "pytest-asyncio>=0.24",
 ]
 akshare = [
-  "akshare",
-  "pandas",
+  "akshare>=1.14,<2",
+  "pandas>=2,<3",
 ]
 docs = [
   "pymupdf",
 ]
 board = [
-  "akshare",
-  "fastapi",
-  "uvicorn",
+  "akshare>=1.14,<2",
+  "fastapi>=0.110,<1",
+  "uvicorn>=0.30,<1",
 ]
 
 [tool.setuptools]
@@ -41,9 +41,19 @@ insightagent = ["fixtures/*.json"]
 insightboard = ["web/*.html", "web/*.js", "web/*.css"]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+# -m "not live": live tests hit real APIs and spend tokens; opt in with `pytest -m live`.
+addopts = "-q -m 'not live'"
 asyncio_mode = "auto"
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 markers = [
   "live: calls a real external API",
 ]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+# F catches real bugs (undefined names, unused imports); E7/E9 are cheap wins.
+select = ["F", "E7", "E9"]

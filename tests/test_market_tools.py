@@ -3,7 +3,6 @@ import json
 import pytest
 
 from insightagent.contracts import LLMResponse, LLMToolCall, ResourceCall
-from insightagent.llm import FakeLLMAdapter
 from insightagent.market import (
     FixtureMarketClient,
     FlakyMarketClient,

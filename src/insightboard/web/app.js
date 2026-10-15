@@ -2,6 +2,7 @@ let page = 1, total = 0, currentCode = null, currentJobId = null, currentRunId =
 const size = 50;
 const text = (value) => value === null || value === undefined ? '-' : value;
 const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+const safeUrl = (value) => /^https?:\/\//i.test(String(value ?? '')) ? safe(value) : '';
 const money = (value) => value === null || value === undefined ? '-' : `${(value / 100000000).toFixed(2)} 亿`;
 const yuan = (value) => value === null || value === undefined ? '-' : `${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`;
 const api = (path, options) => fetch(`/api/v1${path}`, options).then(async (response) => {
@@ -157,7 +158,7 @@ function applyWorkflowState(research, track, paper) {
   renderLearningState(research, track);
   document.querySelector('#rail-learn')?.classList.add('is-current');
 }
-async function load() { const q = document.querySelector('#search').value.trim(); const params = new URLSearchParams({ page, size, q, sort: 'turnover', order: 'desc' }); const data = await (await fetch(`/api/v1/quotes?${params}`)).json(); total = data.total; document.querySelector('#quotes').innerHTML = data.items.map((item) => `<tr data-code="${item.stock_code}"><td>${item.stock_code}</td><td>${item.name}</td><td>${text(item.market)}</td><td>${text(item.price)}</td><td class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</td><td>${money(item.turnover)}</td></tr>`).join('') || '<tr><td colspan="6">暂无行情。点击「采集行情」拉取延迟数据。</td></tr>'; document.querySelectorAll('#quotes tr[data-code]').forEach((row) => row.onclick = () => detail(row.dataset.code)); document.querySelector('#page').textContent = `第 ${page} 页，共 ${total} 条`; document.querySelector('#previous').disabled = page === 1; document.querySelector('#next').disabled = page * size >= total; }
+async function load() { const q = document.querySelector('#search').value.trim(); const params = new URLSearchParams({ page, size, q, sort: 'turnover', order: 'desc' }); const data = await (await fetch(`/api/v1/quotes?${params}`)).json(); total = data.total; document.querySelector('#quotes').innerHTML = data.items.map((item) => `<tr data-code="${safe(item.stock_code)}"><td>${safe(item.stock_code)}</td><td>${safe(item.name)}</td><td>${safe(text(item.market))}</td><td>${text(item.price)}</td><td class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</td><td>${money(item.turnover)}</td></tr>`).join('') || '<tr><td colspan="6">暂无行情。点击「采集行情」拉取延迟数据。</td></tr>'; document.querySelectorAll('#quotes tr[data-code]').forEach((row) => row.onclick = () => detail(row.dataset.code)); document.querySelector('#page').textContent = `第 ${page} 页，共 ${total} 条`; document.querySelector('#previous').disabled = page === 1; document.querySelector('#next').disabled = page * size >= total; }
 function chartScale(values) {
   const numbers = values.filter((value) => value !== null && value !== undefined);
   if (!numbers.length) return null;
@@ -233,7 +234,7 @@ async function collectBars() {
       currentBars = data.items;
       drawChart();
       const notices = await api(`/notices/${currentCode}`).catch(() => ({ items: [] }));
-      document.querySelector('#notices').innerHTML = notices.items.map((notice) => `<li>${text(notice.published_at)} ${notice.url ? `<a href="${notice.url}" target="_blank">${notice.title}</a>` : notice.title}</li>`).join('') || document.querySelector('#notices').innerHTML;
+      document.querySelector('#notices').innerHTML = notices.items.map((notice) => `<li>${safe(text(notice.published_at))} ${safeUrl(notice.url) ? `<a href="${safeUrl(notice.url)}" target="_blank" rel="noopener">${safe(notice.title)}</a>` : safe(notice.title)}</li>`).join('') || document.querySelector('#notices').innerHTML;
       return;
     }
     if (attempt >= 40) {
@@ -362,7 +363,7 @@ async function detail(code) {
     api('/paper').catch(() => ({ positions: [], cash: null })),
   ]);
   const item = quote.item;
-  document.querySelector('#detail').innerHTML = `<div class="stock-context"><span class="stock-label">当前研究标的</span><h2>${item.name} <small>${code}</small></h2><p class="price">${text(item.price)} <span class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</span></p></div><div class="stock-actions"><button id="watch">加入自选</button><button id="open-profile" class="button-secondary">用户画像</button><button id="open-paper" class="button-secondary">模拟账户</button></div>`;
+  document.querySelector('#detail').innerHTML = `<div class="stock-context"><span class="stock-label">当前研究标的</span><h2>${safe(item.name)} <small>${safe(code)}</small></h2><p class="price">${text(item.price)} <span class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</span></p></div><div class="stock-actions"><button id="watch">加入自选</button><button id="open-profile" class="button-secondary">用户画像</button><button id="open-paper" class="button-secondary">模拟账户</button></div>`;
   document.querySelector('#watch').onclick = async () => {
     await api(`/watchlist/${code}`, { method: 'PUT' });
     document.querySelector('#watch').textContent = '已加入自选';
@@ -375,7 +376,7 @@ async function detail(code) {
   currentBars = bars.items || [];
   drawChart();
   if (!currentBars.length) collectBars();
-  document.querySelector('#notices').innerHTML = notices.items.map((notice) => `<li>${text(notice.published_at)} ${notice.url ? `<a href="${notice.url}" target="_blank">${notice.title}</a>` : notice.title}</li>`).join('') || '<li>暂无公告。拉取日线时会一并尝试采集。</li>';
+  document.querySelector('#notices').innerHTML = notices.items.map((notice) => `<li>${safe(text(notice.published_at))} ${safeUrl(notice.url) ? `<a href="${safeUrl(notice.url)}" target="_blank" rel="noopener">${safe(notice.title)}</a>` : safe(notice.title)}</li>`).join('') || '<li>暂无公告。拉取日线时会一并尝试采集。</li>';
   document.querySelector('#research-status').textContent = current ? '已有研究基线' : '尚未进行首次分析';
   document.querySelector('#track-status').textContent = track ? '已有追踪结果' : '';
   document.querySelector('#research-result').innerHTML = '<p class="empty-state">完成首次分析后，四维结论和决策会显示在这里。</p>';
@@ -398,7 +399,7 @@ function historyKind(item) {
 }
 async function loadHistory(code) { const data = await api(`/research/stocks/${code}/history`); document.querySelector('#research-history').innerHTML = `<h3>研究历史</h3>` + data.items.map((item) => `<p>${zhTime(item.created_at) || '时间未知'} · ${historyKind(item)} · ${zh('status', item.status) || '已记录'}${item.run_id ? ` <button class="history-view" data-run-id="${item.run_id}">查看此版本</button>` : ''}</p>`).join(''); document.querySelectorAll('.history-view').forEach((button) => button.addEventListener('click', () => loadRun(button.getAttribute('data-run-id')))); }
 async function loadRun(runId) { const data = await api(`/research/runs/${runId}`); if (data.mode === 'track_day' || data.tracking) { renderTrack(data); document.querySelector('#track-status').textContent = '已切换到历史追踪'; document.querySelector('#track-result').scrollIntoView({behavior: 'smooth', block: 'start'}); return; } renderResearch(data); currentRunId = runId; if (data.job_id) currentJobId = data.job_id; document.querySelector('#research-status').textContent = '已切换到历史分析'; document.querySelector('#research-result').scrollIntoView({behavior: 'smooth', block: 'start'}); }
-async function loadWatchlist() { view('watchlist'); const data = await api('/watchlist'); document.querySelector('#watchlist').innerHTML = data.items.map((item) => `<p><button class="stock" data-code="${item.stock_code}">${item.stock_code} ${text(item.name)}</button> ${text(item.price)} <span class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</span></p>`).join('') || '<p>尚未加入自选股。</p>'; document.querySelectorAll('.stock').forEach((button) => button.onclick = () => detail(button.dataset.code)); }
+async function loadWatchlist() { view('watchlist'); const data = await api('/watchlist'); document.querySelector('#watchlist').innerHTML = data.items.map((item) => `<p><button class="stock" data-code="${safe(item.stock_code)}">${safe(item.stock_code)} ${safe(text(item.name))}</button> ${text(item.price)} <span class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</span></p>`).join('') || '<p>尚未加入自选股。</p>'; document.querySelectorAll('.stock').forEach((button) => button.onclick = () => detail(button.dataset.code)); }
 async function paperTrade(code, side) {
   const status = document.querySelector('#paper-trade-status');
   try {
@@ -417,9 +418,9 @@ async function loadPaper() {
   try {
     const data = await api('/paper');
     const pnlClass = data.pnl >= 0 ? 'up' : 'down';
-    const positions = (data.positions || []).map((item) => `<tr data-code="${item.stock_code}"><td>${item.stock_code}</td><td>${text(item.name)}</td><td>${item.quantity}</td><td>${text(item.avg_cost)}</td><td>${text(item.last_price)}</td><td>${yuan(item.market_value)}</td><td class="${item.unrealized >= 0 ? 'up' : 'down'}">${yuan(item.unrealized)}</td></tr>`).join('') || '<tr><td colspan="7">暂无持仓</td></tr>';
-    const fills = (data.fills || []).map((item) => `<p>${item.created_at} · ${item.side === 'buy' ? '买' : '卖'} ${item.stock_code} ${item.quantity} 股 @ ${item.price}，金额 ${yuan(item.amount)}</p>`).join('') || '<p class="notice">暂无成交</p>';
-    const picks = (data.picks || []).map((item) => `<div class="profile-pref"><div><b>${item.stock_code === 'none' ? '全局选股纪律' : item.stock_code}</b><br>${item.statement}</div><button class="pick-retire" data-id="${item.memory_id}">停用</button></div>`).join('') || '<p class="notice">尚无选股记忆。买入时可写理由，或在下方记下纪律。</p>';
+    const positions = (data.positions || []).map((item) => `<tr data-code="${safe(item.stock_code)}"><td>${safe(item.stock_code)}</td><td>${safe(text(item.name))}</td><td>${item.quantity}</td><td>${text(item.avg_cost)}</td><td>${text(item.last_price)}</td><td>${yuan(item.market_value)}</td><td class="${item.unrealized >= 0 ? 'up' : 'down'}">${yuan(item.unrealized)}</td></tr>`).join('') || '<tr><td colspan="7">暂无持仓</td></tr>';
+    const fills = (data.fills || []).map((item) => `<p>${item.created_at} · ${item.side === 'buy' ? '买' : '卖'} ${safe(item.stock_code)} ${item.quantity} 股 @ ${item.price}，金额 ${yuan(item.amount)}</p>`).join('') || '<p class="notice">暂无成交</p>';
+    const picks = (data.picks || []).map((item) => `<div class="profile-pref"><div><b>${item.stock_code === 'none' ? '全局选股纪律' : safe(item.stock_code)}</b><br>${safe(item.statement)}</div><button class="pick-retire" data-id="${safe(item.memory_id)}">停用</button></div>`).join('') || '<p class="notice">尚无选股记忆。买入时可写理由，或在下方记下纪律。</p>';
     box.innerHTML = `<p class="portfolio-summary"><span>总资产 <b>${yuan(data.equity)}</b></span><span>现金 ${yuan(data.cash)}</span><span>持仓市值 ${yuan(data.market_value)}</span><span>相对本金 <em class="${pnlClass}">${yuan(data.pnl)}（${(data.pnl_pct * 100).toFixed(2)}%）</em></span></p><p class="notice">${data.disclaimer}</p><h3>持仓</h3><section class="table-wrap"><table><thead><tr><th>代码</th><th>名称</th><th>数量</th><th>成本</th><th>现价</th><th>市值</th><th>浮动</th></tr></thead><tbody id="paper-positions">${positions}</tbody></table></section><h3>最近成交</h3><section class="content-card fill-list">${fills}</section><h3>选股记忆</h3><section class="content-card memory-list">${picks}</section><section class="paper-box"><h3>新增选股记忆</h3><input id="pick-code" placeholder="股票代码，空则为全局纪律"><input id="pick-statement" placeholder="选股纪律或这只票为什么在池子里"><button id="pick-save">记下</button></section>`;
     box.querySelectorAll('#paper-positions tr[data-code]').forEach((row) => row.onclick = () => detail(row.dataset.code));
     box.querySelectorAll('.pick-retire').forEach((button) => button.onclick = async () => { await api(`/paper/picks/${button.dataset.id}`, { method: 'DELETE' }); await loadPaper(); });

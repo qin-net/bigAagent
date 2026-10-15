@@ -342,6 +342,3 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
         return {"memory_id": memory_id, "status": "retired"}
 
     return app
-
-
-app = create_app()

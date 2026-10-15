@@ -265,13 +265,21 @@ class ArtifactIntegrityError(RuntimeError):
 class SQLiteDatabase:
     def __init__(self, path: str) -> None:
         self.path = Path(path).expanduser().resolve()
-        self._initialize_lock = asyncio.Lock()
+        # Lazy: asyncio.Lock() binds the current event loop on Python 3.9,
+        # so constructing it here breaks when SQLiteDatabase is built outside
+        # a running loop. Implies the instance must stay on one loop.
+        self._initialize_lock: Optional[asyncio.Lock] = None
         self._initialized = False
+
+    def _init_mutex(self) -> asyncio.Lock:
+        if self._initialize_lock is None:
+            self._initialize_lock = asyncio.Lock()
+        return self._initialize_lock
 
     async def initialize(self) -> None:
         if self._initialized:
             return
-        async with self._initialize_lock:
+        async with self._init_mutex():
             if self._initialized:
                 return
             await asyncio.to_thread(self._initialize_sync)

@@ -94,19 +94,24 @@ def _run_research_worker(store: BoardStore) -> int:
             try:
                 prompt_file = spool_path(item["job_id"])
                 item["prompt"] = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else "none"
-                with ThreadPoolExecutor(max_workers=1) as pool:
-                    future = pool.submit(execute_job_sync, item, store)
-                    try:
-                        result = future.result(timeout=timeout_seconds)
-                    except FutureTimeout:
-                        store.finish_research(item["job_id"], error="研究超时，请再点一次分析或追踪")
-                    else:
-                        store.finish_research(
-                            item["job_id"],
-                            run_id=result.get("run_id"),
-                            noop=result.get("noop", False),
-                            rerun_dimensions=result.get("rerun_dimensions", []),
-                        )
+                # One executor per job, shut down without waiting on timeout:
+                # `with ThreadPoolExecutor(...)` used to block in shutdown(wait=True)
+                # until the runaway job finished, so the "timeout" never freed the loop.
+                pool = ThreadPoolExecutor(max_workers=1)
+                future = pool.submit(execute_job_sync, item, store)
+                try:
+                    result = future.result(timeout=timeout_seconds)
+                except FutureTimeout:
+                    store.finish_research(item["job_id"], error="研究超时，已继续处理后续任务；可稍后重试")
+                    pool.shutdown(wait=False)
+                else:
+                    store.finish_research(
+                        item["job_id"],
+                        run_id=result.get("run_id"),
+                        noop=result.get("noop", False),
+                        rerun_dimensions=result.get("rerun_dimensions", []),
+                    )
+                    pool.shutdown()
             except Exception as error:
                 store.finish_research(item["job_id"], error="{}: {}".format(type(error).__name__, error))
             finally:

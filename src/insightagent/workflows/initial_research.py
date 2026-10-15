@@ -94,7 +94,6 @@ from ..user_intent import (
     extract_slots,
     fill_tagged_empty_slots,
     format_intent_echo,
-    is_decision_only_rerun,
     merge_parsed_with_slots,
     parse_tags,
     should_schedule_rerun,
@@ -759,7 +758,6 @@ async def feedback_on_run(
     )
     schedule = should_schedule_rerun(preview)
     rerun_dims = compute_rerun_dims(preview) if schedule else []
-    decision_only = schedule and is_decision_only_rerun(preview)
 
     target_run = parent_run
     if schedule:

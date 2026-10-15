@@ -66,10 +66,17 @@ class InMemoryStateStore:
     def __init__(self, mutable_roots: Optional[Iterable[str]] = None) -> None:
         self._states: Dict[str, AgentState] = {}
         self._history: Dict[str, list[AgentState]] = {}
-        self._lock = asyncio.Lock()
+        # Lazy: asyncio.Lock() binds the current event loop on Python 3.9,
+        # so constructing it here breaks outside a running loop.
+        self._lock: Optional[asyncio.Lock] = None
         self._mutable_roots = frozenset(
             mutable_roots or self.DEFAULT_MUTABLE_ROOTS
         )
+
+    def _mutex(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     async def load_or_create(
         self,
@@ -81,7 +88,7 @@ class InMemoryStateStore:
         thesis_id: Optional[str] = None,
         business_context: Optional[Dict[str, Any]] = None,
     ) -> AgentState:
-        async with self._lock:
+        async with self._mutex():
             if session_id and session_id in self._states:
                 return self._states[session_id].model_copy(deep=True)
 
@@ -101,7 +108,7 @@ class InMemoryStateStore:
             return state
 
     async def get(self, session_id: str) -> AgentState:
-        async with self._lock:
+        async with self._mutex():
             try:
                 return self._states[session_id].model_copy(deep=True)
             except KeyError as error:
@@ -110,7 +117,7 @@ class InMemoryStateStore:
     async def save(
         self, state: AgentState, *, expected_version: Optional[int] = None
     ) -> AgentState:
-        async with self._lock:
+        async with self._mutex():
             current = self._states.get(state.session_id)
             if current is None:
                 if expected_version not in (None, -1):
@@ -141,7 +148,7 @@ class InMemoryStateStore:
     async def apply_patch(
         self, session_id: str, patch: StatePatch
     ) -> AgentState:
-        async with self._lock:
+        async with self._mutex():
             current = self._states.get(session_id)
             if current is None:
                 raise KeyError("Unknown session: {}".format(session_id))
@@ -160,7 +167,7 @@ class InMemoryStateStore:
             return persisted
 
     async def history(self, session_id: str) -> list[AgentState]:
-        async with self._lock:
+        async with self._mutex():
             return [
                 state.model_copy(deep=True)
                 for state in self._history.get(session_id, [])
@@ -169,7 +176,7 @@ class InMemoryStateStore:
     async def latest_for_agent(
         self, *, agent_name: str, thesis_id: str
     ) -> Optional[AgentState]:
-        async with self._lock:
+        async with self._mutex():
             matches = [
                 state
                 for state in self._states.values()

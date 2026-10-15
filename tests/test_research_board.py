@@ -25,8 +25,12 @@ def test_research_job_queue_and_history(tmp_path):
 
 
 def test_api_run_lookup_includes_job_lineage(tmp_path, monkeypatch):
-    store = BoardStore(str(tmp_path / "board.db")); store.initialize(); store.initialize_research()
-    job = store.create_research_job("000858"); store.claim_research(); store.finish_research(job["job_id"], run_id="run-1", rerun_dimensions=["fundamental"])
+    store = BoardStore(str(tmp_path / "board.db"))
+    store.initialize()
+    store.initialize_research()
+    job = store.create_research_job("000858")
+    store.claim_research()
+    store.finish_research(job["job_id"], run_id="run-1", rerun_dimensions=["fundamental"])
     async def fake_load(_id):
         return {"run_id": _id, "parent_run_id": None, "rerun_dimensions": []}
     monkeypatch.setattr("insightboard.api.load_projected_run", fake_load)
@@ -37,7 +41,8 @@ def test_api_run_lookup_includes_job_lineage(tmp_path, monkeypatch):
 
 def test_research_job_recovers_stale_running(tmp_path):
     store = BoardStore(str(tmp_path / "board.db"))
-    store.initialize(); store.initialize_research()
+    store.initialize()
+    store.initialize_research()
     job = store.create_research_job("000858")
     store.claim_research()
     with store._connection() as connection:
