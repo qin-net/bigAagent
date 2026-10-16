@@ -245,6 +245,22 @@ class BoardStore:
             )
         return dict(row)
 
+    def touch_research(self, job_id: str) -> bool:
+        """Renew the lease on a running job.
+
+        recover_research() requeues anything that has been 'running' for longer
+        than its threshold, and updated_at is otherwise only written at claim
+        and finish time. Without a heartbeat, any job that legitimately runs
+        longer than the threshold gets picked up by a second worker and both
+        executions write the same thesis.
+        """
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE research_job SET updated_at=? WHERE job_id=? AND status='running'",
+                (utc_now(), job_id),
+            )
+            return cursor.rowcount > 0
+
     def finish_research(
         self, job_id: str, *, run_id: Optional[str] = None,
         error: Optional[str] = None, noop: bool = False,

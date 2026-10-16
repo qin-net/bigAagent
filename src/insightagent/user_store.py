@@ -6,7 +6,7 @@ from typing import List, Optional
 from uuid import uuid4
 
 from .contracts import utc_now
-from .persistence import SQLiteDatabase
+from .persistence import SQLiteDatabase, immediate_transaction
 from .user_contracts import DIMS, NONE, UserIntent, UserPreference, UserUtterance
 from .user_intent import MAX_PREF_CHARS, passes_memory_gate, slot_of
 
@@ -177,7 +177,8 @@ class UserStore:
     def _save_preference_sync(self, row: UserPreference) -> None:
         connection = self.database.connect()
         try:
-            self._insert_preference(connection, row)
+            with immediate_transaction(connection):
+                self._insert_preference(connection, row)
         finally:
             connection.close()
 
@@ -187,93 +188,95 @@ class UserStore:
         connection = self.database.connect()
         now = utc_now().isoformat()
         try:
-            for dim in DIMS:
-                slot = slot_of(intent, dim)
-                if slot == NONE or not passes_memory_gate(slot):
-                    continue
-                trigger = slot[:16]
-                title = slot[:16]
-                statement = slot[:MAX_PREF_CHARS]
-                active_rows = connection.execute(
-                    """
-                    SELECT p.preference_id, v.payload_json
-                    FROM user_preferences AS p
-                    JOIN user_preference_versions AS v
-                      ON v.preference_id = p.preference_id
-                     AND v.version = p.current_version
-                    WHERE p.user_id = ? AND p.scope = ? AND p.status = 'active'
-                    """,
-                    (utterance.user_id, dim),
-                ).fetchall()
-                for active in active_rows:
-                    payload = json.loads(active["payload_json"])
-                    if payload.get("statement") == statement:
-                        connection.execute(
-                            """
-                            UPDATE user_preferences
-                            SET status = 'retired', updated_at = ?
-                            WHERE preference_id = ?
-                            """,
-                            (now, active["preference_id"]),
-                        )
-                row = UserPreference(
-                    preference_id=str(uuid4()),
-                    user_id=utterance.user_id,
-                    status="active",
-                    current_version="1",
-                    kind="constraint",
-                    scope=dim,
-                    stock_code=utterance.stock_code,
-                    trigger=trigger,
-                    title=title,
-                    statement=statement,
-                    source="user_feedback",
-                    source_utterance_id=utterance.utterance_id,
-                    source_run_id=utterance.run_id,
-                    created_at=now,
-                    updated_at=now,
-                )
-                self._insert_preference(connection, row)
+            with immediate_transaction(connection):
+                for dim in DIMS:
+                    slot = slot_of(intent, dim)
+                    if slot == NONE or not passes_memory_gate(slot):
+                        continue
+                    trigger = slot[:16]
+                    title = slot[:16]
+                    statement = slot[:MAX_PREF_CHARS]
+                    active_rows = connection.execute(
+                        """
+                        SELECT p.preference_id, v.payload_json
+                        FROM user_preferences AS p
+                        JOIN user_preference_versions AS v
+                          ON v.preference_id = p.preference_id
+                         AND v.version = p.current_version
+                        WHERE p.user_id = ? AND p.scope = ? AND p.status = 'active'
+                        """,
+                        (utterance.user_id, dim),
+                    ).fetchall()
+                    for active in active_rows:
+                        payload = json.loads(active["payload_json"])
+                        if payload.get("statement") == statement:
+                            connection.execute(
+                                """
+                                UPDATE user_preferences
+                                SET status = 'retired', updated_at = ?
+                                WHERE preference_id = ?
+                                """,
+                                (now, active["preference_id"]),
+                            )
+                    row = UserPreference(
+                        preference_id=str(uuid4()),
+                        user_id=utterance.user_id,
+                        status="active",
+                        current_version="1",
+                        kind="constraint",
+                        scope=dim,
+                        stock_code=utterance.stock_code,
+                        trigger=trigger,
+                        title=title,
+                        statement=statement,
+                        source="user_feedback",
+                        source_utterance_id=utterance.utterance_id,
+                        source_run_id=utterance.run_id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    self._insert_preference(connection, row)
         finally:
             connection.close()
 
     def _insert_preference(
         self, connection, row: UserPreference
     ) -> None:
-        connection.execute(
-            """
-            INSERT INTO user_preferences(
-                preference_id, user_id, status, current_version, kind,
-                scope, stock_code, trigger, title, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                row.preference_id,
-                row.user_id,
-                row.status,
-                row.current_version,
-                row.kind,
-                row.scope,
-                row.stock_code,
-                row.trigger,
-                row.title,
-                row.created_at,
-                row.updated_at,
-            ),
-        )
-        connection.execute(
-            """
-            INSERT INTO user_preference_versions(
-                preference_id, version, payload_json, created_at
-            ) VALUES (?, ?, ?, ?)
-            """,
-            (
-                row.preference_id,
-                row.current_version,
-                json.dumps(row.model_dump(), ensure_ascii=False),
-                row.created_at,
-            ),
-        )
+        with immediate_transaction(connection):
+            connection.execute(
+                """
+                INSERT INTO user_preferences(
+                    preference_id, user_id, status, current_version, kind,
+                    scope, stock_code, trigger, title, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row.preference_id,
+                    row.user_id,
+                    row.status,
+                    row.current_version,
+                    row.kind,
+                    row.scope,
+                    row.stock_code,
+                    row.trigger,
+                    row.title,
+                    row.created_at,
+                    row.updated_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO user_preference_versions(
+                    preference_id, version, payload_json, created_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (
+                    row.preference_id,
+                    row.current_version,
+                    json.dumps(row.model_dump(), ensure_ascii=False),
+                    row.created_at,
+                ),
+            )
 
     def _active_preferences_sync(
         self, user_id: str, scope: str, stock_code: str

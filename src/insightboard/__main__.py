@@ -100,7 +100,20 @@ def _run_research_worker(store: BoardStore) -> int:
                 pool = ThreadPoolExecutor(max_workers=1)
                 future = pool.submit(execute_job_sync, item, store)
                 try:
-                    result = future.result(timeout=timeout_seconds)
+                    # Heartbeat while the job runs so recover_research() does not
+                    # requeue a legitimately long job into a second worker.
+                    deadline = time.monotonic() + timeout_seconds
+                    while True:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise FutureTimeout()
+                        try:
+                            result = future.result(timeout=min(30, remaining))
+                            break
+                        except FutureTimeout:
+                            if time.monotonic() >= deadline:
+                                raise
+                            store.touch_research(item["job_id"])
                 except FutureTimeout:
                     store.finish_research(item["job_id"], error="研究超时，已继续处理后续任务；可稍后重试")
                     pool.shutdown(wait=False)

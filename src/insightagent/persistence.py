@@ -5,14 +5,15 @@ import hashlib
 import json
 import os
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Optional
 from uuid import uuid4
 
 from .contracts import AgentState, LLMMessage, LLMToolCall, StatePatch, TaskStatus, utc_now
 from .state import StateConflictError, apply_patch_to_state, snapshot_private_memory
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 MIGRATION_1 = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -230,6 +231,25 @@ CREATE INDEX IF NOT EXISTS idx_user_profile_latest
 ON user_profile_snapshots(user_id, created_at DESC);
 """
 
+MIGRATION_4 = """
+CREATE INDEX IF NOT EXISTS idx_runs_thesis
+ON runs(thesis_id, mode, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_run
+ON reports(run_id);
+CREATE INDEX IF NOT EXISTS idx_decisions_run
+ON decisions(run_id);
+CREATE INDEX IF NOT EXISTS idx_tracking_run
+ON tracking_timeline(run_id);
+CREATE INDEX IF NOT EXISTS idx_utterances_run
+ON user_utterances(run_id);
+CREATE INDEX IF NOT EXISTS idx_utterances_user
+ON user_utterances(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_intents_utterance
+ON user_intents(utterance_id);
+CREATE INDEX IF NOT EXISTS idx_preferences_active
+ON user_preferences(user_id, scope, status);
+"""
+
 EXPECTED_TABLES = frozenset(
     {
         "schema_migrations",
@@ -350,6 +370,9 @@ class SQLiteDatabase:
             if current_version < 3:
                 self._apply_migration(connection, 3, MIGRATION_3)
                 current_version = 3
+            if current_version < 4:
+                self._apply_migration(connection, 4, MIGRATION_4)
+                current_version = 4
         finally:
             connection.close()
 
@@ -1024,6 +1047,35 @@ def _insert_history(
 def _rollback_if_needed(connection: sqlite3.Connection) -> None:
     if connection.in_transaction:
         connection.execute("ROLLBACK")
+
+
+@contextmanager
+def immediate_transaction(
+    connection: sqlite3.Connection,
+) -> Iterator[sqlite3.Connection]:
+    """Run a block atomically under a RESERVED write lock.
+
+    connect() uses isolation_level=None (autocommit), so a bare sequence of
+    statements is not atomic: a failure halfway through leaves earlier writes
+    committed. Taking the lock up front also matters for the read-then-write
+    pattern, because a deferred transaction does not lock on SELECT and two
+    writers can both see the same pre-change state.
+
+    Nested calls join the outer transaction instead of failing, so helpers
+    that are safe to call either standalone or inside a larger unit of work
+    can just always wrap themselves.
+    """
+    if connection.in_transaction:
+        yield connection
+        return
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        yield connection
+    except BaseException:
+        _rollback_if_needed(connection)
+        raise
+    if connection.in_transaction:
+        connection.execute("COMMIT")
 
 
 def _ensure_within(root: Path, target: Path) -> None:

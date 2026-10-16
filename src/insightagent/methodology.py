@@ -21,7 +21,7 @@ from .kb_contract import (
     tokenize_query,
 )
 from .env import repo_root, resolve_path
-from .persistence import SQLiteDatabase
+from .persistence import SQLiteDatabase, immediate_transaction
 
 TEXT_MAX = 200
 MAX_HITS = 3
@@ -637,13 +637,14 @@ class MethodologyCatalog:
         self.ensure_schema()
         connection = self.database.connect()
         try:
-            row = connection.execute(
-                "SELECT COUNT(*) AS n FROM methodology_entries"
-            ).fetchone()
-            if row and int(row["n"]) > 0:
-                return
-            for entry in SEED_ENTRIES:
-                self._upsert_sync(connection, dict(entry), status="approved")
+            with immediate_transaction(connection):
+                row = connection.execute(
+                    "SELECT COUNT(*) AS n FROM methodology_entries"
+                ).fetchone()
+                if row and int(row["n"]) > 0:
+                    return
+                for entry in SEED_ENTRIES:
+                    self._upsert_sync(connection, dict(entry), status="approved")
         finally:
             connection.close()
 
@@ -656,18 +657,19 @@ class MethodologyCatalog:
         db = connection or self.database.connect()
         count = 0
         try:
-            for path in sorted(root.glob("**/*.json")):
-                raw = json.loads(path.read_text(encoding="utf-8"))
-                payload = dict(raw.get("payload") or raw)
-                status = str(
-                    raw.get("status") or payload.get("status") or "approved"
-                )
-                if "id" not in payload and raw.get("entry_id"):
-                    payload["id"] = raw["entry_id"]
-                if "title" not in payload and raw.get("title"):
-                    payload["title"] = raw["title"]
-                self._upsert_sync(db, payload, status=status)
-                count += 1
+            with immediate_transaction(connection):
+                for path in sorted(root.glob("**/*.json")):
+                    raw = json.loads(path.read_text(encoding="utf-8"))
+                    payload = dict(raw.get("payload") or raw)
+                    status = str(
+                        raw.get("status") or payload.get("status") or "approved"
+                    )
+                    if "id" not in payload and raw.get("entry_id"):
+                        payload["id"] = raw["entry_id"]
+                    if "title" not in payload and raw.get("title"):
+                        payload["title"] = raw["title"]
+                    self._upsert_sync(db, payload, status=status)
+                    count += 1
         finally:
             if own:
                 db.close()
@@ -738,18 +740,19 @@ class MethodologyCatalog:
         cleaned = validate_candidate_payload(payload)
         connection = self.database.connect()
         try:
-            existing = connection.execute(
-                "SELECT status, current_version FROM methodology_entries "
-                "WHERE entry_id = ?",
-                (cleaned["id"],),
-            ).fetchone()
-            if existing and existing["status"] == "approved":
-                raise ValueError(
-                    "cannot overwrite approved entry {}".format(cleaned["id"])
+            with immediate_transaction(connection):
+                existing = connection.execute(
+                    "SELECT status, current_version FROM methodology_entries "
+                    "WHERE entry_id = ?",
+                    (cleaned["id"],),
+                ).fetchone()
+                if existing and existing["status"] == "approved":
+                    raise ValueError(
+                        "cannot overwrite approved entry {}".format(cleaned["id"])
+                    )
+                stored = self._upsert_sync(
+                    connection, cleaned, status="candidate"
                 )
-            stored = self._upsert_sync(
-                connection, cleaned, status="candidate"
-            )
         finally:
             connection.close()
         return stored
@@ -785,49 +788,50 @@ class MethodologyCatalog:
         *,
         status: str,
     ) -> Dict[str, Any]:
-        now = datetime.now(timezone.utc).isoformat()
-        entry_id = payload["id"]
-        existing = connection.execute(
-            "SELECT current_version FROM methodology_entries WHERE entry_id = ?",
-            (entry_id,),
-        ).fetchone()
-        version = 1 if not existing else int(existing["current_version"]) + 1
-        payload = dict(payload)
-        payload["status"] = status
-        payload["version"] = version
-        payload["updated_at"] = now
-        body = json.dumps(payload, ensure_ascii=False)
-        if existing:
+        with immediate_transaction(connection):
+            now = datetime.now(timezone.utc).isoformat()
+            entry_id = payload["id"]
+            existing = connection.execute(
+                "SELECT current_version FROM methodology_entries WHERE entry_id = ?",
+                (entry_id,),
+            ).fetchone()
+            version = 1 if not existing else int(existing["current_version"]) + 1
+            payload = dict(payload)
+            payload["status"] = status
+            payload["version"] = version
+            payload["updated_at"] = now
+            body = json.dumps(payload, ensure_ascii=False)
+            if existing:
+                connection.execute(
+                    "UPDATE methodology_entries SET status = ?, current_version = ?, "
+                    "title = ?, scope_json = ?, updated_at = ? WHERE entry_id = ?",
+                    (
+                        status,
+                        version,
+                        payload["title"],
+                        json.dumps(payload["scope"], ensure_ascii=False),
+                        now,
+                        entry_id,
+                    ),
+                )
+            else:
+                connection.execute(
+                    "INSERT INTO methodology_entries("
+                    "entry_id, status, current_version, title, scope_json, "
+                    "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        entry_id,
+                        status,
+                        version,
+                        payload["title"],
+                        json.dumps(payload["scope"], ensure_ascii=False),
+                        now,
+                        now,
+                    ),
+                )
             connection.execute(
-                "UPDATE methodology_entries SET status = ?, current_version = ?, "
-                "title = ?, scope_json = ?, updated_at = ? WHERE entry_id = ?",
-                (
-                    status,
-                    version,
-                    payload["title"],
-                    json.dumps(payload["scope"], ensure_ascii=False),
-                    now,
-                    entry_id,
-                ),
+                "INSERT INTO methodology_versions("
+                "entry_id, version, payload_json, created_at) VALUES (?, ?, ?, ?)",
+                (entry_id, version, body, now),
             )
-        else:
-            connection.execute(
-                "INSERT INTO methodology_entries("
-                "entry_id, status, current_version, title, scope_json, "
-                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    entry_id,
-                    status,
-                    version,
-                    payload["title"],
-                    json.dumps(payload["scope"], ensure_ascii=False),
-                    now,
-                    now,
-                ),
-            )
-        connection.execute(
-            "INSERT INTO methodology_versions("
-            "entry_id, version, payload_json, created_at) VALUES (?, ?, ?, ?)",
-            (entry_id, version, body, now),
-        )
-        return payload
+            return payload
