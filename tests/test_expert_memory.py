@@ -87,7 +87,11 @@ async def test_second_analyze_injects_fundamental_memory_only(tmp_path):
     )
     store = SQLiteStateStore(SQLiteDatabase(str(tmp_path / "insightagent.db")))
     saved = await store.latest_for_agent(
-        agent_name="fundamental", thesis_id="000858-initial"
+        agent_name="fundamental",
+        thesis_id="000858-initial",
+        # analyze_stock runs as the default "local" investor; memory lookups
+        # are user-scoped now, so the query must say whose memory it wants.
+        user_id="local",
     )
     assert saved is not None
     assert saved.private_memory.get("memory_summary") == "盯经营现金流证伪"

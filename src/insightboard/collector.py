@@ -106,8 +106,15 @@ class AkshareQuoteCollector:
                 title = str(row.get("公告标题") or row.get("标题") or row.get("title") or "").strip()
                 if title:
                     notices.append(NoticeHeadline(stock_code, title, str(row.get("公告日期") or row.get("日期") or row.get("published_at") or "") or None, str(row.get("网址") or row.get("url") or "") or None, "akshare.stock_individual_notice_report"))
-        except Exception:
-            pass
+        except Exception as error:
+            # Announce failures instead of returning an empty list: "no notices"
+            # and "the notices source failed" must not look the same downstream.
+            print(
+                "notice collection failed for {}: {}: {}".format(
+                    stock_code, type(error).__name__, error
+                ),
+                flush=True,
+            )
         return bars, notices
 
 

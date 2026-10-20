@@ -24,6 +24,9 @@ class Applicability(BaseModel):
     all_flags: List[str] = Field(default_factory=list)
     none_flags: List[str] = Field(default_factory=list)
     required_fields: List[str] = Field(default_factory=list)
+    # Fallback cards (e.g. "how to assess a stock with no triggered pattern")
+    # carry no trigger flags by design, so they opt in here instead.
+    always_applicable: bool = False
 
 
 class RetrievalSpec(BaseModel):
@@ -93,8 +96,16 @@ class MethodologyCard(BaseModel):
 
     @model_validator(mode="after")
     def _must_bind_flags(self) -> "MethodologyCard":
-        if not self.applicability.any_flags and not self.applicability.all_flags:
-            raise ValueError("applicability.any_flags or all_flags is required")
+        if (
+            not self.applicability.any_flags
+            and not self.applicability.all_flags
+            and not self.applicability.none_flags
+            and not self.applicability.always_applicable
+        ):
+            raise ValueError(
+                "applicability needs any_flags, all_flags, none_flags "
+                "(exclusion-only card), or always_applicable (fallback card)"
+            )
         if not self.retrieval.canonical_terms:
             raise ValueError("retrieval.canonical_terms is required")
         if not self.guidance.text.strip():
@@ -120,6 +131,9 @@ class MethodologyToolOutput(BaseModel):
 
     retrieval_id: str
     entries: List[RetrievedEntry]
+    # Explains an empty result so the model can tell "no card applies" apart
+    # from "the search was malformed" -- without this it invents citations.
+    notice: str = ""
 
 
 def coerce_source_refs(raw: Any) -> List[Dict[str, str]]:

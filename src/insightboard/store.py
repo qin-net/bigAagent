@@ -228,6 +228,17 @@ class BoardStore:
                 "UPDATE research_job SET status='queued', updated_at=? WHERE status='running' AND updated_at<?",
                 (utc_now(), cutoff),
             )
+            # Jobs that sat queued for far longer than any worker cycle mean no
+            # worker is consuming them; failing them visibly beats a 409 that
+            # blocks this stock forever.
+            stale_cutoff = (
+                datetime.now(timezone.utc) - timedelta(minutes=max(30, older_than_minutes * 4))
+            ).isoformat()
+            connection.execute(
+                "UPDATE research_job SET status='failed', error='排队超时，没有执行器处理该任务', updated_at=? "
+                "WHERE status='queued' AND updated_at<?",
+                (utc_now(), stale_cutoff),
+            )
         return result.rowcount
 
     def claim_research(self) -> Optional[dict]:
@@ -322,8 +333,8 @@ class BoardStore:
             raise ValueError("Quote batch contains duplicate stock codes")
         if any(len(code) != 6 or not code.isdigit() for code in codes):
             raise ValueError("Quote batch contains an invalid stock code")
-        if sum(quote.price is not None for quote in quotes) / len(quotes) < 0.8:
-            raise ValueError("Quote batch has fewer than 80% non-null prices")
+        if sum(quote.price is not None and quote.price > 0 for quote in quotes) / len(quotes) < 0.8:
+            raise ValueError("Quote batch has fewer than 80% valid (positive) prices")
 
         batch_id = uuid.uuid4().hex
         as_of = utc_now()
@@ -391,8 +402,9 @@ class BoardStore:
         filters = ["batch_id=?"]
         values: list[object] = [batch["batch_id"]]
         if q:
-            filters.append("(stock_code LIKE ? OR name LIKE ?)")
-            values.extend(["%{}%".format(q), "%{}%".format(q)])
+            filters.append("(stock_code LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')")
+            escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            values.extend(["%{}%".format(escaped), "%{}%".format(escaped)])
         if industry:
             filters.append("industry=?")
             values.append(industry)
@@ -611,6 +623,10 @@ class BoardStore:
         if not quote or quote.get("price") is None:
             raise ValueError("no delayed price for this stock")
         price = float(quote["price"])
+        if price <= 0:
+            # Data sources report 0 outside the trading window; booking a fill
+            # at 0 would create positions out of thin air.
+            raise ValueError("delayed price is not a valid trading price")
         amount = round(price * quantity, 2)
         now = utc_now()
         statement = _pick_statement(reason)

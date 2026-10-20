@@ -1,0 +1,52 @@
+{
+  "entry_id": "kb_fallback_events",
+  "title": "没有重大事件时的信息真空处理",
+  "scope": "sentiment",
+  "version": 1,
+  "payload": {
+    "id": "kb_fallback_events",
+    "title": "没有重大事件时的信息真空处理",
+    "type": "rule",
+    "scope": [
+      "sentiment",
+      "macro"
+    ],
+    "status": "approved",
+    "version": 1,
+    "applicability": {
+      "any_flags": [],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": [],
+      "always_applicable": true
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "事件",
+        "公告",
+        "情绪",
+        "宏观",
+        "信息真空",
+        "检查清单"
+      ],
+      "aliases": [
+        "没有事件",
+        "无公告",
+        "常规检查"
+      ],
+      "intent_tags": [],
+      "priority": 10,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "说明这是信息真空，不要用推测填补",
+      "text": "没有检索到重大事件时，正确表述是「本期无重大事件」，而不是推断「情绪稳定」或「政策无影响」。信息真空本身是一个结论，必须如实写出，并说明它降低了判断的确定性。",
+      "exceptions": []
+    },
+    "source_refs": [],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    }
+  }
+}

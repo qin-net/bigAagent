@@ -104,8 +104,15 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
             import asyncio
             try:
                 asyncio.run(collect_once(store, quote_collector))
-            except Exception:
-                pass
+            except Exception as error:
+                # Swallowing this hid every failure outside collect_once's own
+                # reporting; the thread is the only place that can see it.
+                print(
+                    "quote collection failed: {}: {}".format(
+                        type(error).__name__, error
+                    ),
+                    flush=True,
+                )
             finally:
                 collect_state["running"] = False
                 collect_lock.release()

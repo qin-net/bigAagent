@@ -217,10 +217,13 @@ function drawChart() {
 }
 async function collectBars() {
   if (!currentCode) return;
+  // 闭包捕获发起时的标的：换股后旧轮询链自行终止，不再把 A 的日线
+  // 画进 B 的图表。
+  const code = currentCode;
   const status = document.querySelector('#chart-status');
   status.textContent = '正在拉取日线...';
   try {
-    await api(`/stocks/${currentCode}/bars/collect`, { method: 'POST' });
+    await api(`/stocks/${code}/bars/collect`, { method: 'POST' });
   } catch (error) {
     if (!String(error.message).includes('already')) {
       status.textContent = error.message;
@@ -228,12 +231,13 @@ async function collectBars() {
     }
   }
   const poll = async (attempt) => {
-    if (currentCode == null) return;
-    const data = await api(`/bars/${currentCode}`);
+    if (code !== currentCode) return;
+    const data = await api(`/bars/${code}`).catch(() => null);
+    if (!data) { if (attempt < 40) setTimeout(() => poll(attempt + 1), 3000); return; }
     if (data.items.length) {
       currentBars = data.items;
       drawChart();
-      const notices = await api(`/notices/${currentCode}`).catch(() => ({ items: [] }));
+      const notices = await api(`/notices/${code}`).catch(() => ({ items: [] }));
       document.querySelector('#notices').innerHTML = notices.items.map((notice) => `<li>${safe(text(notice.published_at))} ${safeUrl(notice.url) ? `<a href="${safeUrl(notice.url)}" target="_blank" rel="noopener">${safe(notice.title)}</a>` : safe(notice.title)}</li>`).join('') || document.querySelector('#notices').innerHTML;
       return;
     }
@@ -286,7 +290,7 @@ function renderResearch(data) {
     </div>`;
   currentRunId = data.run_id;
   currentResearchData = data;
-  api('/paper').then((paper) => applyWorkflowState(data, currentTrackData, paper)).catch(() => {});
+  api('/paper').then((paper) => applyWorkflowState(data, currentTrackData, paper)).catch(() => applyWorkflowState(data, currentTrackData, null));
 }
 function renderTrack(data) {
   const track = data.tracking || {};
@@ -332,7 +336,7 @@ function renderTrack(data) {
   currentTrackRunId = data.run_id;
   currentTrackData = data;
   if (data.job_id) currentTrackJobId = data.job_id;
-  api('/paper').then((paper) => applyWorkflowState(currentResearchData, data, paper)).catch(() => {});
+  api('/paper').then((paper) => applyWorkflowState(currentResearchData, data, paper)).catch(() => applyWorkflowState(currentResearchData, data, null));
 }
 function jobLabels(kind) {
   const track = String(kind || '').startsWith('track');
@@ -340,8 +344,86 @@ function jobLabels(kind) {
     ? { queued: '追踪排队', running: '追踪中', success: '追踪完成', unchanged: '未重跑追踪', failed: '追踪失败' }
     : { queued: '排队中', running: '研究中', success: '研究完成', unchanged: '未改变结论，旧报告未改', failed: '失败' };
 }
-async function pollResearch(jobId) { try { const job = await api(`/research/jobs/${jobId}`); const labels = jobLabels(job.kind); const trackish = String(job.kind || '').startsWith('track'); const statusEl = document.querySelector(trackish ? '#track-status' : '#research-status'); const failed = job.status === 'failed' ? `${labels.failed}：${explainError(job.error || '未知错误')}` : ''; statusEl.textContent = failed || labels[job.status] || job.status; if (job.status === 'success') { if (job.run_id) { const data = await api(`/research/runs/${job.run_id}`); if (trackish) { renderTrack(data); currentTrackJobId = job.job_id || jobId; } else { renderResearch(data); currentJobId = job.job_id || jobId; } } await loadHistory(currentCode); return; } if (job.status === 'unchanged') { if (trackish) { const current = await api(`/research/stocks/${currentCode}/track`).catch(() => null); if (current) { currentTrackJobId = current.job_id; renderTrack(current); } } else { const current = await api(`/research/stocks/${currentCode}/current`); currentJobId = current.job_id; renderResearch(current); } await loadHistory(currentCode); return; } if (job.status !== 'failed') setTimeout(() => pollResearch(jobId), 2500); } catch (error) { const trackish = jobId === currentTrackJobId; document.querySelector(trackish ? '#track-status' : '#research-status').textContent = explainError(error.message); } }
-async function startResearch() { try { if (!currentCode) { document.querySelector('#research-status').textContent = '请先打开一只股票'; return; } setStage('research', 'research', { state: 'current', label: '分析中' }); const data = await api('/research/jobs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({stock_code: currentCode, kind: 'analyze', prompt: document.querySelector('#research-prompt').value || 'none'}) }); currentJobId = data.job_id; pollResearch(currentJobId); } catch (error) { if (error.jobId) { currentJobId = error.jobId; document.querySelector('#research-status').textContent = error.message; pollResearch(error.jobId); return; } document.querySelector('#research-status').textContent = error.message; } }
+async function pollResearch(jobId, code = currentCode, attempt = 0) {
+  // code 是发起轮询时的标的：换股后旧轮询链必须自行终止，否则 A 股票的
+  // 结果会渲染进 B 股票的页面（跨标的状态污染）。
+  if (code !== currentCode) return;
+  try {
+    const job = await api(`/research/jobs/${jobId}`);
+    if (code !== currentCode) return;
+    const labels = jobLabels(job.kind);
+    const trackish = String(job.kind || '').startsWith('track');
+    const statusEl = document.querySelector(trackish ? '#track-status' : '#research-status');
+    const failed = job.status === 'failed' ? `${labels.failed}：${explainError(job.error || '未知错误')}` : '';
+    statusEl.textContent = failed || labels[job.status] || job.status;
+    if (job.status === 'failed') {
+      // 失败任务不能留在 currentJobId：否则后续反馈永远对着它 409。
+      // 回滚到最近一次成功的任务，并把阶段徽章从"分析中"摘下来。
+      setStage(trackish ? 'track' : 'research', trackish ? 'track' : 'research', { state: '', label: trackish ? '追踪失败' : '分析失败' });
+      if (trackish) {
+        const current = await api(`/research/stocks/${code}/track`).catch(() => null);
+        currentTrackJobId = current ? current.job_id : null;
+      } else {
+        const current = await api(`/research/stocks/${code}/current`).catch(() => null);
+        currentJobId = current ? current.job_id : null;
+      }
+      return;
+    }
+    if (job.status === 'success') {
+      if (job.run_id) {
+        const data = await api(`/research/runs/${job.run_id}`);
+        if (code !== currentCode) return;
+        if (trackish) { renderTrack(data); currentTrackJobId = job.job_id || jobId; }
+        else { renderResearch(data); currentJobId = job.job_id || jobId; }
+      }
+      await loadHistory(code);
+      return;
+    }
+    if (job.status === 'unchanged') {
+      if (trackish) {
+        const current = await api(`/research/stocks/${code}/track`).catch(() => null);
+        if (current) { currentTrackJobId = current.job_id; renderTrack(current); }
+      } else {
+        const current = await api(`/research/stocks/${code}/current`).catch(() => null);
+        if (current) { currentJobId = current.job_id; renderResearch(current); }
+      }
+      await loadHistory(code);
+      return;
+    }
+    setTimeout(() => pollResearch(jobId, code, 0), 2500);
+  } catch (error) {
+    if (code !== currentCode) return;
+    // 一次网络抖动不该让轮询永久终止（后端任务可能已经成功）。
+    if (attempt < 3) { setTimeout(() => pollResearch(jobId, code, attempt + 1), 2500 * (attempt + 1)); return; }
+    const trackish = jobId === currentTrackJobId;
+    document.querySelector(trackish ? '#track-status' : '#research-status').textContent = explainError(error.message) + '（状态查询中断，可重新打开标的）';
+  }
+}
+async function startResearch() {
+  const button = document.querySelector('#research-start');
+  // 请求在途时禁点：连点会对同一任务挂起多条并行轮询链。
+  if (button && button.disabled) return;
+  if (button) button.disabled = true;
+  try {
+    if (!currentCode) { document.querySelector('#research-status').textContent = '请先打开一只股票'; return; }
+    setStage('research', 'research', { state: 'current', label: '分析中' });
+    const data = await api('/research/jobs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({stock_code: currentCode, kind: 'analyze', prompt: document.querySelector('#research-prompt').value || 'none'}) });
+    currentJobId = data.job_id;
+    pollResearch(currentJobId);
+  } catch (error) {
+    if (error.jobId) {
+      // 已有任务进行中：本次填写的补充口径没有生效，要说清楚。
+      currentJobId = error.jobId;
+      document.querySelector('#research-status').textContent = error.message + '（本次填写的补充口径未生效）';
+      pollResearch(error.jobId);
+    } else {
+      document.querySelector('#research-status').textContent = error.message;
+      setStage('research', 'research', { state: '', label: '未开始' });
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
 async function startTrack() { try { if (!currentCode) { document.querySelector('#track-status').textContent = '请先打开一只股票'; return; } setStage('track', 'track', { state: 'current', label: '追踪中' }); const data = await api('/research/jobs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({stock_code: currentCode, kind: 'track', prompt: document.querySelector('#track-prompt').value || 'none'}) }); currentTrackJobId = data.job_id; pollResearch(currentTrackJobId); } catch (error) { if (error.jobId) { currentTrackJobId = error.jobId; document.querySelector('#track-status').textContent = error.message; pollResearch(error.jobId); return; } document.querySelector('#track-status').textContent = error.message; } }
 async function sendFeedback() { if (!currentJobId || !currentRunId) { document.querySelector('#research-status').textContent = '暂无可反馈的研究结果'; return; } try { const data = await api(`/research/jobs/${currentJobId}/feedback`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt: document.querySelector('#feedback-prompt').value}) }); currentJobId = data.job_id; pollResearch(currentJobId); } catch (error) { document.querySelector('#research-status').textContent = error.message; } }
 async function sendTrackFeedback() { if (!currentTrackJobId || !currentTrackRunId) { document.querySelector('#track-status').textContent = '暂无可反馈的追踪结果'; return; } try { const data = await api(`/research/jobs/${currentTrackJobId}/feedback`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt: document.querySelector('#track-feedback-prompt').value}) }); currentTrackJobId = data.job_id; pollResearch(currentTrackJobId); } catch (error) { document.querySelector('#track-status').textContent = error.message; } }
@@ -354,15 +436,18 @@ async function detail(code) {
   currentResearchData = null;
   currentTrackData = null;
   view('detail');
+  // quote 失败（标的不在当前行情批次）不能让整个 detail 中断：那会留下
+  // "页面还是上一只股票、currentCode 已是新股票"的错配，用户可能对着
+  // 错误标的点分析。bars/notices 失败各自降级为空。
   const [quote, bars, notices, current, track, paper] = await Promise.all([
-    api(`/quotes/${code}`),
-    api(`/bars/${code}`),
-    api(`/notices/${code}`),
+    api(`/quotes/${code}`).catch(() => null),
+    api(`/bars/${code}`).catch(() => ({ items: [] })),
+    api(`/notices/${code}`).catch(() => ({ items: [] })),
     api(`/research/stocks/${code}/current`).catch(() => null),
     api(`/research/stocks/${code}/track`).catch(() => null),
     api('/paper').catch(() => ({ positions: [], cash: null })),
   ]);
-  const item = quote.item;
+  const item = quote && quote.item ? quote.item : { name: '（不在最新行情批次）', price: null, change_pct: null };
   document.querySelector('#detail').innerHTML = `<div class="stock-context"><span class="stock-label">当前研究标的</span><h2>${safe(item.name)} <small>${safe(code)}</small></h2><p class="price">${text(item.price)} <span class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</span></p></div><div class="stock-actions"><button id="watch">加入自选</button><button id="open-profile" class="button-secondary">用户画像</button><button id="open-paper" class="button-secondary">模拟账户</button></div>`;
   document.querySelector('#watch').onclick = async () => {
     await api(`/watchlist/${code}`, { method: 'PUT' });
@@ -398,7 +483,7 @@ function historyKind(item) {
   return '首次研究';
 }
 async function loadHistory(code) { const data = await api(`/research/stocks/${code}/history`); document.querySelector('#research-history').innerHTML = `<h3>研究历史</h3>` + data.items.map((item) => `<p>${zhTime(item.created_at) || '时间未知'} · ${historyKind(item)} · ${zh('status', item.status) || '已记录'}${item.run_id ? ` <button class="history-view" data-run-id="${item.run_id}">查看此版本</button>` : ''}</p>`).join(''); document.querySelectorAll('.history-view').forEach((button) => button.addEventListener('click', () => loadRun(button.getAttribute('data-run-id')))); }
-async function loadRun(runId) { const data = await api(`/research/runs/${runId}`); if (data.mode === 'track_day' || data.tracking) { renderTrack(data); document.querySelector('#track-status').textContent = '已切换到历史追踪'; document.querySelector('#track-result').scrollIntoView({behavior: 'smooth', block: 'start'}); return; } renderResearch(data); currentRunId = runId; if (data.job_id) currentJobId = data.job_id; document.querySelector('#research-status').textContent = '已切换到历史分析'; document.querySelector('#research-result').scrollIntoView({behavior: 'smooth', block: 'start'}); }
+async function loadRun(runId) { const data = await api(`/research/runs/${runId}`); if (data.mode === 'track_day' || data.tracking) { renderTrack(data); document.querySelector('#track-status').textContent = '已切换到历史追踪'; document.querySelector('#track-result').scrollIntoView({behavior: 'smooth', block: 'start'}); return; } renderResearch(data); document.querySelector('#research-status').textContent = '已切换到历史分析（仅查看：反馈仍基于最新结果）'; document.querySelector('#research-result').scrollIntoView({behavior: 'smooth', block: 'start'}); }
 async function loadWatchlist() { view('watchlist'); const data = await api('/watchlist'); document.querySelector('#watchlist').innerHTML = data.items.map((item) => `<p><button class="stock" data-code="${safe(item.stock_code)}">${safe(item.stock_code)} ${safe(text(item.name))}</button> ${text(item.price)} <span class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</span></p>`).join('') || '<p>尚未加入自选股。</p>'; document.querySelectorAll('.stock').forEach((button) => button.onclick = () => detail(button.dataset.code)); }
 async function paperTrade(code, side) {
   const status = document.querySelector('#paper-trade-status');
@@ -618,14 +703,23 @@ async function collectQuotes() {
       return;
     }
   }
-  const poll = async () => {
-    const status = await loadStatus();
+  const poll = async (attempt = 0) => {
+    // 一次状态查询失败不能让轮询链断掉：那会把"采集行情"按钮永久锁灰。
+    let status;
+    try {
+      status = await loadStatus();
+    } catch (error) {
+      if (attempt < 5) { setTimeout(() => poll(attempt + 1), 2000); return; }
+      document.querySelector('#status').textContent = '状态查询失败，请稍后手动刷新';
+      setCollecting(false);
+      return;
+    }
     if (status.collecting) {
-      setTimeout(poll, 1000);
+      setTimeout(() => poll(0), 1000);
       return;
     }
     page = 1;
-    await load();
+    await load().catch(() => {});
     if (status.last_run && status.last_run.status === 'failed') {
       document.querySelector('#status').textContent = `采集失败：${status.last_run.error || '未知错误'}`;
       document.querySelector('#status').className = 'stale';
@@ -633,5 +727,8 @@ async function collectQuotes() {
   };
   setTimeout(poll, 800);
 }
+// 低频自愈：无论哪个标签页、哪条链路把采集状态标错了，30 秒内都会被
+// 真实后端状态纠正（否则另一个标签页的按钮可能永久变灰）。
+setInterval(() => { loadStatus().then((s) => setCollecting(!!s.collecting)).catch(() => {}); }, 30000);
 document.querySelector('#refresh').onclick = () => { page = 1; load(); }; document.querySelector('#collect').onclick = collectQuotes; document.querySelector('#collect-market').onclick = collectQuotes; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#search').onkeydown = (event) => { if (event.key === 'Enter') { page = 1; load(); } }; document.querySelector('#previous').onclick = () => { page -= 1; load(); }; document.querySelector('#next').onclick = () => { page += 1; load(); }; document.querySelector('#research-start').onclick = startResearch; document.querySelector('#feedback-send').onclick = sendFeedback; document.querySelector('#track-start').onclick = startTrack; document.querySelector('#track-feedback-send').onclick = sendTrackFeedback; document.querySelector('#chart-mode-line').onclick = () => { chartMode = 'line'; drawChart(); }; document.querySelector('#chart-mode-k').onclick = () => { chartMode = 'k'; drawChart(); }; document.querySelector('#chart-collect').onclick = collectBars; document.querySelector('#cover-enter').onclick = () => { enterWorkbench(); view('market'); };
 document.querySelectorAll('nav button').forEach((button) => button.onclick = () => { if (button.dataset.view === 'watchlist') loadWatchlist(); else if (button.dataset.view === 'profile') loadProfile(); else if (button.dataset.view === 'paper') loadPaper(); else if (button.dataset.view === 'experts') loadExperts(); else if (button.dataset.view === 'cover') showCover(); else view('market'); }); document.querySelector('.back').onclick = () => view('market'); loadStatus(); load();

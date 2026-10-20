@@ -1,0 +1,78 @@
+{
+  "entry_id": "kb_insufficient_data_discipline",
+  "title": "数据不足时先列缺失，不许用推测补齐",
+  "scope": "fundamental",
+  "version": 1,
+  "payload": {
+    "id": "kb_insufficient_data_discipline",
+    "title": "数据不足时先列缺失，不许用推测补齐",
+    "type": "rule",
+    "scope": [
+      "fundamental",
+      "technical",
+      "sentiment",
+      "macro"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "insufficient_bars"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": [],
+      "always_applicable": false
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "数据不足",
+        "缺失",
+        "样本不足",
+        "无法计算",
+        "不确定"
+      ],
+      "aliases": [
+        "缺数据",
+        "数据不全"
+      ],
+      "intent_tags": [
+        "data_check"
+      ],
+      "priority": 95,
+      "mandatory": true
+    },
+    "guidance": {
+      "action": "把缺失写清楚，能算的照常算，算不了的明确说不算",
+      "text": "当可用数据不足以支撑某项判断时，处理顺序是：先逐项列出缺什么（字段名、缺多少、缺哪一期），再说明缺这个字段会导致哪个结论无法成立，最后只对数据充分的部分给结论。禁止以下三种补齐方式：一是用行业均值代替本公司数据；二是用上一期数据代替本期；三是把「拿不到」表述成「没有异常」。缺失本身要降低置信度，不能因为「其他方面看起来都不错」而抵消。",
+      "exceptions": [
+        "仅缺非关键字段时，正常给结论并在缺失信息中标注，不必降级整份报告"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "个人投资决策手册",
+        "chapter": "7. 什么时候应该弃权",
+        "pages": ""
+      }
+    ],
+    "tests": {
+      "should_match": [
+        {
+          "flags": [
+            "insufficient_bars"
+          ],
+          "query": "数据不足"
+        }
+      ],
+      "should_not_match": [
+        {
+          "flags": [
+            "ma_bull_align"
+          ],
+          "query": "数据不足"
+        }
+      ]
+    }
+  }
+}

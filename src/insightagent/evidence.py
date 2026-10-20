@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Iterable, List, Sequence, Set
+from typing import Any, Iterable, List, Sequence, Set
 
 from .business_contracts import FundamentalSnapshot, Report
 from .data_contracts import MacroSnapshot
@@ -45,13 +45,26 @@ def report_text(report: Report) -> str:
     return " ".join(part for part in parts if part)
 
 
+def _collect_numbers(value: Any, out: Set[float]) -> None:
+    """Walk nested snapshot data: list fields (e.g. an ROE series) are as
+    legitimate a citation source as scalars, so they must be walked too."""
+    if isinstance(value, bool):
+        return
+    if isinstance(value, (int, float)):
+        out.add(float(value))
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            _collect_numbers(item, out)
+        return
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            _collect_numbers(item, out)
+
+
 def allowed_financial_numbers(snapshot: FundamentalSnapshot) -> Set[float]:
     allowed: Set[float] = set(RULE_THRESHOLDS)
-    for value in snapshot.model_dump().values():
-        if isinstance(value, bool):
-            continue
-        if isinstance(value, (int, float)):
-            allowed.add(float(value))
+    _collect_numbers(snapshot.model_dump(), allowed)
     for hit in snapshot.rule_hits:
         for token in NUMBER_RE.findall(hit.detail):
             allowed.add(float(token))

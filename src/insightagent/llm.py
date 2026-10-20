@@ -41,6 +41,11 @@ class DeepSeekChatAdapter:
         self.client = client or AsyncOpenAI(
             api_key=config.api_key,
             base_url=config.base_url,
+            # The SDK default (10 minutes, 2 retries) can outlive the caller's
+            # own budget; a single call must fail well before a research job's
+            # timeout so the job can record a real failure.
+            timeout=90.0,
+            max_retries=1,
         )
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
@@ -88,8 +93,9 @@ class DeepSeekChatAdapter:
             "role": message.role,
             "content": message.content,
         }
-        if message.reasoning_content is not None:
-            data["reasoning_content"] = message.reasoning_content
+        # reasoning_content is deliberately never sent back: the provider
+        # rejects echoing its own hidden reasoning on subsequent turns, and
+        # persistence already strips it for the same reason.
         if message.tool_calls:
             data["tool_calls"] = [
                 {

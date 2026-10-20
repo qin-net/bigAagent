@@ -1,0 +1,89 @@
+{
+  "entry_id": "kb_macd_signal",
+  "title": "MACD 只描述动能方向，不是买卖点",
+  "scope": "technical",
+  "version": 1,
+  "payload": {
+    "id": "kb_macd_signal",
+    "title": "MACD 只描述动能方向，不是买卖点",
+    "type": "rule",
+    "scope": [
+      "technical"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [
+        "macd_pos",
+        "macd_neg"
+      ],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": []
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "macd",
+        "金叉",
+        "死叉",
+        "动能",
+        "dif",
+        "dea",
+        "柱状图"
+      ],
+      "aliases": [
+        "macd 正负",
+        "动能方向",
+        "背离"
+      ],
+      "intent_tags": [
+        "signal_check"
+      ],
+      "priority": 85,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "只用于判断动能边际变化，必须与均线结构共同确认",
+      "text": "MACD 的 DIF 与 DEA 相对位置（本系统以 DIF>DEA 记为 macd_pos、反之为 macd_neg）只描述中期动能的边际方向，不构成买卖点。解读时须遵守：一是单独一条指标不构成信号，必须与均线排列共同验证（技术面规则第三节第1条）；二是柱状图由负转正或由正转负，只说明动能变化，不说明价格会继续同向；三是真正值得关注的是背离——价格创新高而 MACD 未创新高（顶背离）、价格创新低而 MACD 未创新低（底背离），且背离后仍需等待确认信号再行动；四是参数采用标准 12/26/9，不得为匹配历史而修改参数。",
+      "exceptions": [
+        "数据不足无法计算 MACD 时，应写入缺失信息并按 insufficient_bars 处理"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "Appel_2005_Technical_Analysis_Power_Tools",
+        "chapter": "MACD 定义与信号",
+        "pages": ""
+      },
+      {
+        "source_id": "技术面规则",
+        "chapter": "一、核心指标定义；三、使用规则第1/3/4条",
+        "pages": ""
+      }
+    ],
+    "tests": {
+      "should_match": [
+        {
+          "flags": [
+            "macd_pos"
+          ],
+          "query": "macd 动能"
+        },
+        {
+          "flags": [
+            "macd_neg"
+          ],
+          "query": "死叉"
+        }
+      ],
+      "should_not_match": [
+        {
+          "flags": [
+            "macd_pos"
+          ],
+          "query": "现金流"
+        }
+      ]
+    }
+  }
+}

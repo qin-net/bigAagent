@@ -49,6 +49,13 @@ def profile_evidence(
     positions = []
     for item in paper.get("positions") or []:
         market_value = float(item.get("market_value") or 0)
+        unrealized = item.get("unrealized")
+        # Three-state: None means "quote unavailable", which must not read as
+        # "profitable" downstream -- the model would invent discipline praise
+        # from what is actually missing data.
+        quote_known = (
+            unrealized is not None and item.get("change_pct") is not None
+        )
         positions.append(
             {
                 "stock_code": item.get("stock_code"),
@@ -57,8 +64,9 @@ def profile_evidence(
                     round(market_value / equity, 4) if equity else None
                 ),
                 "unrealized_positive": (
-                    float(item.get("unrealized") or 0) >= 0
+                    float(unrealized) >= 0 if quote_known else None
                 ),
+                "quote_available": quote_known,
             }
         )
     return {

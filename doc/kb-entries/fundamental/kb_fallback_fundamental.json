@@ -1,0 +1,51 @@
+{
+  "entry_id": "kb_fallback_fundamental",
+  "title": "没有触发特定模式时的基础财务检查",
+  "scope": "fundamental",
+  "version": 1,
+  "payload": {
+    "id": "kb_fallback_fundamental",
+    "title": "没有触发特定模式时的基础财务检查",
+    "type": "rule",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "approved",
+    "version": 1,
+    "applicability": {
+      "any_flags": [],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": [],
+      "always_applicable": true
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "基本面",
+        "财务",
+        "盈利",
+        "现金流",
+        "估值",
+        "检查清单"
+      ],
+      "aliases": [
+        "没有异常",
+        "常规检查",
+        "基础面"
+      ],
+      "intent_tags": [],
+      "priority": 10,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "按基础四问逐项确认，不因缺少触发标签而跳过检查",
+      "text": "没有任何触发标签不等于没有问题。应先确认四项基础事实：盈利是否来自主营、经营现金流与净利润是否同向、资产负债率是否在可比区间、当前估值相对自身历史分位处于什么位置。四项中任何一项拿不到数据，就写进缺失信息，不要用推测补齐。",
+      "exceptions": []
+    },
+    "source_refs": [],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    }
+  }
+}

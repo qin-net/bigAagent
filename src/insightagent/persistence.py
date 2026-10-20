@@ -13,7 +13,7 @@ from uuid import uuid4
 from .contracts import AgentState, LLMMessage, LLMToolCall, StatePatch, TaskStatus, utc_now
 from .state import StateConflictError, apply_patch_to_state, snapshot_private_memory
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 MIGRATION_1 = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -250,6 +250,13 @@ CREATE INDEX IF NOT EXISTS idx_preferences_active
 ON user_preferences(user_id, scope, status);
 """
 
+MIGRATION_5 = """
+ALTER TABLE agent_states ADD COLUMN user_id TEXT;
+ALTER TABLE sessions ADD COLUMN user_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_agent_state_user
+ON agent_states(user_id, agent_name, thesis_id, status);
+"""
+
 EXPECTED_TABLES = frozenset(
     {
         "schema_migrations",
@@ -325,12 +332,14 @@ class SQLiteDatabase:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(
             str(self.path),
-            timeout=5.0,
+            timeout=30.0,
             isolation_level=None,
         )
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA busy_timeout = 5000")
+        # Four experts write concurrently; 5s was short enough that a busy
+        # database turned into a hard "database is locked" run failure.
+        connection.execute("PRAGMA busy_timeout = 30000")
         connection.execute("PRAGMA synchronous = NORMAL")
         connection.execute("PRAGMA journal_mode = WAL")
         return connection
@@ -373,6 +382,9 @@ class SQLiteDatabase:
             if current_version < 4:
                 self._apply_migration(connection, 4, MIGRATION_4)
                 current_version = 4
+            if current_version < 5:
+                self._apply_migration(connection, 5, MIGRATION_5)
+                current_version = 5
         finally:
             connection.close()
 
@@ -436,6 +448,7 @@ class SQLiteStateStore:
         stock_code: Optional[str] = None,
         thesis_id: Optional[str] = None,
         business_context: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None,
     ) -> AgentState:
         await self.database.initialize()
         return await asyncio.to_thread(
@@ -446,6 +459,7 @@ class SQLiteStateStore:
             stock_code,
             thesis_id,
             business_context or {},
+            user_id,
         )
 
     def _load_or_create_sync(
@@ -456,6 +470,7 @@ class SQLiteStateStore:
         stock_code: Optional[str],
         thesis_id: Optional[str],
         business_context: Dict[str, Any],
+        user_id: Optional[str] = None,
     ) -> AgentState:
         connection = self.database.connect()
         try:
@@ -478,7 +493,16 @@ class SQLiteStateStore:
                 ).fetchone()
                 if parent_row:
                     parent = AgentState.model_validate_json(parent_row["state_json"])
-                    inherited = snapshot_private_memory(parent.private_memory)
+                    # Only inherit from a parent that is genuinely the same
+                    # role on the same thesis. The id can arrive from model
+                    # supplied tool arguments, so an unchecked lookup would let
+                    # a call read another agent's or investor's memory.
+                    if (
+                        parent.agent_name == agent_name
+                        and parent.thesis_id == thesis_id
+                        and (parent.user_id or "") == (user_id or "")
+                    ):
+                        inherited = snapshot_private_memory(parent.private_memory)
 
             state = AgentState(
                 session_id=session_id
@@ -489,6 +513,7 @@ class SQLiteStateStore:
                 thesis_id=thesis_id,
                 business_context=business_context,
                 private_memory=inherited,
+                user_id=user_id,
             )
             self._insert_new_state(connection, state)
             connection.execute("COMMIT")
@@ -622,27 +647,35 @@ class SQLiteStateStore:
             connection.close()
 
     async def latest_for_agent(
-        self, *, agent_name: str, thesis_id: str
+        self, *, agent_name: str, thesis_id: str, user_id: Optional[str] = None
     ) -> Optional[AgentState]:
         await self.database.initialize()
         return await asyncio.to_thread(
-            self._latest_for_agent_sync, agent_name, thesis_id
+            self._latest_for_agent_sync, agent_name, thesis_id, user_id
         )
 
     def _latest_for_agent_sync(
-        self, agent_name: str, thesis_id: str
+        self, agent_name: str, thesis_id: str, user_id: Optional[str]
     ) -> Optional[AgentState]:
         if not thesis_id:
             return None
         connection = self.database.connect()
         try:
+            # user_id scopes the lookup: without it, an agent working on the
+            # same stock for a different investor would inherit their memory.
             row = connection.execute(
                 """
                 SELECT state_json FROM agent_states
                 WHERE agent_name = ? AND thesis_id = ? AND status = ?
+                  AND COALESCE(user_id, '') = ?
                 ORDER BY updated_at DESC LIMIT 1
                 """,
-                (agent_name, thesis_id, TaskStatus.SUCCESS.value),
+                (
+                    agent_name,
+                    thesis_id,
+                    TaskStatus.SUCCESS.value,
+                    user_id or "",
+                ),
             ).fetchone()
             if not row:
                 return None
@@ -676,8 +709,9 @@ class SQLiteStateStore:
             """
             INSERT INTO agent_states(
                 session_id, parent_session_id, agent_name, stock_code,
-                thesis_id, status, version, state_json, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                thesis_id, status, version, state_json, created_at,
+                updated_at, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             _state_row(state),
         )
@@ -692,7 +726,7 @@ class SQLiteStateStore:
             UPDATE agent_states
             SET parent_session_id = ?, agent_name = ?, stock_code = ?,
                 thesis_id = ?, status = ?, version = ?, state_json = ?,
-                created_at = ?, updated_at = ?
+                created_at = ?, updated_at = ?, user_id = ?
             WHERE session_id = ?
             """,
             (
@@ -705,6 +739,7 @@ class SQLiteStateStore:
                 state.model_dump_json(),
                 state.created_at.isoformat(),
                 state.updated_at.isoformat(),
+                state.user_id,
                 state.session_id,
             ),
         )
@@ -1023,6 +1058,7 @@ def _state_row(state: AgentState) -> tuple[Any, ...]:
         state.model_dump_json(),
         state.created_at.isoformat(),
         state.updated_at.isoformat(),
+        state.user_id,
     )
 
 

@@ -18,10 +18,12 @@ from .pdfmd import (
 )
 from .workflows.initial_research import (
     FeedbackError,
+    InvalidStockCodeError,
     analyze_stock,
     feedback_on_run,
     format_cli_text,
     format_feedback_result,
+    normalize_stock_code,
     write_run_json,
 )
 
@@ -497,7 +499,11 @@ async def _run_analyze(args: argparse.Namespace) -> int:
         adapter = FixtureFundamentalAdapter.from_directory(
             default_fixtures_dir(args.fixtures_dir)
         )
-        snapshot = await adapter.fetch_fundamental(args.stock_code.strip())
+        # Normalise exactly like the workflow does; a code with a market
+        # suffix (000858.SZ) would otherwise miss the fixture by key and
+        # wrongly conclude that no model is needed.
+        precheck_code = normalize_stock_code(args.stock_code)
+        snapshot = await adapter.fetch_fundamental(precheck_code)
         needs_llm = not all(
             getattr(snapshot, name) is None for name in REQUIRED_FIELDS
         )
@@ -593,7 +599,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     load_dotenv()
     parser = build_parser()
     args = parser.parse_args(argv)
-    return asyncio.run(_run(args))
+    try:
+        return asyncio.run(_run(args))
+    except InvalidStockCodeError as error:
+        # A bad code is a user error, not a crash; other subcommands already
+        # report it this way.
+        print(str(error))
+        return 1
 
 
 if __name__ == "__main__":

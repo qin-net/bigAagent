@@ -40,19 +40,40 @@ class ContextArchive(Protocol):
 
 
 class CharacterTokenCounter:
-    """Portable approximation until a model-specific tokenizer is configured."""
+    """Lightweight estimator until a model-specific tokenizer is configured.
+
+    CJK characters are roughly one token each while ASCII averages ~4
+    characters per token, so a flat len/4 estimate under-counts Chinese text
+    by 3-4x. This project's prompts and reports are mostly Chinese, and an
+    under-count means "it fits" is decided wrongly and the request is
+    rejected downstream.
+    """
+
+    @staticmethod
+    def _is_wide(char: str) -> bool:
+        code = ord(char)
+        return (
+            0x4E00 <= code <= 0x9FFF      # CJK unified ideographs
+            or 0x3000 <= code <= 0x303F   # CJK punctuation
+            or 0xFF00 <= code <= 0xFFEF   # full-width forms
+            or 0x3040 <= code <= 0x30FF   # kana
+            or 0xAC00 <= code <= 0xD7AF   # hangul
+        )
 
     def count_text(self, text: str) -> int:
         if not text:
             return 0
-        return max(1, (len(text) + 3) // 4)
+        wide = sum(1 for char in text if self._is_wide(char))
+        narrow = len(text) - wide
+        return max(1, wide + (narrow + 3) // 4)
 
     def count_messages(self, messages: List[LLMMessage]) -> int:
         total = 0
         for message in messages:
             total += 4
             total += self.count_text(message.content or "")
-            total += self.count_text(message.reasoning_content or "")
+            # reasoning_content is never sent back to the provider, so it does
+            # not consume request budget.
             if message.tool_calls:
                 total += self.count_text(
                     json.dumps(
@@ -117,9 +138,16 @@ class ContextBuffer:
         self.messages.append(message)
         await self.archive.append(self.session_id, message)
 
-    async def append_user(self, content: str, *, priority: int = 100) -> None:
+    async def append_user(
+        self, content: str, *, priority: int = 100, pin: bool = False
+    ) -> None:
         await self.append(
-            LLMMessage(role="user", content=content, priority=priority)
+            LLMMessage(
+                role="user",
+                content=content,
+                priority=priority,
+                metadata={"pinned": True} if pin else {},
+            )
         )
 
     async def append_assistant(
@@ -140,14 +168,15 @@ class ContextBuffer:
         )
 
     async def append_tool(
-        self, *, tool_call_id: str, content: str
+        self, *, tool_call_id: str, content: str, pin: bool = False
     ) -> None:
         await self.append(
             LLMMessage(
                 role="tool",
                 tool_call_id=tool_call_id,
                 content=content,
-                priority=80,
+                priority=95 if pin else 80,
+                metadata={"pinned": True} if pin else {},
             )
         )
 
@@ -345,10 +374,14 @@ class ContextCompactor:
         keep_indices.update(
             index
             for index, message in enumerate(messages)
-            if message.priority >= 90
-            and (
-                message.metadata.get("pinned", False)
-                or index == len(messages) - 1
+            # A pinned message is never snipped regardless of its position:
+            # the task prompt and the authoritative snapshots must survive
+            # compaction, or later rounds lose the task definition and the
+            # exact numbers the evidence check requires.
+            if message.metadata.get("pinned", False)
+            or (
+                message.priority >= 90
+                and index == len(messages) - 1
             )
         )
 

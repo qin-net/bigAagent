@@ -149,6 +149,33 @@ async def test_remember_without_rerun_writes_preference(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_this_run_feedback_applies_to_next_analyze(tmp_path):
+    # 不带 #rerun 的反馈语义是"留给下一次分析"。下一次 analyze 必须读到它，
+    # 否则这条反馈写进库之后就无人消费（历史缺陷）。
+    parent, fund, tech, sent, macro = await _parent(tmp_path)
+    await feedback_on_run(
+        parent.run.run_id,
+        database=_db(tmp_path),
+        llm_adapter=fund,
+        artifact_root=str(tmp_path / "artifacts"),
+        user_prompt="下次注意现金流质量",
+        extract_llm_adapter=_extract_llm(
+            _slots_payload(fundamental="注意现金流质量，对照经营现金流")
+        ),
+        technical_llm_adapter=tech,
+        sentiment_llm_adapter=sent,
+        macro_llm_adapter=macro,
+    )
+
+    from test_p0_research import _make_four_agent_llms as _mk
+    fund2, tech2, sent2, macro2 = _mk()
+    await _analyze(tmp_path, "000858", fund2, tech2, sent2, macro2)
+    from test_expert_memory import _first_user_json
+    task = _first_user_json(fund2)
+    assert "现金流质量" in json.dumps(task, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
 async def test_rerun_fundamental_only_freezes_other_reports(tmp_path):
     parent, fund, tech, sent, macro = await _parent(tmp_path)
     parent_tech = parent.technical_report.model_dump(mode="json")

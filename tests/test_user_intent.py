@@ -159,6 +159,37 @@ def test_plain_constraint_is_not_rerun():
     assert json.loads(parsed.tagged_dims) == [NONE]
 
 
+def test_explicit_tags_block_nl_dim_expansion():
+    # 显式 tag 只点了基本面；正文里的"技术面挺好别动"不得把技术面拉进重跑。
+    parsed = merge_parsed_with_slots(
+        parse_tags("#rerun #fundamental 技术面那段挺好别动"),
+        empty_slots(),
+    )
+    assert json.loads(parsed.tagged_dims) == ["fundamental"]
+
+
+def test_negated_rerun_marker_is_not_rerun():
+    # 用户明确拒绝重跑，不能因为句中出现"再看一遍"就触发重跑。
+    parsed = merge_parsed_with_slots(
+        parse_tags("这次不用再看一遍了，就按原来的"),
+        empty_slots(),
+    )
+    assert parsed.effect == "this_run"
+    parsed = merge_parsed_with_slots(
+        parse_tags("别重跑，我只是记一下"),
+        empty_slots(),
+    )
+    assert "rerun" not in json.loads(parsed.tags)
+
+
+def test_memory_gate_rejects_garbage_even_with_check_word():
+    # 命中"估值/趋势"等检查词的纯吐槽，仍然不许进永久偏好。
+    assert passes_memory_gate("写得不行，估值太差") is False
+    assert passes_memory_gate("太保守了，趋势也没写") is False
+    # 真正可执行的规则不受影响。
+    assert passes_memory_gate("估值须同时对照自身分位和同行") is True
+
+
 def test_llm_remember_rerun_and_invalid_effect():
     parsed = merge_parsed_with_slots(
         parse_tags("记住并且把基本面再出一版"),

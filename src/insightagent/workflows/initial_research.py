@@ -95,6 +95,7 @@ from ..user_intent import (
     fill_tagged_empty_slots,
     format_intent_echo,
     merge_parsed_with_slots,
+    overlay_none_slots,
     parse_tags,
     should_schedule_rerun,
 )
@@ -283,6 +284,7 @@ async def analyze_stock(
         stock_code=code,
         thesis_id="{}-initial".format(code),
         status="running",
+        user_id=user_id,
     )
     await store.save_run(run)
     await audit.append(
@@ -290,34 +292,58 @@ async def analyze_stock(
         {"stock_code": code, "fixture": fixture},
         run_id=run.run_id,
     )
-    intent, show_intent_echo = await _prepare_intent(
-        user_prompt=user_prompt,
-        user_id=user_id,
-        run=run,
-        code=code,
-        llm_adapter=extract_llm,
-        model=model,
-        user_store=user_store,
-        audit=audit,
-    )
-    fund_prefs = await user_store.active_preferences(
-        user_id=user_id, scope="fundamental", stock_code=code
-    )
-    tech_prefs = await user_store.active_preferences(
-        user_id=user_id, scope="technical", stock_code=code
-    )
-    sent_prefs = await user_store.active_preferences(
-        user_id=user_id, scope="sentiment", stock_code=code
-    )
-    macro_prefs = await user_store.active_preferences(
-        user_id=user_id, scope="macro", stock_code=code
-    )
-    decision_prefs = await user_store.active_preferences(
-        user_id=user_id, scope="decision", stock_code=code
-    )
-
+    # Initialised before the try: the failure handler reads it, and an error
+    # raised during intent extraction would otherwise leave it unbound.
     macro_fetch_error: Optional[Exception] = None
+    # The run row is already persisted, so everything from here on must be
+    # inside the failure handler: otherwise an error while reading intent or
+    # preferences escapes and leaves the run stuck at status="running".
     try:
+        intent, show_intent_echo = await _prepare_intent(
+            user_prompt=user_prompt,
+            user_id=user_id,
+            run=run,
+            code=code,
+            llm_adapter=extract_llm,
+            model=model,
+            user_store=user_store,
+            audit=audit,
+        )
+        # Feedback given after the previous run without #rerun was stored with
+        # moment=post_decision and the promise "applies to the next run". This
+        # is that next run, so merge it in (same pattern as the tracking
+        # chain). Only the latest completed run is consulted, so a note stops
+        # applying once a newer run has incorporated it.
+        prior_run = await store.latest_research_run(run.thesis_id)
+        if prior_run is not None:
+            pending = await user_store.intent_for_run_moment(
+                run_id=prior_run["run"]["run_id"],
+                moment="post_decision",
+                effect="this_run",
+            )
+            if pending is not None:
+                intent = overlay_none_slots(intent, pending)
+                await audit.append(
+                    "pending_feedback_applied",
+                    {"source_run_id": prior_run["run"]["run_id"]},
+                    run_id=run.run_id,
+                )
+        fund_prefs = await user_store.active_preferences(
+            user_id=user_id, scope="fundamental", stock_code=code
+        )
+        tech_prefs = await user_store.active_preferences(
+            user_id=user_id, scope="technical", stock_code=code
+        )
+        sent_prefs = await user_store.active_preferences(
+            user_id=user_id, scope="sentiment", stock_code=code
+        )
+        macro_prefs = await user_store.active_preferences(
+            user_id=user_id, scope="macro", stock_code=code
+        )
+        decision_prefs = await user_store.active_preferences(
+            user_id=user_id, scope="decision", stock_code=code
+        )
+
         snapshot = await fetch_retry.execute(
             fundamental_adapter.fetch_fundamental, code
         )
@@ -769,6 +795,7 @@ async def feedback_on_run(
             snapshot_refs=dict(parent_run.snapshot_refs),
             session_ids={},
             parent_run_id=parent_run.run_id,
+            user_id=user_id,
         )
         await store.save_run(target_run)
         await audit.append(
@@ -781,17 +808,31 @@ async def feedback_on_run(
             run_id=target_run.run_id,
         )
 
-    intent, show_echo = await _commit_intent(
-        parsed=parsed,
-        slots=slots,
-        audit_type=audit_type,
-        user_id=user_id,
-        run=target_run,
-        code=parent_run.stock_code,
-        user_store=user_store,
-        audit=audit,
-        moment="post_decision",
-    )
+    try:
+        intent, show_echo = await _commit_intent(
+            parsed=parsed,
+            slots=slots,
+            audit_type=audit_type,
+            user_id=user_id,
+            run=target_run,
+            code=parent_run.stock_code,
+            user_store=user_store,
+            audit=audit,
+            moment="post_decision",
+        )
+    except Exception as error:
+        # The child run was already persisted above; without this it would sit
+        # at status="running" forever and block the whole feedback chain.
+        if schedule:
+            target_run.status = "failed"
+            target_run.updated_at = utc_now()
+            await store.save_run(target_run)
+            await audit.append(
+                "run_failed",
+                {"type": type(error).__name__, "message": str(error)},
+                run_id=target_run.run_id,
+            )
+        raise
 
     if not schedule:
         if parsed.effect in {"rerun", "remember_rerun"}:
@@ -1282,6 +1323,30 @@ def _decision_constraint(intent, prefs) -> str:
     return "；".join(parts)
 
 
+async def _reject_session(
+    database: SQLiteDatabase, session_id: str, *, reason: str
+) -> None:
+    """Mark a session whose output failed evidence binding as FAILED.
+
+    The agent loop itself succeeded, so the session sits at SUCCESS and its
+    private memory (built on numbers that failed verification) would be
+    inherited both by the retry that is about to run and by every future run
+    of this thesis. Demote it so memory lookup skips it."""
+    if not session_id:
+        return
+    from ..contracts import TaskStatus
+
+    store = SQLiteStateStore(database)
+    try:
+        state = await store.get(session_id)
+        state.status = TaskStatus.FAILED
+        state.business_context["rejected_by"] = reason
+        await store.save(state, expected_version=state.version)
+    except Exception:
+        # Best effort: failing to demote must not mask the binding error.
+        return
+
+
 async def _prepare_session(
     *,
     database: SQLiteDatabase,
@@ -1294,6 +1359,7 @@ async def _prepare_session(
         SQLiteStateStore(database),
         agent_name=agent_name,
         thesis_id=run.thesis_id,
+        user_id=run.user_id,
     )
     session_id = str(uuid4())
     run.session_ids[agent_name] = session_id
@@ -1360,6 +1426,9 @@ async def _bind_fundamental_with_retries(
             return report, session_id
         except EvidenceBindingError as error:
             last_error = error
+            await _reject_session(
+                database, session_id, reason="evidence_binding"
+            )
             await audit.append(
                 "evidence_bind_retry",
                 {
@@ -1416,6 +1485,9 @@ async def _bind_macro_with_retries(
             return report, session_id
         except EvidenceBindingError as error:
             last_error = error
+            await _reject_session(
+                database, session_id, reason="evidence_binding"
+            )
             await audit.append(
                 "evidence_bind_retry",
                 {
@@ -1476,6 +1548,7 @@ async def _run_fundamental_agent(
                 "thesis_id": run.thesis_id,
                 "run_id": run.run_id,
             },
+            user_id=run.user_id,
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
@@ -1647,6 +1720,7 @@ async def _run_technical_agent(
                 "thesis_id": run.thesis_id,
                 "run_id": run.run_id,
             },
+            user_id=run.user_id,
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
@@ -1708,6 +1782,7 @@ async def _run_sentiment_agent(
                 "thesis_id": run.thesis_id,
                 "run_id": run.run_id,
             },
+            user_id=run.user_id,
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise
@@ -1772,6 +1847,7 @@ async def _run_macro_agent(
                 "thesis_id": run.thesis_id,
                 "run_id": run.run_id,
             },
+            user_id=run.user_id,
         )
     except (InvalidModelOutputError, StateConflictError, ValidationError):
         raise

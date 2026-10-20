@@ -183,6 +183,9 @@ class RunRecord(BaseModel):
     run_id: str
     stock_code: str
     thesis_id: str
+    # Owner of the run; flows into each expert session so private memory
+    # stays per-investor. Optional so runs persisted before this field parse.
+    user_id: Optional[str] = None
     mode: Literal["research", "track_day"] = "research"
     status: Literal["running", "success", "failed", "degraded"]
     snapshot_refs: dict = Field(default_factory=dict)

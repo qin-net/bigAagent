@@ -1,0 +1,76 @@
+{
+  "entry_id": "kb_valuation_neutral",
+  "title": "估值不高不低时不能默认合理",
+  "scope": "fundamental",
+  "version": 1,
+  "payload": {
+    "id": "kb_valuation_neutral",
+    "title": "估值不高不低时不能默认合理",
+    "type": "rule",
+    "scope": [
+      "fundamental"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [],
+      "all_flags": [],
+      "none_flags": [
+        "valuation_cheap",
+        "valuation_rich",
+        "value_trap_risk"
+      ],
+      "required_fields": [],
+      "always_applicable": false
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "估值",
+        "合理区间",
+        "pe",
+        "pb",
+        "分位",
+        "安全边际"
+      ],
+      "aliases": [
+        "估值中性",
+        "估值合理"
+      ],
+      "intent_tags": [
+        "valuation_check"
+      ],
+      "priority": 60,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "估值中性不是买入理由，必须给出历史与同行两个参照",
+      "text": "当估值既没有触发偏贵、也没有触发便宜时，正确表述是「估值处于自身历史与同行的中间区间」，而不是「估值合理」或「有安全边际」。判断必须同时给出两个参照：一是当前 PE/PB 相对公司自身历史分位所处位置，二是相对同行业可比公司的位置。若其中一个参照拿不到数据，写进缺失信息，不得用一个参照替另一个背书。内在价值是区间而不是精确数字，不得给出单一目标价。",
+      "exceptions": [
+        "亏损公司 PE 不适用时，改用 PB 或市销率，并说明口径"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_id": "个人投资决策手册",
+        "chapter": "2.4 价格与估值",
+        "pages": ""
+      }
+    ],
+    "tests": {
+      "should_match": [
+        {
+          "flags": [],
+          "query": "估值合理区间"
+        }
+      ],
+      "should_not_match": [
+        {
+          "flags": [
+            "valuation_cheap"
+          ],
+          "query": "估值"
+        }
+      ]
+    }
+  }
+}

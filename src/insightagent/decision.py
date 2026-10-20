@@ -147,7 +147,13 @@ def build_multi_factor_decision(
 
     voting_reports = [fundamental, technical, sentiment]
     stances = [r.stance for r in voting_reports if not r.abstain]
-    if not stances:
+    if fundamental.abstain:
+        # A rating needs a value judgement. If the fundamental dimension
+        # withdrew, the advice text already says "no directional view", so the
+        # rating must agree -- otherwise consumers that read only `rating`
+        # treat a buy from the other dimensions as a buy call.
+        rating = "abstain"
+    elif not stances:
         rating = "abstain"
     elif len(set(stances)) == 1:
         rating = stances[0]

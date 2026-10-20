@@ -47,7 +47,9 @@ def test_flags_gate_query_only_ranks():
     )
     assert sneaked == []
     empty_flags = search_methodology("rsi 超买", scope="technical", flags=[])
-    assert empty_flags == []
+    # No triggered flags must fall back to keyword matching instead of
+    # returning nothing, otherwise a stock without signals gets no guidance.
+    assert [item["id"] for item in empty_flags] == ["kb_rsi_overbought"]
 
 
 def test_query_reranks_applicable_cards():

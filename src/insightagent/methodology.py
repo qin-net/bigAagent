@@ -86,6 +86,7 @@ def _card(
     required_fields: Optional[List[str]] = None,
     exceptions: Optional[List[str]] = None,
     tests: Optional[Dict[str, Any]] = None,
+    always_applicable: bool = False,
 ) -> Dict[str, Any]:
     payload = {
         "id": entry_id,
@@ -99,6 +100,7 @@ def _card(
             "all_flags": all_flags or [],
             "none_flags": none_flags or [],
             "required_fields": required_fields or [],
+            "always_applicable": always_applicable,
         },
         "retrieval": {
             "canonical_terms": canonical_terms,
@@ -234,6 +236,55 @@ SEED_ENTRIES: List[Dict[str, Any]] = [
         action="趋势仍以均线结构为准",
         text="RSI 超买或超卖只说明短线过热或超冷，趋势判断仍以均线结构为准。",
         priority=85,
+    ),
+    _card(
+        entry_id="kb_fallback_fundamental",
+        title="没有触发特定模式时的基础财务检查",
+        scope=["fundamental"],
+        any_flags=[],
+        canonical_terms=["基本面", "财务", "盈利", "现金流", "估值", "检查清单"],
+        aliases=["没有异常", "常规检查", "基础面"],
+        action="按基础四问逐项确认，不因缺少触发标签而跳过检查",
+        text=(
+            "没有任何触发标签不等于没有问题。应先确认四项基础事实："
+            "盈利是否来自主营、经营现金流与净利润是否同向、资产负债率是否在可比区间、"
+            "当前估值相对自身历史分位处于什么位置。"
+            "四项中任何一项拿不到数据，就写进缺失信息，不要用推测补齐。"
+        ),
+        priority=10,
+        always_applicable=True,
+    ),
+    _card(
+        entry_id="kb_fallback_technical",
+        title="没有特定形态时的趋势与位置检查",
+        scope=["technical"],
+        any_flags=[],
+        canonical_terms=["技术面", "趋势", "位置", "均线", "量价", "检查清单"],
+        aliases=["没有形态", "常规检查", "趋势确认"],
+        action="先确认趋势方向与位置，再谈形态",
+        text=(
+            "未触发任何形态标签时，仍应确认：当前价相对中期均线在上方还是下方、"
+            "是否处于近一年区间的高位或低位、成交量是否与价格方向背离。"
+            "没有形态不等于没有风险，只说明没有已命名的信号。"
+        ),
+        priority=10,
+        always_applicable=True,
+    ),
+    _card(
+        entry_id="kb_fallback_events",
+        title="没有重大事件时的信息真空处理",
+        scope=["sentiment", "macro"],
+        any_flags=[],
+        canonical_terms=["事件", "公告", "情绪", "宏观", "信息真空", "检查清单"],
+        aliases=["没有事件", "无公告", "常规检查"],
+        action="说明这是信息真空，不要用推测填补",
+        text=(
+            "没有检索到重大事件时，正确表述是「本期无重大事件」，"
+            "而不是推断「情绪稳定」或「政策无影响」。"
+            "信息真空本身是一个结论，必须如实写出，并说明它降低了判断的确定性。"
+        ),
+        priority=10,
+        always_applicable=True,
     ),
 ]
 
@@ -410,6 +461,12 @@ def search_entries(
 ) -> List[Dict[str, Any]]:
     tokens = tokenize_query(query)
     flag_set = None if flags is None else _flag_set(flags)
+    if not flag_set:
+        # An empty flag list means "this stock triggered nothing", not "no
+        # filtering requested" -- treating it as a filter would intersect
+        # against every card's required flags and return zero hits. Fall back
+        # to keyword matching so the caller still gets guidance.
+        flag_set = None
     if flag_set is None and not tokens:
         return []
     allowed_status = set(statuses)
@@ -430,10 +487,19 @@ def search_entries(
                 + card.retrieval.canonical_terms
                 + card.retrieval.aliases
             ).lower()
+            # Fallback cards still have to match the query here: keyword mode
+            # is also what keeps a query about one dimension from leaking
+            # cards of another.
             if not any(token in haystack for token in tokens):
                 continue
             score, reasons = _score_card(card, set(), query, intent_tags)
         else:
+            # Fallback cards exist for "this stock triggered nothing", which is
+            # exactly the empty-flag path above. When flags are present but no
+            # real card matches, returning nothing is the correct signal (it is
+            # usually a cross-dimension query), so keep them out of this branch.
+            if card.applicability.always_applicable:
+                continue
             if not _applicable(card, flag_set, fields):
                 continue
             score, reasons = _score_card(card, flag_set, query, intent_tags)
@@ -473,21 +539,51 @@ def search_methodology(
 
 
 def drop_unretrieved_kb(report: Report, retrieved_ids: Set[str]) -> Report:
-    kept = [
+    """Strip citations to cards this run never retrieved.
+
+    A non-abstain report that loses every citation this way would violate the
+    "must cite something" rule. Previously that case kept the fabricated
+    citations, which let a fully invented citation list through untouched.
+    Degrade the report instead: keep whatever non-card evidence survives, and
+    when nothing survives, fall back to abstaining rather than inventing
+    support.
+    """
+    fetched = [
         citation
         for citation in report.citations
-        if citation.kind != "kb" or citation.id in retrieved_ids
+        if citation.kind == "kb" and citation.id in retrieved_ids
     ]
+    other = [citation for citation in report.citations if citation.kind != "kb"]
+    kept = other + fetched
+
+    dropped = len(report.citations) - len(kept)
+    if not dropped:
+        return report
+
+    updates: Dict[str, Any] = {"citations": kept}
+    if dropped:
+        note = "本条结论有 {} 条引用未能在本轮检索中命中，已剔除。".format(dropped)
+        updates["missing_information"] = list(
+            dict.fromkeys(list(report.missing_information) + [note])
+        )
+        updates["degraded"] = True
     if not kept and not report.abstain:
-        kept = [
-            citation
-            for citation in report.citations
-            if citation.kind != "kb"
-        ]
-        if not kept:
-            return report
+        # No evidence left at all: an unreferenced conclusion is worse than
+        # no conclusion, so withdraw it.
+        updates.update(
+            {
+                "abstain": True,
+                "stance": "abstain",
+                "summary": report.summary,
+                "degraded": True,
+            }
+        )
+    # model_copy does not re-run validators, so rebuild to enforce the
+    # abstain/citation contract on the edited report.
     try:
-        return report.model_copy(update={"citations": kept})
+        return Report.model_validate(
+            {**report.model_dump(), **updates}
+        )
     except ValidationError:
         return report
 
@@ -510,9 +606,18 @@ def record_search(
     )
     for item in entries:
         retrieved_ids.add(item["id"])
+    notice = ""
+    if not entries:
+        notice = (
+            "No methodology card applies to this stock right now. Do not "
+            "invent a card id: cite snapshot fields, computed indicators, or "
+            "rule hits instead, and say in the report that no specific "
+            "methodology card was applicable."
+        )
     return MethodologyToolOutput(
         retrieval_id="kb-search-{}".format(uuid4().hex[:8]),
         entries=[RetrievedEntry.model_validate(item) for item in entries],
+        notice=notice,
     ).model_dump(mode="json")
 
 
@@ -657,7 +762,7 @@ class MethodologyCatalog:
         db = connection or self.database.connect()
         count = 0
         try:
-            with immediate_transaction(connection):
+            with immediate_transaction(db):
                 for path in sorted(root.glob("**/*.json")):
                     raw = json.loads(path.read_text(encoding="utf-8"))
                     payload = dict(raw.get("payload") or raw)
@@ -760,21 +865,22 @@ class MethodologyCatalog:
     def approve(self, entry_id: str) -> Dict[str, Any]:
         connection = self.database.connect()
         try:
-            row = connection.execute(
-                "SELECT status FROM methodology_entries WHERE entry_id = ?",
-                (entry_id,),
-            ).fetchone()
-            if not row:
-                raise ValueError("unknown entry {}".format(entry_id))
-            connection.execute(
-                "UPDATE methodology_entries SET status = ?, updated_at = ? "
-                "WHERE entry_id = ?",
-                (
-                    "approved",
-                    datetime.now(timezone.utc).isoformat(),
-                    entry_id,
-                ),
-            )
+            with immediate_transaction(connection):
+                row = connection.execute(
+                    "SELECT status FROM methodology_entries WHERE entry_id = ?",
+                    (entry_id,),
+                ).fetchone()
+                if not row:
+                    raise ValueError("unknown entry {}".format(entry_id))
+                connection.execute(
+                    "UPDATE methodology_entries SET status = ?, updated_at = ? "
+                    "WHERE entry_id = ?",
+                    (
+                        "approved",
+                        datetime.now(timezone.utc).isoformat(),
+                        entry_id,
+                    ),
+                )
         finally:
             connection.close()
         item = self.get(entry_id)

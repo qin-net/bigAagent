@@ -6,11 +6,22 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
+from insightagent.env import resolve_path
+
 SPOOL_ENV = "INSIGHTBOARD_RESEARCH_SPOOL"
 
 
 def spool_path(job_id: str) -> Path:
-    root = Path(os.environ.get(SPOOL_ENV, "data/research_spool"))
+    # Anchor to the repo root like every database path does. A bare relative
+    # path resolves against the *current* working directory, so an API process
+    # and a worker started elsewhere would look in different directories and
+    # the worker would silently read no prompt at all.
+    root = Path(
+        resolve_path(
+            os.environ.get(SPOOL_ENV, ""),
+            default_relative="data/research_spool",
+        )
+    )
     root.mkdir(parents=True, exist_ok=True)
     return root / (job_id + ".txt")
 
@@ -25,7 +36,7 @@ def remove_prompt(job_id: str) -> None:
     except FileNotFoundError:
         pass
 
-from insightagent.env import load_dotenv, resolve_path
+from insightagent.env import load_dotenv
 from insightagent.llm import DeepSeekChatAdapter, DeepSeekConfig
 from insightagent.persistence import SQLiteDatabase, SQLiteStateStore
 from insightagent.research_store import ResearchStore

@@ -263,9 +263,17 @@ def merge_parsed_with_slots(parsed: TagParse, slots: LlmIntentSlots) -> TagParse
         elif chosen == "end":
             hash_end = True
 
-    for dim in llm_dims + inferred["dims"]:
+    # llm_dims comes from faithful slot extraction and is always honoured.
+    # inferred["dims"] is a raw substring scan with no negation awareness
+    # ("技术面挺好别动" still matches 技术面), so it may only widen the scope
+    # when the user gave no explicit hash tags at all.
+    for dim in llm_dims:
         if dim not in dims:
             dims.append(dim)
+    if not explicit:
+        for dim in inferred["dims"]:
+            if dim not in dims:
+                dims.append(dim)
     if hash_remember and "remember" not in tags:
         tags.append("remember")
     if hash_rerun and "rerun" not in tags:
@@ -297,14 +305,45 @@ def merge_parsed_with_slots(parsed: TagParse, slots: LlmIntentSlots) -> TagParse
     )
 
 
+NEGATION_PREFIXES = (
+    "不用",
+    "不要",
+    "别",
+    "无需",
+    "不必",
+    "先不",
+    "不想",
+)
+
+
+def _marker_hit(body: str, markers: Sequence[str]) -> bool:
+    """Substring scan with a negation window.
+
+    "不用重跑" must not read as a rerun request: for each marker occurrence,
+    look a few characters back and drop the hit when a negation word sits
+    directly in front of it.
+    """
+    for marker in markers:
+        start = 0
+        while True:
+            index = body.find(marker, start)
+            if index < 0:
+                break
+            window = body[max(0, index - 3):index]
+            if not any(window.endswith(neg) for neg in NEGATION_PREFIXES):
+                return True
+            start = index + 1
+    return False
+
+
 def _infer_control_from_nl(body: str) -> dict:
     if body == NONE:
         return {"remember": False, "rerun": False, "end": False, "dims": [], "tags": []}
-    remember = any(marker in body for marker in NL_REMEMBER_MARKERS)
-    rerun = any(marker in body for marker in NL_RERUN_MARKERS)
+    remember = _marker_hit(body, NL_REMEMBER_MARKERS)
+    rerun = _marker_hit(body, NL_RERUN_MARKERS)
     if "再分析" in body and "别再分析" not in body and "不要再分析" not in body:
         rerun = True
-    ended = any(marker in body for marker in NL_END_MARKERS)
+    ended = _marker_hit(body, NL_END_MARKERS)
     dims: List[str] = []
     for phrase, dim in NL_DIM_PHRASES:
         if phrase in body and dim not in dims:
@@ -416,6 +455,13 @@ def build_intent(
     parsed: TagParse,
     slots: LlmIntentSlots,
 ) -> UserIntent:
+    # "End" with no rerun/remember means the user is walking away from this
+    # line of analysis. Whatever the extractor put into the slots must not be
+    # fed to experts as constraints, so the slots are dropped wholesale.
+    tags = json.loads(parsed.tags)
+    end_only = "end" in tags and parsed.effect == "this_run"
+    if end_only:
+        slots = empty_slots()
     return UserIntent(
         intent_id=str(uuid4()),
         utterance_id=utterance_id,
@@ -510,9 +556,12 @@ def passes_memory_gate(slot: str) -> bool:
         return False
     lowered = text.lower()
     has_check = any(marker.lower() in lowered for marker in MEMORY_CHECK_MARKERS)
-    if _hanzi_count(text) < 8 and not has_check:
+    # Garbage wording disqualifies unconditionally. A check keyword must not
+    # whitelist a complaint: "估值太差写得不行" names 估值 but is still venting,
+    # not an executable rule.
+    if any(marker in text for marker in MEMORY_GARBAGE_MARKERS):
         return False
-    if not has_check and any(marker in text for marker in MEMORY_GARBAGE_MARKERS):
+    if _hanzi_count(text) < 8 and not has_check:
         return False
     return True
 
@@ -542,8 +591,21 @@ def format_intent_echo(intent: UserIntent) -> str:
 def split_slot(slot: str) -> Tuple[List[str], List[str]]:
     if slot == NONE:
         return [], []
-    text = slot[:MAX_SLOT_CHARS]
-    if text.endswith("？") or text.endswith("?"):
+    # Classify on the original text: truncating first turned a long question
+    # into a constraint (the trailing ？ was cut off).
+    is_question = slot.endswith("？") or slot.endswith("?")
+    text = slot
+    if len(text) > MAX_SLOT_CHARS:
+        clipped = text[:MAX_SLOT_CHARS]
+        # Cut at the last sentence boundary so a dangling "不要只看" cannot
+        # invert the meaning; fall back to a hard cut with an ellipsis.
+        for mark in ("。", "；", "，", ";", ","):
+            index = clipped.rfind(mark)
+            if index >= MAX_SLOT_CHARS // 2:
+                clipped = clipped[: index + 1]
+                break
+        text = clipped + "…"
+    if is_question:
         return [text], []
     return [], ["用户口径：" + text]
 

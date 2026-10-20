@@ -88,8 +88,21 @@ def _run_research_worker(store: BoardStore) -> int:
     store.recover_research(older_than_minutes=8)
     timeout_seconds = 8 * 60
     while True:
-        store.recover_research(older_than_minutes=8)
-        item = store.claim_research()
+        # The loop must survive anything: an exception in claim/recover (DB
+        # busy, disk hiccup) previously killed the whole worker thread and the
+        # queue silently stopped draining.
+        try:
+            store.recover_research(older_than_minutes=8)
+            item = store.claim_research()
+        except Exception as error:
+            print(
+                "research worker iteration failed: {}: {}".format(
+                    type(error).__name__, error
+                ),
+                flush=True,
+            )
+            time.sleep(5)
+            continue
         if item:
             try:
                 prompt_file = spool_path(item["job_id"])

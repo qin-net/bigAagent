@@ -28,6 +28,9 @@ class AgentState(BaseModel):
     agent_name: str
     stock_code: Optional[str] = None
     thesis_id: Optional[str] = None
+    # Owner of this session. Memory lookup filters on it so one investor's
+    # private notes can never be inherited by another investor's run.
+    user_id: Optional[str] = None
     loop_round: int = 0
     status: TaskStatus = TaskStatus.READY
     business_context: Dict[str, Any] = Field(default_factory=dict)

@@ -11,6 +11,7 @@ from .context import (
     ContextArchive,
     ContextBuffer,
     ContextCompactor,
+    ContextConfig,
     InMemoryContextArchive,
 )
 from .contracts import (
@@ -36,7 +37,6 @@ from .retry import ExponentialBackoff
 from .schema import to_strict_json_schema
 from .state import (
     InMemoryStateStore,
-    StateConflictError,
     StateStore,
     drop_immutable_patch_paths,
 )
@@ -59,6 +59,21 @@ class InvalidModelOutputError(ValueError):
 
 
 SUBMIT_FINAL = "submit_final"
+
+# Tool results carrying the authoritative numbers that the evidence check
+# compares a report against. These are pinned so compaction cannot drop them.
+SNAPSHOT_TOOL_NAMES = frozenset(
+    {
+        "get_fundamental_snapshot",
+        "get_indicator_snapshot",
+        "get_macro_snapshot",
+        "get_event_snapshot",
+        "get_price_snapshot",
+        "get_kline_snapshot",
+        "get_holder_changes",
+        "get_tracking_context",
+    }
+)
 
 
 class SubmitFinalOutput(BaseModel):
@@ -184,6 +199,7 @@ class RuntimeConfig:
     reasoning_effort: str = "high"
     response_format: str = "json"
     max_tokens: int = 4096
+    context_window: int = 32768
     max_loop_round: int = 15
     max_parallel_calls: int = 4
     strict_tools: bool = True
@@ -231,7 +247,7 @@ class AgentLocalScheduler:
         state = await self.state_store.save(
             state, expected_version=state.version
         )
-        await context_buffer.append_user(user_input)
+        await context_buffer.append_user(user_input, pin=True)
         self._trace(
             "loop_start",
             {
@@ -346,7 +362,9 @@ class AgentLocalScheduler:
                     self.config.max_loop_round
                 )
             )
-        except Exception as error:
+        except BaseException as error:
+            # BaseException also covers cancellation: a timed-out or cancelled
+            # turn must not leave the session sitting at status="running".
             await self._mark_failed(state.session_id, error)
             raise
 
@@ -430,6 +448,10 @@ class AgentLocalScheduler:
                         ensure_ascii=False,
                         default=str,
                     ),
+                    # Snapshot reads carry the authoritative numbers the
+                    # evidence check compares against; compacting them away
+                    # forces the model to answer from memory and fail.
+                    pin=call.name in SNAPSHOT_TOOL_NAMES,
                 )
             state = await self._checkpoint_round(state, context_buffer)
             return state, None
@@ -695,7 +717,7 @@ class AgentLocalScheduler:
         }
 
     async def _mark_failed(
-        self, session_id: str, error: Exception
+        self, session_id: str, error: BaseException
     ) -> None:
         try:
             current = await self.state_store.get(session_id)
@@ -707,7 +729,9 @@ class AgentLocalScheduler:
             await self.state_store.save(
                 current, expected_version=current.version
             )
-        except StateConflictError:
+        except Exception:
+            # Best effort only: a failure while recording the failure must not
+            # replace the original exception the caller is about to see.
             return
 
 
@@ -734,7 +758,24 @@ class AgentInstance:
             context_archive or InMemoryContextArchive()
         )
         self.resource_registry = ResourceRegistry()
-        self.compactor = compactor or ContextCompactor()
+        # Derive the compaction budget from this agent's own output allowance;
+        # the built-in default reserves far less than agents actually request,
+        # which both over-compacts and can overrun the real window.
+        if compactor is None:
+            # Reserve this agent's output allowance, but never more than half
+            # the window: max_tokens is an upper bound the provider will clamp,
+            # and reserving the whole window leaves no room for any input.
+            reserved = min(
+                self.config.max_tokens,
+                max(1024, self.config.context_window // 2),
+            )
+            compactor = ContextCompactor(
+                config=ContextConfig(
+                    reserved_output_tokens=reserved,
+                    context_window=self.config.context_window,
+                )
+            )
+        self.compactor = compactor
         self.llm_retry = llm_retry or ExponentialBackoff()
         self.orchestrator = CallOrchestrator(
             self.resource_registry,
@@ -771,6 +812,7 @@ class AgentInstance:
         session_id: Optional[str] = None,
         parent_session_id: Optional[str] = None,
         business_context: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None,
     ) -> AgentFinalResponse:
         business_context = business_context or {}
         state = await self.state_store.load_or_create(
@@ -780,6 +822,7 @@ class AgentInstance:
             stock_code=business_context.get("stock_code"),
             thesis_id=business_context.get("thesis_id"),
             business_context=business_context,
+            user_id=user_id or business_context.get("user_id"),
         )
         if business_context and state.business_context != business_context:
             state.business_context.update(business_context)

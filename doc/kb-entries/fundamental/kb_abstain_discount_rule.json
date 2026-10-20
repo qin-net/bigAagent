@@ -1,0 +1,62 @@
+{
+  "entry_id": "kb_abstain_discount_rule",
+  "title": "任一维弃权时，综合结论必须降级而不是照常投票",
+  "scope": "decision",
+  "version": 1,
+  "payload": {
+    "id": "kb_abstain_discount_rule",
+    "title": "任一维弃权时，综合结论必须降级而不是照常投票",
+    "type": "rule",
+    "scope": [
+      "decision"
+    ],
+    "status": "candidate",
+    "version": 1,
+    "applicability": {
+      "any_flags": [],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": [],
+      "always_applicable": true
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "弃权",
+        "综合决策",
+        "置信度",
+        "评级",
+        "降级"
+      ],
+      "aliases": [
+        "某一维缺失",
+        "弃权折扣"
+      ],
+      "intent_tags": [
+        "decision_check"
+      ],
+      "priority": 20,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "弃权维不计票，且必须显式体现在置信度与结论句上",
+      "text": "综合决策时，弃权的维度不参与投票，但它的缺席必须被显式表达，不能被悄悄忽略。具体三点：一是置信度按缺失维度数打折，缺失越多置信度越低；二是「给用户的那句话」必须与评级一致——基本面弃权时不得出现「评级=买入」同时配「信息不足，不形成判断」这种自相矛盾；三是当关键维度（基本面）弃权时，宁可将评级降为暂不判断，也不要用其余维度的高分掩盖价值判断的缺失。降级不是失败，是如实反映确定性的下降。",
+      "exceptions": []
+    },
+    "source_refs": [
+      {
+        "source_id": "个人投资决策手册",
+        "chapter": "7. 什么时候应该弃权",
+        "pages": ""
+      },
+      {
+        "source_id": "InsightAgent-设计文档",
+        "chapter": "决策与置信度",
+        "pages": ""
+      }
+    ],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    }
+  }
+}

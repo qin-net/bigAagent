@@ -1,0 +1,51 @@
+{
+  "entry_id": "kb_fallback_technical",
+  "title": "没有特定形态时的趋势与位置检查",
+  "scope": "technical",
+  "version": 1,
+  "payload": {
+    "id": "kb_fallback_technical",
+    "title": "没有特定形态时的趋势与位置检查",
+    "type": "rule",
+    "scope": [
+      "technical"
+    ],
+    "status": "approved",
+    "version": 1,
+    "applicability": {
+      "any_flags": [],
+      "all_flags": [],
+      "none_flags": [],
+      "required_fields": [],
+      "always_applicable": true
+    },
+    "retrieval": {
+      "canonical_terms": [
+        "技术面",
+        "趋势",
+        "位置",
+        "均线",
+        "量价",
+        "检查清单"
+      ],
+      "aliases": [
+        "没有形态",
+        "常规检查",
+        "趋势确认"
+      ],
+      "intent_tags": [],
+      "priority": 10,
+      "mandatory": false
+    },
+    "guidance": {
+      "action": "先确认趋势方向与位置，再谈形态",
+      "text": "未触发任何形态标签时，仍应确认：当前价相对中期均线在上方还是下方、是否处于近一年区间的高位或低位、成交量是否与价格方向背离。没有形态不等于没有风险，只说明没有已命名的信号。",
+      "exceptions": []
+    },
+    "source_refs": [],
+    "tests": {
+      "should_match": [],
+      "should_not_match": []
+    }
+  }
+}

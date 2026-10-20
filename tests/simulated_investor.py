@@ -392,7 +392,9 @@ async def run_simulated_investor(
     for stock in PERSONA["stocks"]:
         for role in ("fundamental", "technical", "sentiment", "macro", "tracking"):
             saved = await states.latest_for_agent(
-                agent_name=role, thesis_id="{}-initial".format(stock["code"])
+                agent_name=role,
+                thesis_id="{}-initial".format(stock["code"]),
+                user_id="local",
             )
             if saved is not None:
                 memories.append(

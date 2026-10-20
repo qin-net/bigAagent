@@ -51,7 +51,11 @@ class StateStore(Protocol):
         ...
 
     async def latest_for_agent(
-        self, *, agent_name: str, thesis_id: str
+        self,
+        *,
+        agent_name: str,
+        thesis_id: str,
+        user_id: Optional[str] = None,
     ) -> Optional[AgentState]:
         ...
 
@@ -87,6 +91,7 @@ class InMemoryStateStore:
         stock_code: Optional[str] = None,
         thesis_id: Optional[str] = None,
         business_context: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None,
     ) -> AgentState:
         async with self._mutex():
             if session_id and session_id in self._states:
@@ -100,8 +105,13 @@ class InMemoryStateStore:
                 thesis_id=thesis_id,
                 business_context=business_context or {},
                 private_memory=_inherited_memory(
-                    self._states, parent_session_id
+                    self._states,
+                    parent_session_id,
+                    agent_name=agent_name,
+                    thesis_id=thesis_id,
+                    user_id=user_id,
                 ),
+                user_id=user_id,
             )
             self._states[state.session_id] = state.model_copy(deep=True)
             self._history[state.session_id] = [state.model_copy(deep=True)]
@@ -174,7 +184,11 @@ class InMemoryStateStore:
             ]
 
     async def latest_for_agent(
-        self, *, agent_name: str, thesis_id: str
+        self,
+        *,
+        agent_name: str,
+        thesis_id: str,
+        user_id: Optional[str] = None,
     ) -> Optional[AgentState]:
         async with self._mutex():
             matches = [
@@ -183,6 +197,7 @@ class InMemoryStateStore:
                 if state.agent_name == agent_name
                 and state.thesis_id == thesis_id
                 and state.status == TaskStatus.SUCCESS
+                and (state.user_id or "") == (user_id or "")
             ]
             if not matches:
                 return None
@@ -350,12 +365,16 @@ def attach_prior_memory(user_query: str, memory: Dict[str, Any]) -> str:
 
 
 async def prior_session_memory(
-    store: StateStore, *, agent_name: str, thesis_id: str
+    store: StateStore,
+    *,
+    agent_name: str,
+    thesis_id: str,
+    user_id: Optional[str] = None,
 ) -> Tuple[Optional[str], Dict[str, Any]]:
     if not thesis_id:
         return None, {}
     parent = await store.latest_for_agent(
-        agent_name=agent_name, thesis_id=thesis_id
+        agent_name=agent_name, thesis_id=thesis_id, user_id=user_id
     )
     if parent is None:
         return None, {}
@@ -363,11 +382,24 @@ async def prior_session_memory(
 
 
 def _inherited_memory(
-    states: Dict[str, AgentState], parent_session_id: Optional[str]
+    states: Dict[str, AgentState],
+    parent_session_id: Optional[str],
+    *,
+    agent_name: Optional[str] = None,
+    thesis_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     if not parent_session_id:
         return {}
     parent = states.get(parent_session_id)
     if parent is None:
+        return {}
+    # Mirror the SQLite store: memory moves only between sessions of the same
+    # role, thesis, and owner.
+    if agent_name is not None and parent.agent_name != agent_name:
+        return {}
+    if thesis_id is not None and parent.thesis_id != thesis_id:
+        return {}
+    if (parent.user_id or "") != (user_id or ""):
         return {}
     return snapshot_private_memory(parent.private_memory)

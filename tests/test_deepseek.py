@@ -102,10 +102,9 @@ async def test_deepseek_adapter_serializes_reasoning_and_usage():
 
     assert payload["extra_body"]["thinking"]["type"] == "enabled"
     assert payload["reasoning_effort"] == "high"
-    assert (
-        payload["messages"][0]["reasoning_content"]
-        == "must be returned"
-    )
+    # Hidden reasoning must not be echoed back to the provider: it is rejected
+    # on later turns and only inflates the request.
+    assert "reasoning_content" not in payload["messages"][0]
     assert payload["response_format"] == {"type": "json_object"}
     assert response.usage.prompt_cache_hit_tokens == 8
     assert response.usage.reasoning_tokens == 3

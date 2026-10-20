@@ -36,6 +36,7 @@ from .persistence import (
 )
 from .research_store import ResearchStore
 from .resources import FunctionResource
+from .retry import ExponentialBackoff, RetryConfig
 from .runtime import AgentInstance, RuntimeConfig
 from .user_contracts import DIMS, NONE, UserIntent
 from .user_intent import (
@@ -61,6 +62,12 @@ DEFAULT_MARKDOWN_ROOTS = (
     Path("data/kb/markdown"),
     Path("tests/fixtures/kb"),
 )
+
+# Expert sub-agent calls are expensive and non-idempotent: a timeout must
+# surface as a failed tool result, not restart the whole sub-agent.
+AGENT_SKILL_RETRY = {
+    "agent_skill": ExponentialBackoff(RetryConfig(max_retries=0))
+}
 
 TRACKING_SYSTEM_PROMPT = """
 You are InsightAgent's tracking agent.
@@ -872,7 +879,11 @@ def register_track_tools(agent: AgentInstance, context: TrackToolContext) -> Non
         output_model=SkillCallOutput,
         resource_type=ResourceType.AGENT_SKILL,
         parallel_safe=False,
-        timeout_seconds=180.0,
+        # A skill call runs a whole sub-agent loop (several LLM turns with
+        # tools), so the 30s default is far too tight, and retrying it on
+        # timeout would re-run the entire sub-agent up to four times.
+        timeout_seconds=480.0,
+        retry_policy="agent_skill",
         side_effect=SideEffect.NON_IDEMPOTENT,
     )
     agent.register_tool(
@@ -1147,6 +1158,7 @@ async def track_thesis(
         status="running",
         parent_run_id=baseline_run.run_id,
         snapshot_refs=dict(baseline_run.snapshot_refs),
+        user_id=user_id,
     )
     await store.save_run(track_run)
     session_id = str(uuid4())
@@ -1216,6 +1228,7 @@ async def track_thesis(
             ),
             state_store=SQLiteStateStore(database),
             context_archive=SQLiteContextArchive(database),
+            resource_retry_policies=AGENT_SKILL_RETRY,
         )
         register_track_tools(agent, tool_context)
         token = bind_catalog(catalog)
@@ -1223,6 +1236,7 @@ async def track_thesis(
             SQLiteStateStore(database),
             agent_name="tracking",
             thesis_id=track_run.thesis_id,
+            user_id=user_id,
         )
         user_query = attach_prior_memory(
             _track_user_query(
@@ -1247,6 +1261,7 @@ async def track_thesis(
                     "thesis_id": track_run.thesis_id,
                     "run_id": track_run.run_id,
                 },
+                user_id=user_id,
             )
         finally:
             reset_catalog(token)
