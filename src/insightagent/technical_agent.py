@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any, Dict
@@ -131,8 +132,9 @@ def register_technical_tools(
     def get_kline_snapshot(dummy: str = "") -> Dict[str, Any]:
         return context.kline.model_dump(mode="json")
 
-    def search(query: str) -> Dict[str, Any]:
-        return record_search(
+    async def search(query: str) -> Dict[str, Any]:
+        return await asyncio.to_thread(
+            record_search,
             context.retrieved_kb_ids,
             query,
             scope="technical",

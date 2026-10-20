@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -378,49 +379,74 @@ async def analyze_stock(
             fixture_payload=macro_fixture_payload,
         )
 
+        # Each dimension degrades on its own: a failed fetch becomes an
+        # abstention for that dimension instead of failing the whole run.
+        # (The old "fallback" here re-ran the very same adapter because its
+        # guard was always true, so it only doubled the latency.)
+        tech_fetch_error: Optional[Exception] = None
         try:
             tech_fields = await fetch_retry.execute(
                 technical_adapter.fetch_technical, code
             )
-        except Exception:
-            if technical_adapter is not None and not fixture:
-                tech_fields = await fetch_retry.execute(
-                    build_market_adapter_for(fixture=False, dimension="technical").fetch_technical,
-                    code,
-                )
-            else:
-                raise
-        sent_fields = await fetch_retry.execute(
-            sentiment_adapter.fetch_sentiment, code
-        )
+        except Exception as error:
+            tech_fetch_error = error
+            tech_fields = {}
+        sent_fetch_error: Optional[Exception] = None
+        try:
+            sent_fields = await fetch_retry.execute(
+                sentiment_adapter.fetch_sentiment, code
+            )
+        except Exception as error:
+            sent_fetch_error = error
+            sent_fields = {}
         macro_fetch_error: Optional[Exception] = None
         try:
             macro_fields = await fetch_retry.execute(macro_adapter.fetch_macro, code)
         except Exception as error:
             macro_fetch_error = error
-            macro_fields = {
-                "macro": MacroSnapshot().model_dump(mode="json"),
-                "industry": "",
-                "stock_code": code,
-                "company_name": snapshot.company_name or "",
-            }
-        tech_artifact_ref = await artifacts.put(
-            json.dumps(tech_fields, ensure_ascii=False)
+            macro_fields = {}
+        # Only dimensions with real data are frozen. Writing an empty
+        # snapshot here would be worse than writing nothing: a later rerun
+        # would find a non-empty artifact and burn retries on all-None fields.
+        tech_artifact_ref = (
+            None
+            if tech_fetch_error is not None
+            else await artifacts.put(json.dumps(tech_fields, ensure_ascii=False))
         )
-        sent_artifact_ref = await artifacts.put(
-            json.dumps(sent_fields, ensure_ascii=False)
+        sent_artifact_ref = (
+            None
+            if sent_fetch_error is not None
+            else await artifacts.put(json.dumps(sent_fields, ensure_ascii=False))
         )
-        macro_artifact_ref = await artifacts.put(
-            json.dumps(macro_fields, ensure_ascii=False)
+        macro_artifact_ref = (
+            None
+            if macro_fetch_error is not None
+            else await artifacts.put(json.dumps(macro_fields, ensure_ascii=False))
         )
-        run.snapshot_refs = {
+        refs = {
             "fundamental": fundamental_artifact_ref,
             "technical": tech_artifact_ref,
             "sentiment": sent_artifact_ref,
             "macro": macro_artifact_ref,
         }
+        run.snapshot_refs = {k: v for k, v in refs.items() if v}
         run.updated_at = utc_now()
         await store.save_run(run)
+        for dim, error in (
+            ("technical", tech_fetch_error),
+            ("sentiment", sent_fetch_error),
+            ("macro", macro_fetch_error),
+        ):
+            if error is not None:
+                await audit.append(
+                    "snapshot_failed",
+                    {
+                        "agent": dim,
+                        "error_type": type(error).__name__,
+                        "message": str(error),
+                    },
+                    run_id=run.run_id,
+                )
         await audit.append(
             "snapshot_ready",
             {
@@ -481,37 +507,45 @@ async def analyze_stock(
             unbound_policy=unbound_policy,
             audit=audit,
         )
-        technical_future = _run_technical_agent(
-            tech_fields=tech_fields,
-            run=run,
-            database=database,
-            llm_adapter=technical_llm_adapter or llm_adapter,
-            model=model,
-            thinking_enabled=thinking_enabled,
-            user_query=build_expert_user_query(
-                run_id=run.run_id,
-                stock_code=code,
-                as_of=snapshot.as_of.isoformat(),
-                dim="technical",
-                intent=intent,
-                preference_statements=[item.statement for item in tech_prefs],
-            ),
+        technical_future = (
+            _run_technical_agent(
+                tech_fields=tech_fields,
+                run=run,
+                database=database,
+                llm_adapter=technical_llm_adapter or llm_adapter,
+                model=model,
+                thinking_enabled=thinking_enabled,
+                user_query=build_expert_user_query(
+                    run_id=run.run_id,
+                    stock_code=code,
+                    as_of=snapshot.as_of.isoformat(),
+                    dim="technical",
+                    intent=intent,
+                    preference_statements=[item.statement for item in tech_prefs],
+                ),
+            )
+            if tech_fetch_error is None
+            else _immediate_technical_abstention()
         )
-        sentiment_future = _run_sentiment_agent(
-            sent_fields=sent_fields,
-            run=run,
-            database=database,
-            llm_adapter=sentiment_llm_adapter or llm_adapter,
-            model=model,
-            thinking_enabled=thinking_enabled,
-            user_query=build_expert_user_query(
-                run_id=run.run_id,
-                stock_code=code,
-                as_of=snapshot.as_of.isoformat(),
-                dim="sentiment",
-                intent=intent,
-                preference_statements=[item.statement for item in sent_prefs],
-            ),
+        sentiment_future = (
+            _run_sentiment_agent(
+                sent_fields=sent_fields,
+                run=run,
+                database=database,
+                llm_adapter=sentiment_llm_adapter or llm_adapter,
+                model=model,
+                thinking_enabled=thinking_enabled,
+                user_query=build_expert_user_query(
+                    run_id=run.run_id,
+                    stock_code=code,
+                    as_of=snapshot.as_of.isoformat(),
+                    dim="sentiment",
+                    intent=intent,
+                    preference_statements=[item.statement for item in sent_prefs],
+                ),
+            )
+            if sent_fetch_error is None
+            else _immediate_sentiment_abstention()
         )
         macro_future = (
             _bind_macro_with_retries(
@@ -1306,9 +1340,12 @@ async def _prepare_intent(
     )
 
 
-def _activate_catalog(database: SQLiteDatabase):
+async def _activate_catalog(database: SQLiteDatabase):
     catalog = MethodologyCatalog(split_kb_database(database))
-    catalog.ensure_seeded()
+    # Seeding opens SQLite and may write; keep it off the shared event loop.
+    # The bind itself stays in the caller's context because it is a
+    # ContextVar and must be visible to the code that runs the agent.
+    await asyncio.to_thread(catalog.ensure_seeded)
     return bind_catalog(catalog)
 
 
@@ -1537,7 +1574,7 @@ async def _run_fundamental_agent(
     )
     ctx = FundamentalToolContext(snapshot=snapshot, artifacts=artifacts)
     register_fundamental_tools(agent, ctx)
-    token = _activate_catalog(database)
+    token = await _activate_catalog(database)
     try:
         final = await agent.run(
             user_query,
@@ -1672,6 +1709,14 @@ async def _immediate_macro_abstention() -> tuple[Report, str]:
     return _abstain_macro(), ""
 
 
+async def _immediate_technical_abstention() -> tuple[Report, str]:
+    return _abstain_technical(), ""
+
+
+async def _immediate_sentiment_abstention() -> tuple[Report, str]:
+    return _abstain_sentiment(), ""
+
+
 async def _run_technical_agent(
     *,
     tech_fields: Dict[str, Any],
@@ -1709,7 +1754,7 @@ async def _run_technical_agent(
         context_archive=SQLiteContextArchive(database),
     )
     register_technical_tools(agent, ctx)
-    token = _activate_catalog(database)
+    token = await _activate_catalog(database)
     try:
         final = await agent.run(
             user_query,
@@ -1771,7 +1816,7 @@ async def _run_sentiment_agent(
         context_archive=SQLiteContextArchive(database),
     )
     register_sentiment_tools(agent, ctx)
-    token = _activate_catalog(database)
+    token = await _activate_catalog(database)
     try:
         final = await agent.run(
             user_query,
@@ -1836,7 +1881,7 @@ async def _run_macro_agent(
         context_archive=SQLiteContextArchive(database),
     )
     register_macro_tools(agent, ctx)
-    token = _activate_catalog(database)
+    token = await _activate_catalog(database)
     try:
         final = await agent.run(
             user_query,
@@ -2047,8 +2092,12 @@ def write_run_json(outcome: AnalysisOutcome, database_path: str) -> Path:
     target = Path(database_path).expanduser().resolve().parent / "runs"
     target.mkdir(parents=True, exist_ok=True)
     path = target / "{}.json".format(outcome.run.run_id)
-    path.write_text(
+    # Write-then-rename: a crash mid-write must not leave a truncated file
+    # that later reads happily parse as a valid (but incomplete) result.
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(
         json.dumps(outcome.to_dict(), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    os.replace(str(temporary), str(path))
     return path

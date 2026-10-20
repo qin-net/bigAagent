@@ -14,6 +14,8 @@ from .contracts import AgentState, LLMMessage, LLMToolCall, StatePatch, TaskStat
 from .state import StateConflictError, apply_patch_to_state, snapshot_private_memory
 
 SCHEMA_VERSION = 5
+# How many state-version snapshots to keep per session (history is a debug aid).
+HISTORY_KEEP_VERSIONS = 50
 
 MIGRATION_1 = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -889,8 +891,14 @@ class FileArtifactStore:
             temporary = target.with_name(
                 "{}.{}.tmp".format(target.name, uuid4().hex)
             )
-            temporary.write_bytes(encoded)
-            os.replace(str(temporary), str(target))
+            try:
+                temporary.write_bytes(encoded)
+                os.replace(str(temporary), str(target))
+            finally:
+                # A failed write (disk full, interrupt) must not leave a
+                # random .tmp file behind; nothing ever cleans those up.
+                if temporary.exists():
+                    temporary.unlink()
 
         connection = self.database.connect()
         try:
@@ -1077,6 +1085,12 @@ def _insert_history(
             state.model_dump_json(),
             utc_now().isoformat(),
         ),
+    )
+    # Every save snapshots the full state, so history grows without bound.
+    # Keep the recent window; older versions are only useful for debugging.
+    connection.execute(
+        "DELETE FROM agent_state_history WHERE session_id = ? AND version <= ?",
+        (state.session_id, state.version - HISTORY_KEEP_VERSIONS),
     )
 
 

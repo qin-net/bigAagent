@@ -11,6 +11,8 @@ from typing import Iterator, Optional, Sequence
 from .contracts import DailyBar, NoticeHeadline, QuoteInput
 
 STALE_AFTER = timedelta(minutes=45)
+# How many published quote batches to retain; older ones are pruned on publish.
+KEEP_QUOTE_BATCHES = 48
 
 
 def utc_now() -> str:
@@ -20,6 +22,9 @@ def utc_now() -> str:
 class BoardStore:
     def __init__(self, path: str) -> None:
         self.path = Path(path)
+        # Paper tables only need creating once per process; doing it inside
+        # paper_snapshot made every read request take a write lock.
+        self._paper_ready: set = set()
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -216,7 +221,19 @@ class BoardStore:
             job_id = uuid.uuid4().hex
             connection.execute(
                 "INSERT INTO research_job(job_id,user_id,stock_code,kind,parent_run_id,status,prompt,created_at,updated_at) VALUES(?,?,?,?,?,'queued',?,?,?)",
-                (job_id, user_id, stock_code, kind, parent_run_id, None, now, now),
+                (
+                    job_id,
+                    user_id,
+                    stock_code,
+                    kind,
+                    parent_run_id,
+                    # Stored in the same transaction as the row: a separate
+                    # spool file could be written after the worker had already
+                    # claimed the job, silently dropping the user's wording.
+                    (prompt or "none").strip() or "none",
+                    now,
+                    now,
+                ),
             )
             row = connection.execute("SELECT * FROM research_job WHERE job_id=?", (job_id,)).fetchone()
         return {**dict(row), "existing": False}
@@ -254,7 +271,11 @@ class BoardStore:
                 "UPDATE research_job SET status='running', updated_at=? WHERE job_id=? AND status='queued'",
                 (now, row["job_id"]),
             )
-        return dict(row)
+            claimed = dict(row)
+            # Return the row as it now exists, not as it was read.
+            claimed["status"] = "running"
+            claimed["updated_at"] = now
+        return claimed
 
     def touch_research(self, job_id: str) -> bool:
         """Renew the lease on a running job.
@@ -376,6 +397,18 @@ class BoardStore:
                 "UPDATE ingest_run SET finished_at=?, status='succeeded', row_count=? WHERE run_id=?",
                 (utc_now(), len(quotes), batch_id),
             )
+            # Keep only the newest batches: readers only ever look at the
+            # pointer target, and every refresh appends a full-market batch.
+            stale = [
+                row["batch_id"]
+                for row in connection.execute(
+                    "SELECT batch_id FROM quote_batch ORDER BY created_at DESC LIMIT -1 OFFSET ?",
+                    (KEEP_QUOTE_BATCHES,),
+                )
+            ]
+            for old_batch in stale:
+                connection.execute("DELETE FROM quote_snapshot WHERE batch_id=?", (old_batch,))
+                connection.execute("DELETE FROM quote_batch WHERE batch_id=?", (old_batch,))
         return batch_id
 
     def record_failure(self, *, source: str, error: str) -> str:
@@ -506,6 +539,8 @@ class BoardStore:
             connection.execute("DELETE FROM watchlist WHERE user_id='local' AND stock_code=?", (stock_code,))
 
     def initialize_paper(self, *, user_id: str = "local", initial_cash: float = 1_000_000.0) -> None:
+        if user_id in self._paper_ready:
+            return
         with self._connection() as connection:
             connection.executescript(
                 """
@@ -553,6 +588,7 @@ class BoardStore:
                 "INSERT OR IGNORE INTO paper_account(user_id, cash, initial_cash, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
                 (user_id, initial_cash, initial_cash, now, now),
             )
+        self._paper_ready.add(user_id)
 
     def paper_snapshot(self, *, user_id: str = "local") -> dict:
         self.initialize_paper(user_id=user_id)
@@ -705,12 +741,29 @@ class BoardStore:
             )
             return cursor.rowcount > 0
 
+    def quote_for(self, stock_code: str) -> Optional[dict]:
+        """Exact lookup in the current batch.
+
+        The old path did a LIKE query with size=1 and hoped the 6-digit code
+        only matched its own row, which is not a guarantee.
+        """
+        batch = self._current_batch()
+        if batch is None:
+            return None
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT stock_code, name, industry, market, price, change_pct, open, high, low, "
+                "volume, turnover, pe, pb FROM quote_snapshot WHERE batch_id=? AND stock_code=?",
+                (batch["batch_id"], stock_code),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def current_batch(self) -> Optional[dict]:
+        batch = self._current_batch()
+        return dict(batch) if batch else None
+
     def _current_quote(self, stock_code: str) -> Optional[dict]:
-        page = self.quote_page(page=1, size=1, q=stock_code, sort="stock_code", order="asc")
-        for item in page["items"]:
-            if item["stock_code"] == stock_code:
-                return item
-        return None
+        return self.quote_for(stock_code)
 
     def _upsert_pick(self, connection: sqlite3.Connection, *, user_id: str, stock_code: str, statement: str, now: str) -> None:
         for row in connection.execute(

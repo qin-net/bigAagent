@@ -105,8 +105,20 @@ def _run_research_worker(store: BoardStore) -> int:
             continue
         if item:
             try:
+                # Prompt lives on the job row itself (written in the same
+                # transaction as the job), so there is no window where a
+                # claimed job has no wording yet. The spool file is only a
+                # fallback for jobs created before that change.
                 prompt_file = spool_path(item["job_id"])
-                item["prompt"] = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else "none"
+                row_prompt = (item.get("prompt") or "").strip()
+                if row_prompt and row_prompt != "none":
+                    item["prompt"] = row_prompt
+                else:
+                    item["prompt"] = (
+                        prompt_file.read_text(encoding="utf-8")
+                        if prompt_file.exists()
+                        else "none"
+                    )
                 # One executor per job, shut down without waiting on timeout:
                 # `with ThreadPoolExecutor(...)` used to block in shutdown(wait=True)
                 # until the runaway job finished, so the "timeout" never freed the loop.

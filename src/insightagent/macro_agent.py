@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
@@ -129,8 +130,9 @@ def register_macro_tools(agent: AgentInstance, context: MacroToolContext) -> Non
         }
         return payload
 
-    def search(query: str) -> Dict[str, Any]:
-        return record_search(
+    async def search(query: str) -> Dict[str, Any]:
+        return await asyncio.to_thread(
+            record_search,
             context.retrieved_kb_ids,
             query,
             scope="macro",

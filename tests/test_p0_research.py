@@ -700,6 +700,32 @@ class _BoomLLM:
         raise RuntimeError("simulated sentiment crash")
 
 
+class _BoomTechnicalAdapter:
+    async def fetch_technical(self, stock_code):
+        raise RuntimeError("simulated technical fetch outage")
+
+
+@pytest.mark.asyncio
+async def test_technical_fetch_failure_degrades_instead_of_failing_run(tmp_path):
+    # 技术面取数失败应当只让该维弃权（与宏观一致），不能炸掉整个 run。
+    fund_llm, tech_llm, sent_llm, macro_llm = _make_four_agent_llms()
+    outcome = await _analyze(
+        tmp_path,
+        "000858",
+        fund_llm,
+        tech_llm,
+        sent_llm,
+        macro_llm,
+        technical_adapter=_BoomTechnicalAdapter(),
+    )
+    assert outcome.run.status != "failed"
+    assert outcome.report is not None
+    assert outcome.technical_report is not None
+    assert outcome.technical_report.abstain is True
+    assert "technical" not in (outcome.run.snapshot_refs or {})
+    assert outcome.decision is not None
+
+
 @pytest.mark.asyncio
 async def test_sentiment_crash_does_not_claim_missing_events(tmp_path):
     fund_llm, tech_llm, _, macro_llm = _make_four_agent_llms()

@@ -223,9 +223,12 @@ def build_multi_factor_decision(
     if len(non_abstain) >= 2:
         stances_set = {s for _, s in non_abstain}
         if len(stances_set) > 1:
-            for dim, stance in non_abstain:
-                for other_dim, other_stance in non_abstain:
-                    if dim != other_dim and stance != other_stance:
+            # Unordered pairs: iterating ordered pairs produced both
+            # "A buys, B sells" and "B sells, A buys", and dedup could not
+            # collapse them because the strings differ.
+            for index, (dim, stance) in enumerate(non_abstain):
+                for other_dim, other_stance in non_abstain[index + 1:]:
+                    if stance != other_stance:
                         disagreements.append(
                             "{dim} 为 {stance}，{other} 为 {other_stance}".format(
                                 dim=dim,
@@ -305,10 +308,13 @@ def dimension_is_missing(dim: str, report: Report) -> bool:
 
 
 def report_degrades_run(dim: str, report: Report) -> bool:
+    # "Low relevance macro" / "no recent events" are completed N/A results and
+    # must not count as an abstention. A real degraded flag still counts,
+    # otherwise partial data loss is silently reported as a clean run.
     if dim == "macro" and report.relevance_to_stock == "low":
-        return False
+        return bool(report.degraded)
     if dim == "sentiment" and NO_RECENT_EVENTS in report.missing_information:
-        return False
+        return bool(report.degraded)
     return bool(report.abstain or report.degraded)
 
 

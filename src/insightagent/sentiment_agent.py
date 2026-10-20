@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any, Dict
@@ -112,8 +113,9 @@ def register_sentiment_tools(
     def get_holder_changes(dummy: str = "") -> Dict[str, Any]:
         return context.holders.model_dump(mode="json")
 
-    def search(query: str) -> Dict[str, Any]:
-        return record_search(
+    async def search(query: str) -> Dict[str, Any]:
+        return await asyncio.to_thread(
+            record_search,
             context.retrieved_kb_ids,
             query,
             scope="sentiment",

@@ -79,7 +79,6 @@ class ResearchStore:
         report_id = "{}-{}".format(run_id, agent_name)
         await asyncio.to_thread(
             self._save_child_sync,
-            "reports",
             report_id,
             run_id,
             agent_name,
@@ -101,7 +100,6 @@ class ResearchStore:
 
     def _save_child_sync(
         self,
-        table: str,
         record_id: str,
         run_id: str,
         agent_name: str,

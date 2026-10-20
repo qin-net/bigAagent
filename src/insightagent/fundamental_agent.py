@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -125,8 +126,11 @@ def register_fundamental_tools(
     def get_snapshot(dummy: str = "") -> Dict[str, Any]:
         return context.snapshot.model_dump(mode="json")
 
-    def search(query: str) -> Dict[str, Any]:
-        return record_search(
+    async def search(query: str) -> Dict[str, Any]:
+        # Catalog search opens SQLite and validates cards; running it inline
+        # blocks the event loop that four experts share.
+        return await asyncio.to_thread(
+            record_search,
             context.retrieved_kb_ids,
             query,
             scope="fundamental",

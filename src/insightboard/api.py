@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import asyncio
 import json
 import threading
 
@@ -23,6 +24,15 @@ from fastapi.staticfiles import StaticFiles
 from insightagent.env import load_dotenv
 
 from .store import BoardStore
+
+
+def _require_code(stock_code: str) -> str:
+    """All public endpoints take a 6-digit A-share code; reject anything else
+    before it reaches the database."""
+    code = (stock_code or "").strip()
+    if len(code) != 6 or not code.isdigit():
+        raise HTTPException(status_code=400, detail="invalid stock code")
+    return code
 
 
 class ResearchRequest(BaseModel):
@@ -129,23 +139,31 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
 
     @app.get("/api/v1/quotes/{stock_code}")
     def quote(stock_code: str) -> dict:
-        page = store.quote_page(page=1, size=1, q=stock_code, sort="stock_code", order="asc")
-        for item in page["items"]:
-            if item["stock_code"] == stock_code:
-                return {"batch_id": page["batch_id"], "as_of": page["as_of"], "item": item}
-        raise HTTPException(status_code=404, detail="Stock not found in current batch")
+        code = _require_code(stock_code)
+        item = store.quote_for(code)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Stock not found in current batch")
+        batch = store.current_batch()
+        return {
+            "batch_id": batch["batch_id"] if batch else None,
+            "as_of": batch["as_of"] if batch else None,
+            "item": item,
+        }
 
     @app.get("/api/v1/bars/{stock_code}")
     def bars(stock_code: str, limit: int = Query(120, ge=1, le=250)) -> dict:
-        return {"stock_code": stock_code, "items": store.bars(stock_code, limit)}
+        code = _require_code(stock_code)
+        return {"stock_code": code, "items": store.bars(code, limit)}
 
     @app.get("/api/v1/notices/{stock_code}")
     def notices(stock_code: str, limit: int = Query(30, ge=1, le=30)) -> dict:
-        return {"stock_code": stock_code, "items": store.notices(stock_code, limit)}
+        code = _require_code(stock_code)
+        return {"stock_code": code, "items": store.notices(code, limit)}
 
     @app.post("/api/v1/stocks/{stock_code}/refresh-request")
     def refresh_request(stock_code: str) -> dict:
-        return {"stock_code": stock_code, "queue": store.enqueue_deep(stock_code, reason="detail", priority=5)}
+        code = _require_code(stock_code)
+        return {"stock_code": code, "queue": store.enqueue_deep(code, reason="detail", priority=5)}
 
     @app.post("/api/v1/stocks/{stock_code}/bars/collect")
     def collect_bars(stock_code: str) -> dict:
@@ -241,7 +259,10 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
 
     @app.get("/api/v1/research/stocks/{stock_code}/current")
     async def current_research(stock_code: str) -> dict:
-        job = store.current_research(stock_code)
+        code = _require_code(stock_code)
+        # BoardStore is synchronous SQLite; calling it directly on the event
+        # loop stalls every other request while it waits on a lock.
+        job = await asyncio.to_thread(store.current_research, code)
         if not job:
             raise HTTPException(status_code=404, detail="no successful research")
         result = await load_projected_run(job["run_id"])
@@ -254,7 +275,8 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
 
     @app.get("/api/v1/research/stocks/{stock_code}/track")
     async def current_track(stock_code: str) -> dict:
-        job = store.current_track(stock_code)
+        code = _require_code(stock_code)
+        job = await asyncio.to_thread(store.current_track, code)
         if not job:
             raise HTTPException(status_code=404, detail="no successful track")
         result = await load_projected_run(job["run_id"])
@@ -270,7 +292,7 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
         result = await load_projected_run(run_id)
         if not result:
             raise HTTPException(status_code=404, detail="research run not found")
-        job = store.research_job_by_run(run_id)
+        job = await asyncio.to_thread(store.research_job_by_run, run_id)
         if job:
             result["job_id"] = job["job_id"]
             result["parent_run_id"] = job.get("parent_run_id") or result.get("parent_run_id")
@@ -292,7 +314,8 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
     @app.post("/api/v1/profile/generate")
     async def create_user_profile() -> dict:
         try:
-            return await generate_user_profile(paper=store.paper_snapshot())
+            paper = await asyncio.to_thread(store.paper_snapshot)
+            return await generate_user_profile(paper=paper)
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error))
         except RuntimeError as error:
@@ -311,13 +334,15 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
 
     @app.put("/api/v1/watchlist/{stock_code}")
     def add_watch(stock_code: str) -> dict:
-        store.add_watch(stock_code)
-        return {"stock_code": stock_code, "watchlisted": True}
+        code = _require_code(stock_code)
+        store.add_watch(code)
+        return {"stock_code": code, "watchlisted": True}
 
     @app.delete("/api/v1/watchlist/{stock_code}")
     def remove_watch(stock_code: str) -> dict:
-        store.remove_watch(stock_code)
-        return {"stock_code": stock_code, "watchlisted": False}
+        code = _require_code(stock_code)
+        store.remove_watch(code)
+        return {"stock_code": code, "watchlisted": False}
 
     @app.get("/api/v1/paper")
     def paper() -> dict:

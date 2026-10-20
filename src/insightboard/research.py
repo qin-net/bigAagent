@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
+import sqlite3
 from pathlib import Path
 from typing import Any, Optional
 
 from insightagent.env import resolve_path
 
 SPOOL_ENV = "INSIGHTBOARD_RESEARCH_SPOOL"
+LOG = logging.getLogger("insightboard.research")
 
 
 def spool_path(job_id: str) -> Path:
@@ -179,9 +182,13 @@ def _latest_expert_memories_sync(database: SQLiteDatabase) -> list[dict[str, Any
             WHERE status = 'SUCCESS'
               AND agent_name IN ('fundamental', 'technical', 'sentiment', 'macro', 'tracking')
             ORDER BY updated_at DESC
+            LIMIT 500
             """
         ).fetchall()
-    except Exception:
+    except sqlite3.Error:
+        # A database fault must not masquerade as "no expert has learned
+        # anything yet"; log it so the empty list is explainable.
+        LOG.exception("failed to load expert memories")
         return []
     finally:
         connection.close()

@@ -139,7 +139,21 @@ def sanitize_report(report: Report) -> Report:
         seen.add(key)
         citations.append(cleaned)
     updates["citations"] = citations
-    return report.model_copy(update=updates)
+    if not citations and not report.abstain:
+        # Every citation id was empty or malformed. A non-abstain report with
+        # no evidence is invalid and, once stored, makes the run impossible to
+        # reload for feedback; withdraw the conclusion instead.
+        updates.update(
+            {
+                "abstain": True,
+                "stance": "abstain",
+                "degraded": True,
+                "missing_information": list(report.missing_information)
+                + ["引用编号无效，结论已撤回"],
+            }
+        )
+    # model_copy skips validators; rebuild so the result is guaranteed valid.
+    return Report.model_validate({**report.model_dump(), **updates})
 
 
 class Decision(BaseModel):
