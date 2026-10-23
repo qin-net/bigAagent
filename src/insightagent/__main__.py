@@ -527,7 +527,8 @@ async def _run_analyze(args: argparse.Namespace) -> int:
         thinking_enabled=not args.no_thinking,
         unbound_policy="abstain",
         user_prompt=args.prompt,
-        synthesis_llm_adapter=llm_adapter,
+        # initial_synthesis 暂时关闭（见 insightboard/research.py 同名注释）。
+        synthesis_llm_adapter=None,
     )
     write_run_json(outcome, args.path)
     if args.as_json:

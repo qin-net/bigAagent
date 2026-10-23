@@ -365,15 +365,6 @@ async def analyze_stock(
             user_id=user_id, scope="decision", stock_code=code
         )
 
-        snapshot = await fetch_retry.execute(
-            fundamental_adapter.fetch_fundamental, code
-        )
-        snapshot = apply_fundamental_rules(snapshot)
-        fundamental_artifact_ref = await artifacts.put(
-            json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False)
-        )
-        snapshot.artifact_ref = fundamental_artifact_ref
-
         tech_fixture_payload = (
             synthetic_market_fixture(code) if fixture else None
         )
@@ -399,10 +390,67 @@ async def analyze_stock(
             fixture_payload=macro_fixture_payload,
         )
 
-        # Each dimension degrades on its own: a failed fetch becomes an
-        # abstention for that dimension instead of failing the whole run.
-        # (The old "fallback" here re-ran the very same adapter because its
-        # guard was always true, so it only doubled the latency.)
+        # Four network fetches, none of which needs another's output, used to
+        # run one after another: 23 of the 49 seconds of a real run were spent
+        # waiting on this queue. Fundamental, sentiment and macro now run
+        # concurrently. Technical stays on its own line because it reads the
+        # board's local SQLite through BoardTechnicalAdapter, and it is fast.
+        # The audit log writes through asyncio.to_thread on its own connection,
+        # and two of those at the same instant can fail with SQLITE_READONLY on
+        # this setup. Fetches and agents now run concurrently, so every audit
+        # write inside them goes through one lock: order and timing stay real,
+        # writes stay serial.
+        audit_lock = asyncio.Lock()
+
+        async def _emit_audit(event_type, payload, session_id=None):
+            async with audit_lock:
+                await audit.append(
+                    event_type,
+                    payload,
+                    run_id=run.run_id,
+                    session_id=session_id,
+                )
+
+        async def _fetch_fundamental():
+            await _emit_audit("fetch_started", {"dimension": "fundamental"})
+            value = await fetch_retry.execute(
+                fundamental_adapter.fetch_fundamental, code
+            )
+            await _emit_audit("fetch_completed", {"dimension": "fundamental"})
+            return value
+
+        async def _fetch_optional(dimension, operation):
+            # Each dimension degrades on its own: a failed fetch becomes an
+            # abstention for that dimension instead of failing the whole run.
+            await _emit_audit("fetch_started", {"dimension": dimension})
+            try:
+                fields = await fetch_retry.execute(operation, code)
+                error = None
+            except Exception as error_in_fetch:
+                fields, error = {}, error_in_fetch
+            await _emit_audit(
+                "fetch_completed", {"dimension": dimension, "ok": error is None}
+            )
+            return fields, error
+
+        (
+            snapshot,
+            (sent_fields, sent_fetch_error),
+            (macro_fields, macro_fetch_error),
+        ) = await asyncio.gather(
+            _fetch_fundamental(),
+            _fetch_optional("sentiment", sentiment_adapter.fetch_sentiment),
+            _fetch_optional("macro", macro_adapter.fetch_macro),
+        )
+        snapshot = apply_fundamental_rules(snapshot)
+        fundamental_artifact_ref = await artifacts.put(
+            json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False)
+        )
+        snapshot.artifact_ref = fundamental_artifact_ref
+
+        await audit.append(
+            "fetch_started", {"dimension": "technical"}, run_id=run.run_id
+        )
         tech_fetch_error: Optional[Exception] = None
         try:
             tech_fields = await fetch_retry.execute(
@@ -411,20 +459,11 @@ async def analyze_stock(
         except Exception as error:
             tech_fetch_error = error
             tech_fields = {}
-        sent_fetch_error: Optional[Exception] = None
-        try:
-            sent_fields = await fetch_retry.execute(
-                sentiment_adapter.fetch_sentiment, code
-            )
-        except Exception as error:
-            sent_fetch_error = error
-            sent_fields = {}
-        macro_fetch_error: Optional[Exception] = None
-        try:
-            macro_fields = await fetch_retry.execute(macro_adapter.fetch_macro, code)
-        except Exception as error:
-            macro_fetch_error = error
-            macro_fields = {}
+        await audit.append(
+            "fetch_completed",
+            {"dimension": "technical", "ok": tech_fetch_error is None},
+            run_id=run.run_id,
+        )
         # Only dimensions with real data are frozen. Writing an empty
         # snapshot here would be worse than writing nothing: a later rerun
         # would find a non-empty artifact and burn retries on all-None fields.
@@ -592,12 +631,39 @@ async def analyze_stock(
             else _immediate_macro_abstention()
         )
 
+        async def _track_agent(dimension, coroutine):
+            """Emit agent_completed the moment this dimension finishes.
+
+            The four reports used to be recorded in one batch after gather,
+            so every event carried the same timestamp and the board had no way
+            to show per-dimension progress. Wrapping each coroutine keeps the
+            event where it belongs: the branch that actually produced it.
+            """
+            result = await coroutine
+            report = result[0] if isinstance(result, tuple) else result
+            await _emit_audit(
+                "agent_completed",
+                {
+                    "dimension": dimension,
+                    "status": (
+                        "abstained"
+                        if getattr(report, "abstain", False)
+                        else "completed"
+                    ),
+                    "stance": getattr(report, "stance", None),
+                    "score": getattr(report, "score", None),
+                    "summary": str(getattr(report, "summary", "") or "")[:200],
+                },
+                session_id=run.session_ids.get(dimension),
+            )
+            return result
+
         fundamental_result, technical_result, sentiment_result, macro_result = (
             await asyncio.gather(
-                fundamental_future,
-                technical_future,
-                sentiment_future,
-                macro_future,
+                _track_agent("fundamental", fundamental_future),
+                _track_agent("technical", technical_future),
+                _track_agent("sentiment", sentiment_future),
+                _track_agent("macro", macro_future),
                 return_exceptions=True,
             )
         )
@@ -672,52 +738,8 @@ async def analyze_stock(
                 run_id=run.run_id,
             )
 
-        await audit.append(
-            "agent_completed",
-            {
-                "status": (
-                    "completed" if not fundamental_report.abstain else "abstained"
-                ),
-                "stance": fundamental_report.stance,
-                "score": fundamental_report.score,
-            },
-            run_id=run.run_id,
-            session_id=run.session_ids.get("fundamental"),
-        )
-        await audit.append(
-            "agent_completed",
-            {
-                "status": (
-                    "completed" if not technical_report.abstain else "abstained"
-                ),
-                "stance": technical_report.stance,
-                "score": technical_report.score,
-            },
-            run_id=run.run_id,
-            session_id=run.session_ids.get("technical"),
-        )
-        await audit.append(
-            "agent_completed",
-            {
-                "status": (
-                    "completed" if not sentiment_report.abstain else "abstained"
-                ),
-                "stance": sentiment_report.stance,
-                "score": sentiment_report.score,
-            },
-            run_id=run.run_id,
-            session_id=run.session_ids.get("sentiment"),
-        )
-        await audit.append(
-            "agent_completed",
-            {
-                "status": "completed" if not macro_report.abstain else "abstained",
-                "stance": macro_report.stance,
-                "score": macro_report.score,
-            },
-            run_id=run.run_id,
-            session_id=run.session_ids.get("macro"),
-        )
+        # agent_completed 现在由每个分支自己写完就发（见上面的 _track_agent），
+        # 不再等四维全部结束才一起补发——否则前端永远看到四个同时完成。
 
         decision = build_multi_factor_decision(
             fundamental_report,

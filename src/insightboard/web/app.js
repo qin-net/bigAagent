@@ -250,6 +250,8 @@ async function collectBars() {
   poll(0);
 }
 function renderResearch(data) {
+  stopRunClock();
+  runProgressSignature = '';
   const decision = data.decision || {};
   const rating = zh('rating', decision.rating);
   const confidence = decision.confidence != null ? `${Math.round(decision.confidence * 100)}%` : '';
@@ -356,6 +358,166 @@ function renderTrack(data) {
   if (data.job_id) currentTrackJobId = data.job_id;
   api('/paper').then((paper) => applyWorkflowState(currentResearchData, data, paper)).catch(() => applyWorkflowState(currentResearchData, data, null));
 }
+const PROGRESS_DIM_LABELS = { fundamental: '基本面', technical: '技术面', sentiment: '情绪', macro: '宏观' };
+const PROGRESS_DIM_STATES = { pending: '等待', fetching: '取数中', fetched: '排队待研究', running: '研究中', done: '已交卷', failed: '中断' };
+
+let runClock = null;
+let runProgressSignature = '';
+
+function fmtSeconds(value) {
+  const number = Number(value);
+  if (!isFinite(number)) return '—';
+  return (Math.round(number * 10) / 10).toFixed(1) + 's';
+}
+
+function stopRunClock() {
+  if (runClock && runClock.timer) clearInterval(runClock.timer);
+  runClock = null;
+}
+
+function startRunClock(baseSeconds) {
+  // 服务端只给基准秒数；秒数由前端自己走，否则每 2.5 秒才跳一次，看着一卡一卡。
+  stopRunClock();
+  runClock = { base: Number(baseSeconds) || 0, t0: performance.now(), timer: null };
+  runClock.timer = setInterval(tickRunClock, 100);
+  tickRunClock();
+}
+
+function rebaseRunClock(baseSeconds) {
+  // 每次轮询把基准纠回服务端值，避免长时间漂移；不满局重启动画。
+  if (!runClock) { startRunClock(baseSeconds); return; }
+  runClock.base = Number(baseSeconds) || 0;
+  runClock.t0 = performance.now();
+}
+
+function syncLaneClocks(progress) {
+  // 纠偏时泳道的基准也要跟着换，否则每次轮询后泳道秒表都会往回退。
+  const times = progress.dimension_times || {};
+  const dims = progress.dimensions || {};
+  const failedJob = progress.status === 'failed';
+  document.querySelectorAll('[data-dim]').forEach((lane) => {
+    const key = lane.dataset.dim;
+    const clock = lane.querySelector('[data-lane-elapsed]');
+    const time = times[key];
+    if (!clock || !time) return;
+    const isDone = (dims[key] || '') === 'done';
+    clock.dataset.laneElapsed = time.elapsed_seconds == null ? 0 : time.elapsed_seconds;
+    clock.dataset.laneDone = isDone || failedJob ? '1' : '0';
+    if (isDone) clock.textContent = fmtSeconds(time.elapsed_seconds);
+  });
+}
+
+function tickRunClock() {
+  if (!runClock) return;
+  const delta = (performance.now() - runClock.t0) / 1000;
+  const head = document.querySelector('#run-elapsed');
+  if (head) head.textContent = '已用 ' + fmtSeconds(runClock.base + delta);
+  document.querySelectorAll('[data-lane-elapsed]').forEach((node) => {
+    if (node.dataset.laneDone === '1') return;
+    node.textContent = fmtSeconds(Number(node.dataset.laneElapsed) + delta);
+  });
+}
+
+function progressSignature(progress) {
+  const dims = progress.dimensions || {};
+  return [
+    progress.stage_label || '',
+    progress.agents_done || 0,
+    Object.keys(PROGRESS_DIM_LABELS).map((key) => dims[key] || '').join(','),
+  ].join('|');
+}
+
+function renderRunProgress(progress) {
+  const box = document.querySelector('#research-result');
+  if (!box) return;
+  const signature = progressSignature(progress);
+  const base = Number(progress.elapsed_seconds || 0);
+  if (signature === runProgressSignature && box.querySelector('.run-map')) {
+    rebaseRunClock(base);
+    syncLaneClocks(progress);
+    return;
+  }
+  runProgressSignature = signature;
+
+  const phases = progress.phases || [];
+  const authors = (progress.dimension_summaries || {});
+  const times = (progress.dimension_times || {});
+  const doneCount = Number(progress.agents_done || 0);
+  const total = Number(progress.agents_total || 4);
+  const isFailed = progress.status === 'failed';
+
+  // 队伍走过的比例：取数 1/3，四维按已交卷数分摊中间 1/3，汇总为终点。
+  let ratio = 0;
+  const fetchPhase = phases.find((item) => item.key === 'fetch');
+  const agentPhase = phases.find((item) => item.key === 'agents');
+  const decisionPhase = phases.find((item) => item.key === 'decision');
+  if (fetchPhase && fetchPhase.state === 'done') ratio = 1 / 3;
+  if (agentPhase && agentPhase.state !== 'pending') ratio = 1 / 3 + (1 / 3) * (doneCount / total);
+  if (decisionPhase && decisionPhase.state === 'done') ratio = 1;
+  ratio = Math.max(0.02, Math.min(1, ratio));
+
+  const nodeFor = (phase, label, extra) => {
+    const state = phase ? phase.state : 'pending';
+    const css = isFailed && state === 'running' ? 'failed' : (state === 'running' ? 'current' : state);
+    let detail = extra || '—';
+    if (phase && phase.elapsed_seconds != null) detail = fmtSeconds(phase.elapsed_seconds);
+    return `<div class="route-node is-${css}"><span class="route-dot"></span><b>${label}</b><small>${detail}</small></div>`;
+  };
+
+  const lanes = Object.keys(PROGRESS_DIM_LABELS).map((key) => {
+    const rawState = (progress.dimensions || {})[key] || 'pending';
+    const state = isFailed && rawState !== 'done' && rawState !== 'pending' ? 'failed' : rawState;
+    const info = authors[key];
+    const time = times[key] || {};
+    const elapsed = time.elapsed_seconds;
+    const isDone = rawState === 'done';
+    const clock = rawState === 'pending'
+      ? '—'
+      : isDone
+        ? fmtSeconds(elapsed)
+        : fmtSeconds(elapsed || 0);
+    const verdict = info && info.score != null
+      ? `<span class="lane-verdict">${info.stance || ''} ${info.score}</span>`
+      : '';
+    const body = info && info.summary && isDone
+      ? `<p class="lane-summary">${safe(info.summary)}</p><p class="lane-hint">单维摘要，综合结论尚未生成</p>`
+      : '';
+    return `<article class="run-lane is-${state}" data-dim="${key}">
+      <header><span class="lane-dot"></span><b>${PROGRESS_DIM_LABELS[key]}</b><span class="lane-state">${PROGRESS_DIM_STATES[state] || state}</span>${verdict}<span class="lane-clock" data-lane-elapsed="${elapsed == null ? 0 : elapsed}" data-lane-done="${isDone || isFailed ? 1 : 0}">${clock}</span></header>
+      ${body}
+    </article>`;
+  }).join('');
+
+  const stalled = Number(progress.heartbeat_seconds || 0) > 12 && progress.status === 'running';
+  box.innerHTML = `<div class="run-map">
+    <div class="run-map-head">
+      <span class="run-map-title">${progress.stage_label || '研究中'}</span>
+      <span id="run-elapsed" class="run-map-clock">已用 ${fmtSeconds(base)}</span>
+      <span class="run-map-count">${doneCount}/${total} 已交卷</span>
+    </div>
+    ${isFailed
+      ? `<p class="run-map-error">${safe(progress.error || '上次运行未完成（执行器中断）。已完成的维度结果保留在下方，可重新发起。')}</p>`
+      : (stalled ? '<p class="run-map-stall">超过 12 秒没有新动静，可能卡在取数或模型重试上</p>' : '')}
+    <div class="run-route">
+      <div class="route-track"><i class="route-fill" style="width:${Math.round(ratio * 100)}%"></i><span class="route-party" style="left:${Math.round(ratio * 100)}%"><i></i><i></i></span></div>
+      <div class="route-nodes">
+        ${nodeFor(fetchPhase, '取数')}
+        ${nodeFor(agentPhase, '四维分析', `${doneCount}/${total}`)}
+        ${nodeFor(decisionPhase, '汇总结论')}
+      </div>
+    </div>
+    <div class="run-lanes">${lanes}</div>
+  </div>`;
+  startRunClock(base);
+}
+
+function swapResultInto(selector, paint) {
+  const box = document.querySelector(selector);
+  if (!box) { paint(); return; }
+  box.classList.add('is-swapping');
+  setTimeout(() => { paint(); box.classList.remove('is-swapping'); }, 150);
+}
+
 function jobLabels(kind) {
   const track = String(kind || '').startsWith('track');
   return track
@@ -374,6 +536,10 @@ async function pollResearch(jobId, code = currentCode, attempt = 0) {
     const statusEl = document.querySelector(trackish ? '#track-status' : '#research-status');
     const failed = job.status === 'failed' ? `${labels.failed}：${explainError(job.error || '未知错误')}` : '';
     statusEl.textContent = failed || labels[job.status] || job.status;
+    if (!trackish && (job.status === 'queued' || job.status === 'running')) {
+      const progress = await api(`/research/jobs/${jobId}/progress`).catch(() => null);
+      if (progress && code === currentCode) renderRunProgress(progress);
+    }
     if (job.status === 'failed') {
       // 失败任务不能留在 currentJobId：否则后续反馈永远对着它 409。
       // 回滚到最近一次成功的任务，并把阶段徽章从"分析中"摘下来。
@@ -392,7 +558,7 @@ async function pollResearch(jobId, code = currentCode, attempt = 0) {
         const data = await api(`/research/runs/${job.run_id}`);
         if (code !== currentCode) return;
         if (trackish) { renderTrack(data); currentTrackJobId = job.job_id || jobId; }
-        else { renderResearch(data); currentJobId = job.job_id || jobId; }
+        else { swapResultInto('#research-result', () => renderResearch(data)); currentJobId = job.job_id || jobId; }
       }
       await loadHistory(code);
       return;
@@ -403,7 +569,7 @@ async function pollResearch(jobId, code = currentCode, attempt = 0) {
         if (current) { currentTrackJobId = current.job_id; renderTrack(current); }
       } else {
         const current = await api(`/research/stocks/${code}/current`).catch(() => null);
-        if (current) { currentJobId = current.job_id; renderResearch(current); }
+        if (current) { currentJobId = current.job_id; swapResultInto('#research-result', () => renderResearch(current)); }
       }
       await loadHistory(code);
       return;
@@ -457,13 +623,14 @@ async function detail(code) {
   // quote 失败（标的不在当前行情批次）不能让整个 detail 中断：那会留下
   // "页面还是上一只股票、currentCode 已是新股票"的错配，用户可能对着
   // 错误标的点分析。bars/notices 失败各自降级为空。
-  const [quote, bars, notices, current, track, paper] = await Promise.all([
+  const [quote, bars, notices, current, track, paper, latest] = await Promise.all([
     api(`/quotes/${code}`).catch(() => null),
     api(`/bars/${code}`).catch(() => ({ items: [] })),
     api(`/notices/${code}`).catch(() => ({ items: [] })),
     api(`/research/stocks/${code}/current`).catch(() => null),
     api(`/research/stocks/${code}/track`).catch(() => null),
     api('/paper').catch(() => ({ positions: [], cash: null })),
+    api(`/research/stocks/${code}/latest-job`).catch(() => null),
   ]);
   const item = quote && quote.item ? quote.item : { name: '（不在最新行情批次）', price: null, change_pct: null };
   document.querySelector('#detail').innerHTML = `<div class="stock-context"><span class="stock-label">当前研究标的</span><h2>${safe(item.name)} <small>${safe(code)}</small></h2><p class="price">${text(item.price)} <span class="${item.change_pct >= 0 ? 'up' : 'down'}">${text(item.change_pct)}%</span></p></div><div class="stock-actions"><button id="watch">加入自选</button><button id="open-profile" class="button-secondary">用户画像</button><button id="open-paper" class="button-secondary">模拟账户</button></div>`;
@@ -488,6 +655,29 @@ async function detail(code) {
     renderResearch(current);
     currentRunId = current.run_id;
     currentJobId = current.job_id;
+  }
+  // 上次那次没跑完（中断或失败）时，页面重新进来也要能看到现场，而不是一片空白。
+  // 规则：只有在这条 job 比"最后一次成功研究"更新时才盖住结果区，免得用旧的失败
+  // 把新的结论顶掉。
+  if (latest && latest.job) {
+    const job = latest.job;
+    const unfinished = job.status === 'running' || job.status === 'failed';
+    const newer = !current || String(job.created_at || '') > String(current.created_at || '');
+    if (unfinished && (newer || job.status === 'running')) {
+      if (latest.progress) {
+        renderRunProgress({ ...latest.progress, status: job.status, error: job.error });
+      }
+      if (job.status === 'running') {
+        currentJobId = job.job_id;
+        if (job.run_id) currentRunId = job.run_id;
+        document.querySelector('#research-status').textContent = '上次运行还没结束，正在同步进度';
+        pollResearch(job.job_id);
+      } else {
+        document.querySelector('#research-status').textContent = job.error
+          ? explainError(job.error)
+          : '上次运行未完成';
+      }
+    }
   }
   if (track) renderTrack(track);
   applyWorkflowState(current, track, paper);
