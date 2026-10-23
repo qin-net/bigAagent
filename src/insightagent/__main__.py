@@ -527,6 +527,7 @@ async def _run_analyze(args: argparse.Namespace) -> int:
         thinking_enabled=not args.no_thinking,
         unbound_policy="abstain",
         user_prompt=args.prompt,
+        synthesis_llm_adapter=llm_adapter,
     )
     write_run_json(outcome, args.path)
     if args.as_json:

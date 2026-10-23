@@ -11,7 +11,13 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from ..business_contracts import Decision, Report, RunRecord, sanitize_report
+from ..business_contracts import (
+    Decision,
+    InitialSynthesis,
+    Report,
+    RunRecord,
+    sanitize_report,
+)
 from ..contracts import utc_now
 from ..data_contracts import (
     EventSnapshot,
@@ -149,6 +155,7 @@ class AnalysisOutcome:
     rerun_dimensions: List[str] = field(default_factory=list)
     copied_dimensions: List[str] = field(default_factory=list)
     parent_decision: Optional[Decision] = None
+    synthesis: Optional[InitialSynthesis] = None
 
     def to_dict(self) -> Dict[str, Any]:
         payload = {
@@ -180,6 +187,11 @@ class AnalysisOutcome:
             "error": self.error,
             "intent": (
                 self.intent.model_dump(mode="json") if self.intent else None
+            ),
+            "synthesis": (
+                self.synthesis.model_dump(mode="json")
+                if self.synthesis
+                else None
             ),
         }
         if self.parent_run_id:
@@ -268,7 +280,15 @@ async def analyze_stock(
     user_prompt: str = NONE,
     user_id: str = "local",
     extract_llm_adapter: Optional[LLMAdapter] = None,
+    synthesis_llm_adapter: Optional[LLMAdapter] = None,
 ) -> AnalysisOutcome:
+    """Run the four-expert initial analysis.
+
+    ``synthesis_llm_adapter`` is opt-in: unlike the other ``*_llm_adapter``
+    parameters it does NOT fall back to ``llm_adapter``. When it is None the
+    tracking-agent narrative synthesis step is skipped entirely and the
+    rule-made template rationale is all the run produces.
+    """
     code = normalize_stock_code(stock_code)
     artifacts = FileArtifactStore(database, artifact_root)
     store = ResearchStore(database)
@@ -718,6 +738,55 @@ async def analyze_stock(
             ]
         ):
             status = "degraded"
+        reports_by_role: Dict[str, Optional[Report]] = {
+            "fundamental": fundamental_report,
+            "technical": technical_report,
+            "sentiment": sentiment_report,
+            "macro": macro_report,
+        }
+        synthesis: Optional[InitialSynthesis] = None
+        # Narrative layer over the rule-made decision. Opt-in, and never
+        # fatal: a failed synthesis keeps the template rationale and the
+        # run status untouched. Skipped when every dimension abstained --
+        # there is nothing to narrate.
+        if synthesis_llm_adapter is not None and any(
+            report is not None and not report.abstain
+            for report in reports_by_role.values()
+        ):
+            # Lazy import, same convention as tracking_agent._call_expert:
+            # the two modules reference each other across task modes.
+            from ..tracking_agent import synthesize_initial
+
+            try:
+                synthesis, synthesis_session_id = await synthesize_initial(
+                    reports=reports_by_role,
+                    decision=decision,
+                    run=run,
+                    database=database,
+                    llm_adapter=synthesis_llm_adapter,
+                    model=model,
+                    thinking_enabled=thinking_enabled,
+                )
+                run.session_ids["synthesis"] = synthesis_session_id
+                await audit.append(
+                    "synthesis_completed",
+                    {
+                        "evaluations": len(synthesis.expert_evaluations),
+                        "has_synthesis": bool(synthesis.synthesis),
+                    },
+                    run_id=run.run_id,
+                    session_id=synthesis_session_id,
+                )
+            except Exception as error:
+                synthesis = None
+                await audit.append(
+                    "synthesis_failed",
+                    {
+                        "type": type(error).__name__,
+                        "message": str(error),
+                    },
+                    run_id=run.run_id,
+                )
         return await _complete(
             store,
             audit,
@@ -731,6 +800,7 @@ async def analyze_stock(
             status=status,
             intent=intent,
             show_intent_echo=show_intent_echo,
+            synthesis=synthesis,
         )
     except Exception as error:
         run.status = "failed"
@@ -1926,6 +1996,7 @@ async def _complete(
     status: str,
     intent: Optional[UserIntent] = None,
     show_intent_echo: bool = False,
+    synthesis: Optional[InitialSynthesis] = None,
 ) -> AnalysisOutcome:
     await store.save_report(run.run_id, "fundamental", fundamental_report)
     if technical_report is not None:
@@ -1935,6 +2006,22 @@ async def _complete(
     if macro_report is not None:
         await store.save_report(run.run_id, "macro", macro_report)
     await store.save_decision(run.run_id, decision)
+    if synthesis is not None:
+        # Same storage as a tracking round: the initial synthesis is the
+        # first entry of the thesis timeline. Prescreen's cooldown and
+        # recent_timeline_refs read these rows defensively, so a research
+        # row (no suggested_agent / triggers) is inert for them.
+        await store.save_timeline(
+            run.thesis_id,
+            {
+                "schema_version": "1",
+                "mode": "research",
+                "stock_code": run.stock_code,
+                "thesis_id": run.thesis_id,
+                "deliverable": synthesis.model_dump(mode="json"),
+            },
+            run_id=run.run_id,
+        )
     run.status = status
     run.updated_at = utc_now()
     await store.save_run(run)
@@ -1961,6 +2048,7 @@ async def _complete(
         decision=decision,
         intent=intent,
         show_intent_echo=show_intent_echo,
+        synthesis=synthesis,
     )
 
 
@@ -2059,6 +2147,17 @@ def format_cli_text(outcome: AnalysisOutcome) -> str:
                         "、".join(outcome.rerun_dimensions) or "decision"
                     ),
                 ]
+            )
+    if outcome.synthesis is not None and outcome.synthesis.synthesis:
+        lines.append("综合分析: {}".format(outcome.synthesis.synthesis))
+        if outcome.synthesis.expert_evaluations:
+            lines.append(
+                "专家评估: {}".format(
+                    ", ".join(
+                        "{}:{}".format(item.agent, item.verdict)
+                        for item in outcome.synthesis.expert_evaluations
+                    )
+                )
             )
     if outcome.error:
         lines.append("error: {}".format(outcome.error))

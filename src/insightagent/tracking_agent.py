@@ -4,7 +4,7 @@ import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -12,8 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .contracts import ResourceType, SideEffect, utc_now
 from .business_contracts import (
     AgentSkillCallRecord,
+    Decision,
     ExpertEvaluation,
+    InitialSynthesis,
     NextCheckSuggestion,
+    Report,
     RunRecord,
     TrackingDeliverable,
     TrackingUserOutput,
@@ -92,7 +95,10 @@ or scores.
 
 This round's Task JSON names the job. Use only the tools registered
 this round. Distill tasks must not call analysts. Tracking tasks
-must not read L0 markdown.
+must not read L0 markdown. Initial synthesis tasks must not call
+analysts and must not read L0 markdown: narrate across dimensions
+and adjudicate disagreements; the rating is already decided and is
+not yours to change.
 
 Prefer reusing the latest reports and the prescreen when they
 already answer the question. Call at most one analyst in a single
@@ -1014,6 +1020,176 @@ def finalize_deliverable(
         next_check_suggestion=NextCheckSuggestion.model_validate(
             raw.get("next_check_suggestion") or {}
         ),
+    )
+
+
+# --- initial synthesis task -------------------------------------------------
+# After the first analysis, the tracking agent reads the four expert reports
+# plus the rule-made decision and writes the narrative layer. It is a
+# tool-restricted task like distill: no analyst tools are registered, so it
+# structurally cannot re-run specialists. The session is saved under
+# agent_name="tracking" with the thesis_id, so later track_thesis runs
+# inherit it via prior_session_memory with no change on the tracking side.
+
+INITIAL_SYNTHESIS_INSTRUCTION = (
+    "Read the expert reports and the decision with the tools. Evaluate "
+    "every expert that produced a report (expert_evaluations), adjudicate "
+    "disagreements across dimensions, and write your own synthesis "
+    "narrative in Chinese. The rating is already decided by rules; do not "
+    "change or contradict it. Do not call analysts. Finish with "
+    "submit_final: output must carry thinking, synthesis, and "
+    "expert_evaluations. In state_patch, set private_memory.memory_summary "
+    "and, when useful, private_memory.active_hypotheses / "
+    "falsifiers_watched / key_evidence_refs -- this memory seeds the "
+    "tracking chain for this thesis."
+)
+
+
+@dataclass
+class SynthesisToolContext:
+    reports: Dict[str, Any]
+    decision: Dict[str, Any]
+
+
+def tracking_synthesis_config(
+    *,
+    model: str = "deepseek-v4-flash",
+    thinking_enabled: bool = False,
+) -> RuntimeConfig:
+    return tracking_runtime_config(
+        model=model,
+        thinking_enabled=thinking_enabled,
+        final_output_model=InitialSynthesis,
+    )
+
+
+def register_synthesis_tools(
+    agent: AgentInstance, context: SynthesisToolContext
+) -> None:
+    def get_reports(dummy: str = "") -> Dict[str, Any]:
+        return {"reports": context.reports}
+
+    def get_decision(dummy: str = "") -> Dict[str, Any]:
+        return {"decision": context.decision}
+
+    agent.register_tool(
+        FunctionResource(
+            func=get_reports,
+            name="get_expert_reports",
+            description=(
+                "Full expert reports of this run, keyed by role. Read-only."
+            ),
+            input_model=EmptyArgs,
+            output_model=None,
+        )
+    )
+    agent.register_tool(
+        FunctionResource(
+            func=get_decision,
+            name="get_decision",
+            description=(
+                "The rule-made decision of this run. Read-only; the rating "
+                "is final."
+            ),
+            input_model=EmptyArgs,
+            output_model=None,
+        )
+    )
+
+
+def finalize_initial_synthesis(
+    raw: Dict[str, Any], *, present_roles: Sequence[str]
+) -> InitialSynthesis:
+    if not isinstance(raw, dict):
+        raw = {}
+    evaluations: List[ExpertEvaluation] = []
+    for item in raw.get("expert_evaluations") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            evaluations.append(ExpertEvaluation.model_validate(item))
+        except ValidationError:
+            continue
+    covered = {item.agent for item in evaluations}
+    known = {"fundamental", "technical", "sentiment", "macro"}
+    for role in sorted((set(present_roles) & known) - covered):
+        evaluations.append(
+            ExpertEvaluation(
+                agent=role,  # type: ignore[arg-type]
+                reliability="medium",
+                verdict="insufficient",
+                notes="synthesizer omitted evaluation; marked incomplete",
+            )
+        )
+    thinking = str(raw.get("thinking") or "")
+    synthesis = str(raw.get("synthesis") or "") or thinking
+    return InitialSynthesis(
+        thinking=thinking,
+        synthesis=synthesis,
+        expert_evaluations=evaluations,
+    )
+
+
+async def synthesize_initial(
+    *,
+    reports: Dict[str, Optional[Report]],
+    decision: Decision,
+    run: RunRecord,
+    database: SQLiteDatabase,
+    llm_adapter,
+    model: str = "deepseek-v4-flash",
+    thinking_enabled: bool = False,
+) -> Tuple[InitialSynthesis, str]:
+    report_payload = {
+        role: report.model_dump(mode="json")
+        for role, report in reports.items()
+        if report is not None
+    }
+    context = SynthesisToolContext(
+        reports=report_payload,
+        decision=decision.model_dump(mode="json"),
+    )
+    session_id = str(uuid4())
+    agent = AgentInstance(
+        name="tracking",
+        llm_adapter=llm_adapter,
+        config=tracking_synthesis_config(
+            model=model, thinking_enabled=thinking_enabled
+        ),
+        state_store=SQLiteStateStore(database),
+        context_archive=SQLiteContextArchive(database),
+    )
+    register_synthesis_tools(agent, context)
+    user_query = json.dumps(
+        {
+            "task": "initial_synthesis",
+            "stock_code": run.stock_code,
+            "thesis_id": run.thesis_id,
+            "run_id": run.run_id,
+            "instruction": INITIAL_SYNTHESIS_INSTRUCTION,
+        },
+        ensure_ascii=False,
+    )
+    final = await agent.run(
+        user_query,
+        session_id=session_id,
+        # thesis_id and user_id must be present here: load_or_create copies
+        # them onto the state row, and prior_session_memory finds this
+        # session for the next tracking run only through that row.
+        business_context={
+            "task": "initial_synthesis",
+            "stock_code": run.stock_code,
+            "thesis_id": run.thesis_id,
+            "run_id": run.run_id,
+        },
+        user_id=run.user_id,
+    )
+    raw = final.output if isinstance(final.output, dict) else {}
+    return (
+        finalize_initial_synthesis(
+            raw, present_roles=list(report_payload)
+        ),
+        session_id,
     )
 
 

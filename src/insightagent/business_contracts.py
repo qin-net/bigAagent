@@ -262,6 +262,20 @@ class ExpertEvaluation(BaseModel):
     notes: str = ""
 
 
+class InitialSynthesis(BaseModel):
+    """Narrative layer written by the tracking agent after the first
+    analysis. The rule-made Decision stays authoritative for rating,
+    confidence, and citations; this model only carries the cross-dimension
+    narrative and the per-expert evaluations."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str = "1"
+    thinking: str = ""
+    synthesis: str
+    expert_evaluations: List[ExpertEvaluation] = Field(default_factory=list)
+
+
 class TrackingContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

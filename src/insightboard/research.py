@@ -128,6 +128,7 @@ def project_run(bundle: dict[str, Any], *, run_id: Optional[str] = None) -> dict
         "dimensions": dimensions,
         "decision": ({key: decision.get(key) for key in ("rating", "confidence", "value_score", "timing_score", "advice_one_liner", "risks", "falsifiers", "disagreements", "dimensions_used", "dimensions_missing")} if decision else None),
         "tracking": None,
+        "synthesis": None,
         "disclaimer": "研究辅助，非投资建议",
         "memories": {},
         "preferences": [],
@@ -153,10 +154,20 @@ def project_tracking(deliverable: dict[str, Any] | None) -> dict[str, Any] | Non
     }
 
 
+def project_synthesis(deliverable: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not deliverable:
+        return None
+    return {
+        "synthesis": deliverable.get("synthesis") or "",
+        "thinking": deliverable.get("thinking") or "",
+        "expert_evaluations": list(deliverable.get("expert_evaluations") or []),
+    }
+
+
 async def _memories_for_run(database: SQLiteDatabase, session_ids: dict[str, Any]) -> dict[str, Any]:
     store = SQLiteStateStore(database)
     memories: dict[str, Any] = {}
-    for role in ("fundamental", "technical", "sentiment", "macro", "tracking"):
+    for role in ("fundamental", "technical", "sentiment", "macro", "tracking", "synthesis"):
         session_id = session_ids.get(role)
         if not session_id:
             continue
@@ -255,6 +266,12 @@ async def load_projected_run(run_id: str, db_path: Optional[str] = None) -> Opti
     if projected.get("mode") == "track_day":
         timeline = await store.timeline_for_run(run_id)
         projected["tracking"] = project_tracking((timeline or {}).get("deliverable"))
+    else:
+        # Research runs store the initial synthesis (narrative written by
+        # the tracking agent) as a timeline row too. Keep it under its own
+        # key: the frontend routes `tracking` to the track renderer.
+        timeline = await store.timeline_for_run(run_id)
+        projected["synthesis"] = project_synthesis((timeline or {}).get("deliverable"))
     return projected
 
 
@@ -410,6 +427,7 @@ async def execute_job(job: dict[str, Any], board_store: Any = None) -> dict[str,
             thinking_enabled=True, unbound_policy="abstain",
             user_prompt=prompt, user_id=job.get("user_id", "local"),
             technical_adapter=BoardTechnicalAdapter(board_store) if board_store is not None else None,
+            synthesis_llm_adapter=llm,
         )
         if outcome.run.status == "failed":
             raise RuntimeError(outcome.error or "research failed")

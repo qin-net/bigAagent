@@ -276,6 +276,23 @@ function renderResearch(data) {
     </article>`;
   }).join('');
   const riskList = bullets(decision.risks);
+  const synth = data.synthesis || {};
+  const synthEvals = (synth.expert_evaluations || []).map((item) => {
+    const role = zh('role', item.agent) || '专家';
+    const verdict = zh('verdict', item.verdict);
+    const reliability = zh('reliability', item.reliability);
+    return `<article class="result-card eval-card">
+      <header><span>${role}</span>${verdict ? `<em class="${toneClass(item.verdict)}">${verdict}</em>` : ''}</header>
+      ${reliability ? `<p class="result-note">材料可信度：${reliability}</p>` : ''}
+      ${item.notes ? `<p class="result-body">${safe(item.notes)}</p>` : ''}
+    </article>`;
+  }).join('');
+  const synthCard = synth.synthesis ? `<article class="result-card">
+      <header><span>综合分析</span></header>
+      <p class="result-body">${safe(synth.synthesis)}</p>
+      ${synthEvals ? `<div class="eval-grid">${synthEvals}</div>` : ''}
+      ${synth.thinking ? `<details class="result-details"><summary>查看判断过程</summary><div class="result-block"><p>${safe(synth.thinking)}</p></div></details>` : ''}
+    </article>` : '';
   document.querySelector('#research-result').innerHTML = `
     <div class="result-stack">
       <p class="result-meta">${data.parent_run_id ? '反馈修订版' : '首次分析'}${zhTime(data.created_at) ? ` · ${zhTime(data.created_at)}` : ''}${reruns.length ? ` · 重跑 ${reruns.join('、')}` : ''}${intent ? ` · ${intent}` : ''}</p>
@@ -285,6 +302,7 @@ function renderResearch(data) {
         ${decision.advice_one_liner ? `<p class="result-lead">${safe(decision.advice_one_liner)}</p>` : ''}
         ${riskList ? `<div class="result-block"><h5>需要留意</h5><ul>${riskList}</ul></div>` : ''}
       </article>` : ''}
+      ${synthCard}
       ${prefs ? `<article class="result-card"><header><span>已记住的口径</span></header><ul class="result-list">${prefs}</ul></article>` : ''}
       ${dimCards ? `<div class="dim-grid">${dimCards}</div>` : ''}
     </div>`;
