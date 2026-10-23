@@ -241,8 +241,15 @@ class BoardStore:
     def recover_research(self, *, older_than_minutes: int = 30) -> int:
         cutoff = (datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)).isoformat()
         with self._connection() as connection:
+            # A job whose heartbeat stopped means its executor is gone (process
+            # restarted, thread died). It used to be re-queued, which silently
+            # re-ran the whole study and paid for it twice; the partial reports
+            # were never reused anyway. Fail it visibly instead: the user can
+            # see where it stopped and decide whether to spend again.
             result = connection.execute(
-                "UPDATE research_job SET status='queued', updated_at=? WHERE status='running' AND updated_at<?",
+                "UPDATE research_job SET status='failed', "
+                "error='执行器中断：心跳已停止，任务作废（会话已保留，可重新发起）', updated_at=? "
+                "WHERE status='running' AND updated_at<?",
                 (utc_now(), cutoff),
             )
             # Jobs that sat queued for far longer than any worker cycle mean no
@@ -311,6 +318,20 @@ class BoardStore:
             row = connection.execute(
                 "SELECT job_id,user_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE job_id=?",
                 (job_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def latest_research_job(self, stock_code: str) -> Optional[dict]:
+        """Newest job for a stock, whatever its status.
+
+        `research_job` needs a job id, and the page only knows about successful
+        runs. Without this, a run that died mid-flight leaves nothing to look
+        at: the board shows an empty panel instead of the wreck.
+        """
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT job_id,user_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE stock_code=? ORDER BY created_at DESC LIMIT 1",
+                (stock_code,),
             ).fetchone()
         return dict(row) if row else None
 

@@ -39,7 +39,9 @@ def test_api_run_lookup_includes_job_lineage(tmp_path, monkeypatch):
     assert response.json()["rerun_dimensions"] == ["fundamental"]
 
 
-def test_research_job_recovers_stale_running(tmp_path):
+def test_research_job_fails_stale_running_instead_of_rerunning(tmp_path):
+    # 心跳停了 = 执行器没了。以前这里会置回 queued 让它从头再跑一遍，
+    # 等于用户不知情地又被扣一次钱，而且前几维的结果也不会复用。
     store = BoardStore(str(tmp_path / "board.db"))
     store.initialize()
     store.initialize_research()
@@ -48,7 +50,11 @@ def test_research_job_recovers_stale_running(tmp_path):
     with store._connection() as connection:
         connection.execute("UPDATE research_job SET updated_at='2000-01-01T00:00:00+00:00' WHERE job_id=?", (job["job_id"],))
     assert store.recover_research() == 1
-    assert store.research_job(job["job_id"])["status"] == "queued"
+    recovered = store.research_job(job["job_id"])
+    assert recovered["status"] == "failed"
+    assert "中断" in recovered["error"]
+    # 而且不能再被 worker 认领，否则就是变相重跑
+    assert store.claim_research() is None
 
 
 def test_research_job_rejects_invalid_code(tmp_path):
@@ -121,3 +127,20 @@ async def test_execute_track_job_calls_track_thesis(tmp_path, monkeypatch):
     assert called["thesis_id"] == "000858-initial"
     assert called["fixture"] is False
     assert out["run_id"] == "track-run-1"
+
+
+def test_latest_research_job_sees_failed_jobs(tmp_path):
+    # 页面重进时要能拿到"上次没跑完"的那条，否则只能看到最后一次成功的结果。
+    store = BoardStore(str(tmp_path / "board.db"))
+    store.initialize()
+    store.initialize_research()
+    ok = store.create_research_job("000858")
+    store.claim_research()
+    store.finish_research(ok["job_id"], run_id="run-ok")
+    broken = store.create_research_job("000858", kind="track")
+    store.claim_research()
+    store.finish_research(broken["job_id"], error="执行器中断")
+    latest = store.latest_research_job("000858")
+    assert latest["job_id"] == broken["job_id"]
+    assert latest["status"] == "failed"
+    assert store.latest_research_job("600519") is None

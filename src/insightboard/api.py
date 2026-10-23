@@ -15,6 +15,7 @@ from .research import (
     load_experts_desk,
     load_projected_run,
     load_user_profile,
+    progress_payload,
     retire_user_preference,
     write_prompt,
 )
@@ -72,11 +73,21 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
     static_dir = Path(__file__).with_name("web")
 
     def _web_file(name: str, media_type: str) -> FileResponse:
-        return FileResponse(static_dir / name, media_type=media_type)
+        # A local dev board edits its own CSS/JS all day. Without an explicit
+        # no-cache the browser reuses the heuristic-cached copy and the page
+        # looks like the edit never landed. Revalidation keeps ETag's 304 path.
+        return FileResponse(
+            static_dir / name,
+            media_type=media_type,
+            headers={"Cache-Control": "no-cache, must-revalidate"},
+        )
 
     @app.get("/")
     def index() -> FileResponse:
-        return FileResponse(static_dir / "index.html")
+        return FileResponse(
+            static_dir / "index.html",
+            headers={"Cache-Control": "no-cache, must-revalidate"},
+        )
 
     @app.get("/style.css")
     def style_css() -> FileResponse:
@@ -256,6 +267,21 @@ def create_app(db_path: str = "data/board.db", collector=None) -> FastAPI:
         if not job:
             raise HTTPException(status_code=404, detail="research job not found")
         return job
+
+    @app.get("/api/v1/research/jobs/{job_id}/progress")
+    def research_progress(job_id: str) -> dict:
+        job = store.research_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="research job not found")
+        return progress_payload(job)
+
+    @app.get("/api/v1/research/stocks/{stock_code}/latest-job")
+    def latest_research_job(stock_code: str) -> dict:
+        code = _require_code(stock_code)
+        job = store.latest_research_job(code)
+        if not job:
+            return {"job": None, "progress": None}
+        return {"job": job, "progress": progress_payload(job)}
 
     @app.get("/api/v1/research/stocks/{stock_code}/current")
     async def current_research(stock_code: str) -> dict:

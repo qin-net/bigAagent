@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -449,3 +450,256 @@ async def execute_job(job: dict[str, Any], board_store: Any = None) -> dict[str,
 
 def execute_job_sync(job: dict[str, Any], board_store: Any = None) -> dict[str, Any]:
     return asyncio.run(execute_job(job, board_store))
+
+
+PROGRESS_STEPS = (
+    ("prepare", "准备研究"),
+    ("intent", "理解口径"),
+    ("fetch", "取数"),
+    ("agents", "四维分析"),
+    ("decision", "汇总结论"),
+    ("synthesis", "综合分析"),
+)
+
+ANALYSIS_DIMENSIONS = ("fundamental", "technical", "sentiment", "macro")
+
+
+def _audit_events(run_id: str, db_path: str) -> list[dict[str, Any]]:
+    """Read a run's audit trail. Read-only, and missing files are not an error."""
+    if not run_id or not os.path.exists(db_path):
+        return []
+    target = db_path.replace("\\", "/")
+    connection = sqlite3.connect("file:{}?mode=ro".format(target), uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        rows = connection.execute(
+            "select event_type, payload_json, created_at from audit_events "
+            "where run_id = ? order by created_at, rowid",
+            (run_id,),
+        ).fetchall()
+    except sqlite3.Error:
+        return []
+    finally:
+        connection.close()
+    events = []
+    for row in rows:
+        try:
+            payload = json.loads(row["payload_json"] or "{}")
+        except json.JSONDecodeError:
+            payload = {}
+        events.append(
+            {
+                "type": row["event_type"],
+                "payload": payload if isinstance(payload, dict) else {},
+                "at": row["created_at"],
+            }
+        )
+    return events
+
+
+def _seconds_between(start: Optional[str], end: Optional[str]) -> Optional[float]:
+    if not start or not end:
+        return None
+    try:
+        first = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
+        second = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return round((second - first).total_seconds(), 1)
+
+
+def _guess_run_id(job: dict[str, Any], db_path: str) -> Optional[str]:
+    """Find the run a job started, for jobs that died before reporting back.
+
+    A job only learns its run_id when it finishes, so an interrupted one leaves
+    run_id empty while the audit trail for its run exists anyway. Matching on
+    stock + a narrow start window recovers that trail instead of showing an
+    empty panel.
+    """
+    stock = job.get("stock_code")
+    created = job.get("created_at")
+    if not stock or not created or not os.path.exists(db_path):
+        return None
+    try:
+        started = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    low = (started - timedelta(seconds=5)).isoformat()
+    high = (started + timedelta(minutes=30)).isoformat()
+    target = db_path.replace("\\", "/")
+    connection = sqlite3.connect("file:{}?mode=ro".format(target), uri=True)
+    try:
+        row = connection.execute(
+            "select run_id from runs where stock_code = ? and created_at >= ? "
+            "and created_at <= ? order by created_at asc limit 1",
+            (stock, low, high),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        connection.close()
+    return row[0] if row else None
+
+
+def progress_payload(job: dict[str, Any], now: Optional[datetime] = None) -> dict[str, Any]:
+    """Fold the append-only audit trail into a stage list for the board.
+
+    No mutable progress column is written anywhere: the trail already exists,
+    so old runs get progress replay for free and there is only one source of
+    truth.
+    """
+    now = now or datetime.now(timezone.utc)
+    db_path = agent_paths()[0]
+    run_id = job.get("run_id") or _guess_run_id(job, db_path)
+    events = _audit_events(run_id, db_path) if run_id else []
+
+    dimensions = {dim: "pending" for dim in ANALYSIS_DIMENSIONS}
+    summaries: dict[str, Any] = {}
+    fetch_started_at: dict[str, str] = {}
+    finished_at: dict[str, str] = {}
+    fetched: set[str] = set()
+    seen: set[str] = set()
+    stamps: dict[str, str] = {}
+    for event in events:
+        name = event["type"]
+        payload = event["payload"]
+        dimension = payload.get("dimension")
+        seen.add(name)
+        stamps.setdefault(name, event["at"])
+        if name == "fetch_started" and dimension in dimensions:
+            dimensions[dimension] = "fetching"
+            fetch_started_at.setdefault(dimension, event["at"])
+        elif name == "fetch_completed" and dimension in dimensions:
+            fetched.add(dimension)
+            if dimensions[dimension] == "fetching":
+                dimensions[dimension] = "fetched"
+        elif name == "agent_completed" and dimension in dimensions:
+            dimensions[dimension] = "done"
+            finished_at[dimension] = event["at"]
+            summaries[dimension] = {
+                "status": payload.get("status"),
+                "stance": payload.get("stance"),
+                "score": payload.get("score"),
+                "summary": payload.get("summary"),
+            }
+
+    agents_done = sum(1 for dim in ANALYSIS_DIMENSIONS if dimensions[dim] == "done")
+    fetch_done = "snapshot_ready" in seen or len(fetched) == len(ANALYSIS_DIMENSIONS)
+
+    done_flags = {
+        "prepare": "run_started" in seen,
+        "intent": "intent_parsed" in seen,
+        "fetch": fetch_done,
+        "agents": "decision_written" in seen or agents_done == len(ANALYSIS_DIMENSIONS),
+        "decision": "decision_written" in seen,
+        "synthesis": "synthesis_completed" in seen or "synthesis_failed" in seen,
+    }
+
+    status = job.get("status") or "queued"
+    current = None
+    steps = []
+    for key, label in PROGRESS_STEPS:
+        if done_flags.get(key):
+            state = "done"
+        elif current is None:
+            current = key
+            state = "running"
+        else:
+            state = "pending"
+        steps.append({"key": key, "label": label, "state": state})
+
+    if status == "failed":
+        for step in steps:
+            if step["state"] == "running":
+                step["state"] = "failed"
+    if status in {"success", "unchanged"}:
+        # A finished run must not leave a stage "pending": the ones that never
+        # happened (synthesis after a crash, or every run before those events
+        # existed) are skipped, not still coming.
+        for step in steps:
+            if not done_flags.get(step["key"]):
+                step["state"] = "skipped"
+        current = None
+
+    label = dict(PROGRESS_STEPS).get(current or "", "")
+    if status == "queued":
+        label = "排队中"
+    elif status == "failed":
+        label = "失败"
+    elif status in {"success", "unchanged"}:
+        label = "已完成"
+
+    elapsed = _seconds_between(job.get("created_at"), now.isoformat())
+    heartbeat = _seconds_between(job.get("updated_at"), now.isoformat())
+
+    now_iso = now.isoformat()
+    # 已结束的任务（尤其失败/中断的）不能用 now 算时长，否则卡片上的秒数会一直往上涨；
+    # 停在最后一个事件的时间点才是"它死在哪一秒"。
+    terminal = status in {"success", "unchanged", "failed"}
+    end_ref = (events[-1]["at"] if terminal and events else None) or now_iso
+    agents_started = stamps.get("snapshot_ready") or stamps.get("fetch_started")
+    dimension_times = {}
+    for dim in ANALYSIS_DIMENSIONS:
+        if dimensions[dim] == "pending":
+            continue
+        started = agents_started or fetch_started_at.get(dim)
+        finished = finished_at.get(dim)
+        dimension_times[dim] = {
+            "started": bool(started),
+            "finished": bool(finished),
+            "elapsed_seconds": _seconds_between(started, finished or end_ref) if started else None,
+        }
+
+    phases = [
+        {
+            "key": "fetch",
+            "label": "取数",
+            "state": "done" if fetch_done else ("running" if "run_started" in seen else "pending"),
+            "elapsed_seconds": _seconds_between(
+                stamps.get("run_started"),
+                stamps.get("snapshot_ready") or end_ref,
+            ),
+        },
+        {
+            "key": "agents",
+            "label": "四维分析",
+            "state": (
+                "done"
+                if done_flags["agents"]
+                else ("running" if fetch_done else "pending")
+            ),
+            "elapsed_seconds": _seconds_between(
+                agents_started,
+                stamps.get("decision_written") or end_ref,
+            ),
+            "done_count": agents_done,
+            "total": len(ANALYSIS_DIMENSIONS),
+        },
+        {
+            "key": "decision",
+            "label": "汇总结论",
+            "state": "done" if done_flags["decision"] else ("running" if agents_done == len(ANALYSIS_DIMENSIONS) else "pending"),
+            "elapsed_seconds": 0.0 if done_flags["decision"] else None,
+        },
+    ]
+
+    return {
+        "job_id": job.get("job_id"),
+        "kind": job.get("kind"),
+        "status": status,
+        "run_id": run_id,
+        "stage": current,
+        "stage_label": label,
+        "elapsed_seconds": elapsed,
+        "heartbeat_seconds": heartbeat,
+        "steps": steps,
+        "phases": phases,
+        "last_stage": current,
+        "last_event_type": events[-1]["type"] if events else None,
+        "last_event_at": events[-1]["at"] if events else None,
+        "dimensions": dimensions,
+        "dimension_summaries": summaries,
+        "dimension_times": dimension_times,
+        "agents_done": agents_done,
+        "agents_total": len(ANALYSIS_DIMENSIONS),
+    }
