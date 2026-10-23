@@ -4,7 +4,14 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Type
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    create_model,
+    field_validator,
+)
 
 from .business_contracts import Report
 from .context import (
@@ -112,6 +119,16 @@ class SubmitStatePatch(BaseModel):
     set: List[PathValue] = Field(default_factory=list)
     append: List[PathValues] = Field(default_factory=list)
     remove: List[str] = Field(default_factory=list)
+
+    @field_validator("set", "append", "remove", mode="before")
+    @classmethod
+    def _placeholder_becomes_empty_list(cls, value: Any) -> Any:
+        # Models routinely send `{}` (or null) to mean "nothing to patch" even
+        # though the field is an array. Treat only that empty placeholder as
+        # `[]`; a non-empty dict is a real mistake and must still fail loudly.
+        if value is None or value == {}:
+            return []
+        return value
 
 
 class SubmitFinalArgs(BaseModel):
@@ -582,15 +599,28 @@ class AgentLocalScheduler:
             try:
                 arguments = json.loads(call.arguments)
             except json.JSONDecodeError as error:
-                raise InvalidModelOutputError(
-                    "Invalid JSON arguments for {}. "
-                    "submit_final needs one JSON object, no duplicate keys, "
-                    "and output.report must include role, score, and stance.".format(
-                        call.name
+                # Say what actually went wrong. The previous wording blamed
+                # missing report fields, so a model that merely broke its JSON
+                # syntax went off to rewrite a report that was never the issue.
+                if call.name != SUBMIT_FINAL:
+                    raise InvalidModelOutputError(
+                        "Invalid JSON arguments for {}: {}".format(
+                            call.name, error.msg
+                        )
+                    ) from error
+                hint = (
+                    "submit_final.arguments is not valid JSON: {} "
+                    "(line {}, column {}). Send one JSON object; escape "
+                    "quotes and newlines inside strings.".format(
+                        error.msg, error.lineno, error.colno
                     )
-                    if call.name == "submit_final"
-                    else "Invalid JSON arguments for {}".format(call.name)
-                ) from error
+                )
+                if error.doc and error.pos >= len(error.doc) - 2:
+                    hint += (
+                        " The error sits at the very end, so the payload looks"
+                        " truncated - shorten the report body."
+                    )
+                raise InvalidModelOutputError(hint) from error
             if not isinstance(arguments, dict):
                 raise InvalidModelOutputError(
                     "Tool arguments must be a JSON object"
@@ -623,6 +653,25 @@ class AgentLocalScheduler:
                 "Final response must be a JSON object"
             )
         return self._parse_final_payload(payload, state)
+
+    @staticmethod
+    def _describe_validation(error: ValidationError, limit: int = 4) -> str:
+        """Turn a pydantic error into the field paths the model must fix.
+
+        A generic message ("report is required") sent the model back to rewrite
+        the wrong field five times and burn the whole round budget, so the
+        location of every failure has to reach the model verbatim.
+        """
+
+        parts = []
+        problems = error.errors()
+        for item in problems[:limit]:
+            location = ".".join(str(piece) for piece in item.get("loc", ())) or "<root>"
+            parts.append("{}: {}".format(location, item.get("msg", "invalid")))
+        remaining = len(problems) - limit
+        if remaining > 0:
+            parts.append("+{} more".format(remaining))
+        return "; ".join(parts)
 
     def _parse_final_payload(
         self,
@@ -657,19 +706,24 @@ class AgentLocalScheduler:
                 remove={name: [] for name in submitted.state_patch.remove},
             )
         except ValidationError as error:
+            detail = self._describe_validation(error)
             custom_output = self.config.final_output_model is not SubmitFinalOutput
             if require_report or custom_output:
                 raise InvalidModelOutputError(
-                    "submit_final.output.report is required and must "
-                    "include role, score, and stance"
-                    if require_report
-                    else "submit_final.output must match this call's output schema"
+                    "{}: {}".format(
+                        "submit_final payload rejected"
+                        if require_report
+                        else "submit_final.output must match this call's output schema",
+                        detail,
+                    )
                 ) from error
             try:
                 visible = ModelFinalResponse.model_validate(payload)
             except ValidationError as fallback_error:
                 raise InvalidModelOutputError(
-                    "Final response failed schema validation"
+                    "Final response failed schema validation: {}".format(
+                        self._describe_validation(fallback_error)
+                    )
                 ) from fallback_error
             output = visible.output
             reflection = visible.reflection

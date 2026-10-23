@@ -22,3 +22,7 @@ data/kb/incoming/
 *.db-shm
 opencode.json
 .cursor
+.workbuddy
+
+/.idea/
+/doc/mine/

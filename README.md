@@ -211,15 +211,35 @@ snapshot（白名单字段，截断）
 
 ### 启动
 
+Windows 用 `.venv\Scripts\python.exe`，macOS / Linux 用 `.venv/bin/python`。下面按 Windows 写。
+
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e ".[dev,board,akshare]"
-cp .env.example .env                 # 填入 DEEPSEEK_API_KEY
-.venv/bin/python -m insightboard serve
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -e ".[dev,board,akshare]"
+copy .env.example .env               # 填入 DEEPSEEK_API_KEY
+
+.venv\Scripts\python.exe -m insightagent db init                      # 研究库（只跑一次）
+.venv\Scripts\python.exe -m insightboard --db data/board.db init      # 看板库（只跑一次）
+.venv\Scripts\python.exe -m insightboard --db data/board.db collect-once   # 先采一批行情，否则页面是空的
+
+.venv\Scripts\python.exe scripts\doctor.py       # 启动前自检：依赖 / key / 三个库 / 端口
+.venv\Scripts\python.exe -m insightboard serve   # 真正启动
 ```
 
-浏览器打开 [http://127.0.0.1:8000](http://127.0.0.1:8000) 。一条命令同时拉起接口、页面和研究后台。改完 Python 路由后要重启服务；页面脚本刷新即可。
+浏览器打开 [http://127.0.0.1:8000](http://127.0.0.1:8000) 。一条命令同时拉起接口、页面和研究后台（研究任务是排队执行的，关掉服务即中断）。改完 Python 路由后要重启服务；页面脚本刷新即可。
+
+首次跑一条完整链路（不打开页面也行）：
+
+```bash
+.venv\Scripts\python.exe -m insightagent analyze 000858            # 真取数 + 真调模型
+.venv\Scripts\python.exe -m insightagent analyze 000858 --fixture  # 走夹具快照，省掉行情依赖
+```
+
+`analyze` 会打印 `run_id`；`python -m insightagent feedback <run_id>` 可以对它提交反馈并按维重跑。
+
+> 装依赖时若卡在 502 / 超时，是代理问题，加国内镜像即可：
+> `... -m pip install -e ".[dev,board,akshare]" -i https://pypi.tuna.tsinghua.edu.cn/simple`
 
 ### 在看板上怎么用
 
@@ -236,11 +256,16 @@ cp .env.example .env                 # 填入 DEEPSEEK_API_KEY
 ### 开发与维护
 
 ```bash
-PYTHONPATH=src:. .venv/bin/python -m pytest    # 离线测运行时；test_live_* 会出网
-.venv/bin/python -m insightagent db init
-.venv/bin/python -m pip install -e ".[docs]"
-.venv/bin/python -m insightagent pdf2md         # 本地 PDF 转 Markdown，不上传
+# Windows；`.venv/bin/python` 换 `.venv\Scripts\python.exe` 即为 macOS / Linux 写法
+.venv\Scripts\python.exe -m pytest             # 离线测运行时；test_live_* 会出网（pytest 已默认排除）
+.venv\Scripts\python.exe -m pytest -m live     # 显式跑会出网 / 花钱的那批
+.venv\Scripts\python.exe scripts\doctor.py --net   # 额外验证 DeepSeek key 是否真的可用
+.venv\Scripts\python.exe -m pip install -e ".[docs]"
+.venv\Scripts\python.exe -m insightagent pdf2md    # 本地 PDF 转 Markdown，不上传
 ```
+
+命令行子命令：`insightagent` 有 `analyze` / `feedback` / `track` / `track-feedback` / `kb` / `pdf2md` / `db`；
+`insightboard` 有 `serve` / `collect-once` / `worker` / `research-worker` / `status`。
 
 ---
 

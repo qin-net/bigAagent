@@ -532,3 +532,142 @@ async def test_unknown_tool_name_is_returned_and_loop_continues():
     failed = tool_results[0]["call-1"]
     assert failed["status"] == "failed"
     assert failed["error"]["type"] == "UnknownResourceError"
+
+
+def _abstain_payload(state_patch):
+    return {
+        "status": "abstained",
+        "output": {
+            "report": {
+                "role": "macro",
+                "score": 2,
+                "stance": "abstain",
+                "summary": "利率环境与白酒相关性低，本维弃权。",
+                "citations": [],
+                "risks": ["宏观相关性低"],
+                "degraded": True,
+                "abstain": True,
+                "cycle_tag": "rate_data_available",
+                "relevance_to_stock": "low",
+            }
+        },
+        "reflection": {},
+        "state_patch": state_patch,
+    }
+
+
+def _submit_response(payload, call_id="submit-1"):
+    return LLMResponse(
+        id=call_id,
+        model="deepseek-v4-flash",
+        content="",
+        tool_calls=[
+            LLMToolCall(
+                id=call_id,
+                name="submit_final",
+                arguments=json.dumps(payload),
+            )
+        ],
+        finish_reason="tool_calls",
+    )
+
+
+@pytest.mark.asyncio
+async def test_submit_final_accepts_empty_dict_patch_placeholders():
+    # 真实运行里模型会把 append 写成 {}（表示"没有要追加的"）。
+    # 这只是一种空占位，不该让整轮提交失败——它曾把基本面与情绪面逼到 8 轮熔断。
+    payload = _abstain_payload(
+        {
+            "set": [{"path": "private_memory.memory_summary", "value": "low relevance"}],
+            "append": {},
+            "remove": [],
+        }
+    )
+    fake = FakeLLMAdapter([_submit_response(payload)])
+    agent = AgentInstance(
+        name="macro",
+        llm_adapter=fake,
+        config=RuntimeConfig(max_loop_round=4),
+    )
+    result = await agent.run("Analyze 000858", session_id="session-empty-patch")
+    state = await agent.state_store.get("session-empty-patch")
+    assert state.status == TaskStatus.SUCCESS
+    assert result.output["report"]["stance"] == "abstain"
+    assert state.private_memory["memory_summary"] == "low relevance"
+
+
+@pytest.mark.asyncio
+async def test_submit_final_error_names_the_field_that_actually_failed():
+    # 旧的固定文案（"output.report is required"）会把模型引去重写 report，
+    # 而真正出错的字段是 state_patch.append，于是一直改错地方直到熔断。
+    bad = _abstain_payload(
+        {
+            "set": [{"path": "private_memory.memory_summary", "value": "low"}],
+            "append": {"private_memory.lessons": ["should be a list of objects"]},
+            "remove": [],
+        }
+    )
+    good = _abstain_payload(
+        {
+            "set": [{"path": "private_memory.memory_summary", "value": "low"}],
+            "append": [],
+            "remove": [],
+        }
+    )
+    fake = FakeLLMAdapter(
+        [_submit_response(bad, "submit-bad"), _submit_response(good, "submit-good")]
+    )
+    agent = AgentInstance(
+        name="macro",
+        llm_adapter=fake,
+        config=RuntimeConfig(max_loop_round=4),
+    )
+    result = await agent.run("Analyze 000858", session_id="session-bad-patch")
+    assert result.output["report"]["stance"] == "abstain"
+    assert len(fake.requests) == 2
+    seen = " ".join(
+        message.content or "" for message in fake.requests[1].messages
+    )
+    assert "state_patch.append" in seen
+    assert "report is required" not in seen
+
+
+@pytest.mark.asyncio
+async def test_malformed_tool_arguments_report_the_json_error():
+    # arguments 不是合法 JSON 时，旧文案去怪 report 缺字段，模型会改错地方。
+    good = _abstain_payload(
+        {
+            "set": [{"path": "private_memory.memory_summary", "value": "low"}],
+            "append": [],
+            "remove": [],
+        }
+    )
+    fake = FakeLLMAdapter(
+        [
+            LLMResponse(
+                id="broken-json",
+                model="deepseek-v4-flash",
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="broken-1",
+                        name="submit_final",
+                        arguments='{"status": "completed", "output": {"report": {"summary": "未转义的"引号"',
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+            _submit_response(good, "submit-good"),
+        ]
+    )
+    agent = AgentInstance(
+        name="macro",
+        llm_adapter=fake,
+        config=RuntimeConfig(max_loop_round=4),
+    )
+    result = await agent.run("Analyze 000858", session_id="session-broken-json")
+    assert result.output["report"]["stance"] == "abstain"
+    assert len(fake.requests) == 2
+    seen = " ".join(message.content or "" for message in fake.requests[1].messages)
+    assert "not valid JSON" in seen
+    assert "report is required" not in seen
