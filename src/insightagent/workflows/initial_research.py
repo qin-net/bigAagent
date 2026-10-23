@@ -765,7 +765,12 @@ async def analyze_stock(
                     database=database,
                     llm_adapter=synthesis_llm_adapter,
                     model=model,
-                    thinking_enabled=thinking_enabled,
+                    # Deliberately NOT the run's thinking_enabled: reasoning
+                    # tokens share the completion budget, and this narrative
+                    # task already externalizes its reasoning in the
+                    # `thinking` output field. With thinking on, the live
+                    # model's long submission was truncated mid-JSON.
+                    thinking_enabled=False,
                 )
                 run.session_ids["synthesis"] = synthesis_session_id
                 await audit.append(

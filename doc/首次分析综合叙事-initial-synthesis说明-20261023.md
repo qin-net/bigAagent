@@ -102,6 +102,34 @@ prior_session_memory(agent_name="tracking", thesis_id="000858-initial")
 
 **次要的：决定在哪一步跑合成。** 合成需要读 4 份报告，如果走数据库读就依赖"报告先落库"，会把合成挤到 `_complete` 之后、引入次序耦合。最后选择把内存里的 Report 对象直接传给合成函数，完全不依赖持久化次序。
 
+## 真实链路实测（2026-10-23，DeepSeek 真模型 + fixture 数据）
+
+上线前用真实 key 跑了三轮 `python -m insightagent analyze 000858 --fixture`，**前两轮都失败了**，连环暴露出三个问题（风险清单里的第 1、2 条立刻应验），全部修复后第三轮完整通过。这是一次很典型的"mock 测不出来的问题只有真模型能暴露"：
+
+### 实测 bug 1：误导性报错引发死循环（runtime 级，存量 bug）
+
+第一轮：合成 agent 转满 8 圈 `MaxLoopRoundExceeded`。扒 session 记录发现，模型**第一次提交内容几乎全对**，只是在 state_patch 的条目里多塞了个 `value_note` 字段，strict 校验拒绝。但 runtime 的 submit_final 工具调用路径**无条件**回同一句写死的报错："output.report is required and must include role, score, and stance"——这是给默认输出模型准备的文案，我们的 `InitialSynthesis` 根本没有 report 字段。模型被这句话带偏，后面 7 轮拼命往 output 里加 `report`（恰恰被 extra="forbid" 拒绝），死循环到上限。
+
+第二轮更有意思：**基本面专家**（默认输出模型，和本次功能无关）也栽在同一类坑里——它把 reflection/state_patch 错放进了 output 内部，真实错误是 `output.reflection: Extra inputs are not permitted`，但收到的报错还是"缺 report"（report 明明在且合法），模型照着提示反复检查 report，自然永远修不对。说明这是一个影响**所有 agent** 的存量 bug，只是以前没人连跑多轮触发它。
+
+**修复**（`runtime.py` `_parse_final_payload`）：拒绝消息带上 pydantic 错误的真实路径和原因（如 `state_patch.set.0.value_note: Extra inputs are not permitted`），模型下一轮就能自愈。配了回归测试：故意提交一次带多余字段的 payload，断言重试提示里有真实路径、没有误导文案、且第二次提交成功。
+
+> 归属说明：这个 runtime 级修复最终采用的是上游 commit `6f17788`（superd）的版本，它与我们的本地修复撞车且覆盖面更全——除了带真实路径（最多 4 条 + 计数），还修了 JSON 语法错误路径的同款误导文案（带行列号、末尾截断时直接提示"payload 像被截断"），并对 state_patch 收到空 `{}`/null 占位符做了无歧义宽容（非空 dict 仍硬报错）。我们撤掉了本地重复修复、保留了自己的回归测试（在他的实现下同样通过）。本功能侧的改动（合成任务、max_tokens、thinking 关闭）与其不冲突。
+
+### 实测 bug 2：输出截断（OutputTruncatedError）
+
+修完 bug 1 后第三轮，合成 agent 换了一种死法：`DeepSeek output was truncated`。真模型写叙事极其啰嗦（thinking + synthesis + 逐专家长评动辄数千字），叠加 thinking 模式的推理 token，一次 submit_final 超出 max_tokens=8192 被拦腰截断成非法 JSON。
+
+**修复**两处：合成调用固定 `thinking_enabled=False`（这个任务的推理本来就外化在输出的 `thinking` 字段里，没必要再烧推理预算）；任务指令里给出明确长度预算（synthesis ≤400 字、thinking ≤200 字、每条评价 notes ≤80 字、gaps 最多 3 条）。
+
+### 第三轮：完整通过
+
+- CLI 输出了高质量的「综合分析」——有真正的跨维度推理（"情绪宏观双弃权意味着方向判断实际由前两维承担，这也解释了 0.7 而非更高的置信"）和分歧处理（技术面因 K 线七个月时效缺口被降级采用）
+- 专家评估有区分度：`fundamental:accept, technical:discount, sentiment:accept, macro:accept`
+- **真模型主动写了记忆种子**：memory_summary + active_hypotheses + falsifiers_watched 全写了，`latest_for_agent(agent_name="tracking", thesis_id="000858-initial")` 能查到——记忆链闭环验证成功
+- timeline 行落库（4 条评估）、看板投影 `synthesis` 键有值且 `tracking` 键保持 None（不误路由）
+- 失败的前两轮也验证了降级设计：run 状态不受影响（第二轮 run failed 是基本面专家挂了，与合成无关），失败 session 以 FAILED 落库、不污染记忆链
+
 ## 可能遭遇什么 bug（风险清单）
 
 1. **真实模型不写 state_patch → 记忆链断**。指令里要求了写 private_memory，但模型可以不听。后果不是崩溃，只是追踪拿不到首评记忆（退回旧行为）。如果线上发现 `prior_memory` 经常为空，优先查这里。
@@ -122,7 +150,7 @@ prior_session_memory(agent_name="tracking", thesis_id="000858-initial")
 .venv/bin/python -m pytest -q
 ```
 
-当前状态：全量 112 passed, 3 skipped。
+当前状态：全量 252 passed, 4 skipped（live 测试无 key 自动跳过）；真实链路（DeepSeek 真模型 + fixture 数据）完整通过，见上文实测章节。
 
 手工验证：
 

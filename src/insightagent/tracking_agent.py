@@ -273,6 +273,7 @@ def tracking_runtime_config(
     model: str = "deepseek-v4-flash",
     thinking_enabled: bool = False,
     final_output_model: Optional[type] = None,
+    max_tokens: int = 8192,
 ) -> RuntimeConfig:
     return RuntimeConfig(
         model=model,
@@ -280,7 +281,7 @@ def tracking_runtime_config(
         thinking_enabled=thinking_enabled,
         reasoning_effort="high",
         response_format="json",
-        max_tokens=8192,
+        max_tokens=max_tokens,
         max_loop_round=8,
         max_parallel_calls=1,
         strict_tools=True,
@@ -1036,12 +1037,14 @@ INITIAL_SYNTHESIS_INSTRUCTION = (
     "every expert that produced a report (expert_evaluations), adjudicate "
     "disagreements across dimensions, and write your own synthesis "
     "narrative in Chinese. The rating is already decided by rules; do not "
-    "change or contradict it. Do not call analysts. Finish with "
-    "submit_final: output must carry thinking, synthesis, and "
-    "expert_evaluations. In state_patch, set private_memory.memory_summary "
-    "and, when useful, private_memory.active_hypotheses / "
-    "falsifiers_watched / key_evidence_refs -- this memory seeds the "
-    "tracking chain for this thesis."
+    "change or contradict it. Do not call analysts. Write for a reader: "
+    "synthesis around 400-800 characters, thinking <= 300 characters, each "
+    "evaluation's notes <= 120 characters and at most 3 gaps. Finish with submit_final: output must "
+    "carry thinking, synthesis, and expert_evaluations. In state_patch, "
+    "set private_memory.memory_summary (<= 200 characters) and, when "
+    "useful, private_memory.active_hypotheses / falsifiers_watched / "
+    "key_evidence_refs -- this memory seeds the tracking chain for this "
+    "thesis."
 )
 
 
@@ -1060,6 +1063,10 @@ def tracking_synthesis_config(
         model=model,
         thinking_enabled=thinking_enabled,
         final_output_model=InitialSynthesis,
+        # Narrative task: match the experts' 32768 output budget instead of
+        # the tracking family's 8192 -- a live run with four full reports to
+        # discuss was truncated mid-JSON at 8192.
+        max_tokens=32768,
     )
 
 

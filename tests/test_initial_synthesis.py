@@ -214,6 +214,49 @@ async def test_synthesis_memory_seeds_tracking_chain(tmp_path: Path):
     assert task["prior_memory"]["memory_summary"] == "首评：持有，盯现金流证伪"
 
 
+@pytest.mark.asyncio
+async def test_rejected_submit_gets_accurate_error_and_recovers(tmp_path: Path):
+    """Regression for the live death spiral: a submit with an extra key in
+    state_patch used to be rejected with the default-model message
+    ("output.report is required ..."), steering the model into adding a
+    forbidden `report` field round after round until MaxLoopRound. The
+    runtime must now name the actual failing path so the next round can
+    self-correct."""
+    fund, tech, sent, macro = _make_four_agent_llms()
+    bad = _synth_final(_synthesis_output())
+    bad_args = json.loads(bad.tool_calls[0].arguments)
+    bad_args["state_patch"]["set"] = [
+        {
+            "path": "private_memory.memory_summary",
+            "value": "首评记忆",
+            "value_note": "extra key the schema forbids",
+        }
+    ]
+    bad.tool_calls[0].arguments = json.dumps(bad_args, ensure_ascii=False)
+    synth = FakeLLMAdapter(
+        [
+            _tool("get_expert_reports", "c1"),
+            _tool("get_decision", "c2"),
+            bad,
+            _synth_final(_synthesis_output(), memory={"memory_summary": "首评记忆"}),
+        ]
+    )
+    outcome = await _analyze(
+        tmp_path, "000858", fund, tech, sent, macro,
+        synthesis_llm_adapter=synth,
+    )
+    # recovered on the retry round
+    assert outcome.synthesis is not None
+    assert outcome.run.session_ids.get("synthesis")
+    # the retry prompt named the real failing path, not output.report
+    retry_request = synth.requests[-1]
+    retry_text = " ".join(
+        message.content or "" for message in retry_request.messages
+    )
+    assert "state_patch" in retry_text
+    assert "output.report is required" not in retry_text
+
+
 def test_finalize_fills_missing_evaluations_and_never_raises():
     result = finalize_initial_synthesis(
         {
