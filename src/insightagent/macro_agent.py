@@ -49,6 +49,11 @@ get_macro_snapshot. Query only ranks cards that already match snapshot flags.
 
 Final answer via submit_final:
 - output.report must match the Report schema below
+- in state_patch.set (a LIST of {{path, value}} entries, not a dict; leave
+  append/remove as empty lists), write your working memory for the next run:
+  private_memory.memory_summary = the rate environment you saw and what to
+  re-check next time (<=200 chars). The next analysis starts from this
+  memory; an empty patch means you start over blind.
 - do not write base_version, loop_round, or runtime counters
 - if abstaining, status must be "abstained"
 

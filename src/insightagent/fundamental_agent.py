@@ -58,7 +58,13 @@ drop decimal places (write 22.14548383, not 22 or 22.15). Years
 
 Final JSON must be submitted via the submit_final tool:
 - output.report must match the Report schema below
-- state_patch.set/append/remove may be empty objects/dicts
+- in state_patch.set (a LIST of {{path, value}} entries, not a dict; leave
+  append/remove as empty lists), write your working memory for the next run:
+  private_memory.memory_summary = your core conclusion and the one open
+  question to re-check next time (<=200 chars), and
+  private_memory.falsifiers_watched = the falsifiers you listed. The next
+  analysis of this stock starts from this memory; an empty patch means you
+  start over blind.
 - do not write base_version, loop_round, or other runtime counters
 - if abstaining, status must be "abstained"
 
