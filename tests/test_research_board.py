@@ -137,10 +137,27 @@ def test_latest_research_job_sees_failed_jobs(tmp_path):
     ok = store.create_research_job("000858")
     store.claim_research()
     store.finish_research(ok["job_id"], run_id="run-ok")
-    broken = store.create_research_job("000858", kind="track")
+    broken = store.create_research_job("000858")
     store.claim_research()
     store.finish_research(broken["job_id"], error="执行器中断")
     latest = store.latest_research_job("000858")
     assert latest["job_id"] == broken["job_id"]
     assert latest["status"] == "failed"
     assert store.latest_research_job("600519") is None
+
+
+def test_latest_research_job_ignores_tracking_jobs(tmp_path):
+    # 追踪任务画的是另一块面板。让它混进研究入口，结果区就会显示追踪的进度、
+    # 并按追踪的 job_id 去轮询，两块面板互相串。
+    store = BoardStore(str(tmp_path / "board.db"))
+    store.initialize()
+    store.initialize_research()
+    research = store.create_research_job("000858")
+    store.claim_research()
+    store.finish_research(research["job_id"], run_id="run-ok")
+    track = store.create_research_job("000858", kind="track")
+    store.claim_research()
+    store.finish_research(track["job_id"], error="追踪中断")
+    latest = store.latest_research_job("000858")
+    assert latest["job_id"] == research["job_id"]
+    assert latest["kind"] == "analyze"

@@ -85,14 +85,14 @@ def _run_research_worker(store: BoardStore) -> int:
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
     store.initialize_research()
-    store.recover_research(older_than_minutes=8)
+    store.recover_research(older_than_minutes=2)
     timeout_seconds = 8 * 60
     while True:
         # The loop must survive anything: an exception in claim/recover (DB
         # busy, disk hiccup) previously killed the whole worker thread and the
         # queue silently stopped draining.
         try:
-            store.recover_research(older_than_minutes=8)
+            store.recover_research(older_than_minutes=2)
             item = store.claim_research()
         except Exception as error:
             print(

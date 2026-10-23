@@ -421,9 +421,12 @@ function tickRunClock() {
 function progressSignature(progress) {
   const dims = progress.dimensions || {};
   return [
+    progress.status || '',
     progress.stage_label || '',
     progress.agents_done || 0,
     Object.keys(PROGRESS_DIM_LABELS).map((key) => dims[key] || '').join(','),
+    // 错误文案也进签名：连续两次失败停在同一阶段时，不带上它就只会沿用旧的红条文字。
+    progress.error || '',
   ].join('|');
 }
 
@@ -508,7 +511,8 @@ function renderRunProgress(progress) {
     </div>
     <div class="run-lanes">${lanes}</div>
   </div>`;
-  startRunClock(base);
+  // 失败的任务已经死了，不能起表——否则刚停下来又被重新启动，"已用"继续涨。
+  if (isFailed) stopRunClock(); else startRunClock(base);
 }
 
 function swapResultInto(selector, paint) {
@@ -543,6 +547,16 @@ async function pollResearch(jobId, code = currentCode, attempt = 0) {
     if (job.status === 'failed') {
       // 失败任务不能留在 currentJobId：否则后续反馈永远对着它 409。
       // 回滚到最近一次成功的任务，并把阶段徽章从"分析中"摘下来。
+      // 秒表也要停：任务已经死了，"已用"再往上跳会让人以为它还在跑。
+      stopRunClock();
+      if (!trackish) {
+        // 停在页面上等、直到轮询发现失败：把地图就地转成中断态，
+        // 否则只会看到角落里一行字，结果区还停在"四维分析"。
+        const progress = await api(`/research/jobs/${jobId}/progress`).catch(() => null);
+        if (progress && code === currentCode) {
+          renderRunProgress({ ...progress, status: 'failed', error: job.error });
+        }
+      }
       setStage(trackish ? 'track' : 'research', trackish ? 'track' : 'research', { state: '', label: trackish ? '追踪失败' : '分析失败' });
       if (trackish) {
         const current = await api(`/research/stocks/${code}/track`).catch(() => null);
@@ -612,6 +626,8 @@ async function startTrack() { try { if (!currentCode) { document.querySelector('
 async function sendFeedback() { if (!currentJobId || !currentRunId) { document.querySelector('#research-status').textContent = '暂无可反馈的研究结果'; return; } try { const data = await api(`/research/jobs/${currentJobId}/feedback`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt: document.querySelector('#feedback-prompt').value}) }); currentJobId = data.job_id; pollResearch(currentJobId); } catch (error) { document.querySelector('#research-status').textContent = error.message; } }
 async function sendTrackFeedback() { if (!currentTrackJobId || !currentTrackRunId) { document.querySelector('#track-status').textContent = '暂无可反馈的追踪结果'; return; } try { const data = await api(`/research/jobs/${currentTrackJobId}/feedback`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt: document.querySelector('#track-feedback-prompt').value}) }); currentTrackJobId = data.job_id; pollResearch(currentTrackJobId); } catch (error) { document.querySelector('#track-status').textContent = error.message; } }
 async function detail(code) {
+  // 换标的先把上一只票的秒表停掉，否则那个 100ms 定时器会一直空转。
+  stopRunClock();
   currentCode = code;
   currentJobId = null;
   currentRunId = null;
@@ -663,7 +679,10 @@ async function detail(code) {
     const job = latest.job;
     const unfinished = job.status === 'running' || job.status === 'failed';
     const newer = !current || String(job.created_at || '') > String(current.created_at || '');
-    if (unfinished && (newer || job.status === 'running')) {
+    // 只认比"最后一次成功结论"更新的一条。正在跑的任务不可能比成功结论更旧
+    // （同一标的的并发提交后端会挡），所以不需要为 running 单独开例外——开了的话，
+    // 一个卡死的旧任务会盖住更新的结论并一直轮询下去。
+    if (unfinished && newer) {
       if (latest.progress) {
         renderRunProgress({ ...latest.progress, status: job.status, error: job.error });
       }

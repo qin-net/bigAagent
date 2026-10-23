@@ -322,15 +322,19 @@ class BoardStore:
         return dict(row) if row else None
 
     def latest_research_job(self, stock_code: str) -> Optional[dict]:
-        """Newest job for a stock, whatever its status.
+        """Newest research job for a stock, whatever its status.
 
         `research_job` needs a job id, and the page only knows about successful
         runs. Without this, a run that died mid-flight leaves nothing to look
         at: the board shows an empty panel instead of the wreck.
+
+        Only analyze/feedback kinds: a tracking job paints a different panel,
+        and letting it through made the research panel show a tracker's
+        progress (and poll its job id) as if it were a study.
         """
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT job_id,user_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE stock_code=? ORDER BY created_at DESC LIMIT 1",
+                "SELECT job_id,user_id,stock_code,kind,parent_run_id,run_id,status,error,noop,rerun_dimensions,created_at,updated_at FROM research_job WHERE stock_code=? AND kind IN ('analyze','feedback') ORDER BY created_at DESC LIMIT 1",
                 (stock_code,),
             ).fetchone()
         return dict(row) if row else None
